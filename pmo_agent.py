@@ -75,6 +75,12 @@ PROJECT ASSIGNMENTS:
 • When assignments exist, demand is routed through specific people. For unassigned project-roles, demand is split evenly across all role members (fallback).
 • Always validate assignments: check that the person's role matches the project's role need, and flag if someone is overloaded (RED).
 
+WORKBOOK EDITING:
+• Use read_workbook_cells to inspect any cells before making changes.
+• Use update_workbook to write to any cell in any sheet — assignments, dates, priorities, hours, notes, etc.
+• After making changes that affect capacity or the dashboard, offer to refresh_dashboard.
+• Always confirm what you're about to change before writing, and show old → new values.
+
 CHANGE DETECTION:
 • Use detect_changes at the start of each session to proactively report what changed since last time.
 • After a planning session or significant discussion, offer to save_snapshot to establish a new baseline.
@@ -343,6 +349,55 @@ TOOLS = [
                 }
             },
             "required": []
+        }
+    },
+    {
+        "name": "read_workbook_cells",
+        "description": "Read cells from any sheet in the workbook. Use this to inspect current values before making changes. Returns cell values for the specified range.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sheet_name": {
+                    "type": "string",
+                    "description": "Sheet name (e.g., 'Project Portfolio', 'Team Roster', 'RM_Assumptions')."
+                },
+                "cell_range": {
+                    "type": "string",
+                    "description": "Cell range to read (e.g., 'A1:P5', 'M4:M42', 'B3'). Use Excel-style references."
+                }
+            },
+            "required": ["sheet_name", "cell_range"]
+        }
+    },
+    {
+        "name": "update_workbook",
+        "description": "Write values to any cells in any sheet of the workbook. Use this to update project data, assignments, dates, priorities, or any other field. Supports single cell or batch updates. After making changes, consider refreshing the dashboard.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "updates": {
+                    "type": "array",
+                    "description": "List of cell updates to apply.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "sheet_name": {
+                                "type": "string",
+                                "description": "Sheet name."
+                            },
+                            "cell": {
+                                "type": "string",
+                                "description": "Cell reference (e.g., 'M4', 'H10')."
+                            },
+                            "value": {
+                                "description": "Value to write. Can be string, number, or null to clear."
+                            }
+                        },
+                        "required": ["sheet_name", "cell", "value"]
+                    }
+                }
+            },
+            "required": ["updates"]
         }
     },
     {
@@ -830,6 +885,80 @@ class PMOTools:
         }
         return json.dumps(result, indent=2)
 
+    def read_workbook_cells(self, sheet_name: str, cell_range: str) -> str:
+        import openpyxl
+        from openpyxl.utils import range_boundaries
+        wb = openpyxl.load_workbook(self.connector.workbook_path, data_only=True)
+        if sheet_name not in wb.sheetnames:
+            wb.close()
+            return json.dumps({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
+
+        ws = wb[sheet_name]
+
+        # Handle single cell vs range
+        if ":" in cell_range:
+            min_col, min_row, max_col, max_row = range_boundaries(cell_range)
+        else:
+            min_col, min_row, max_col, max_row = range_boundaries(f"{cell_range}:{cell_range}")
+
+        rows = []
+        for row in range(min_row, max_row + 1):
+            row_data = {}
+            for col in range(min_col, max_col + 1):
+                cell = ws.cell(row=row, column=col)
+                col_letter = openpyxl.utils.get_column_letter(col)
+                val = cell.value
+                if isinstance(val, (date, datetime)):
+                    val = val.strftime("%m/%d/%Y")
+                row_data[f"{col_letter}{row}"] = val
+            rows.append(row_data)
+
+        wb.close()
+        return json.dumps({
+            "sheet": sheet_name,
+            "range": cell_range,
+            "data": rows,
+        }, indent=2, default=str)
+
+    def update_workbook(self, updates: list) -> str:
+        import openpyxl
+        wb = openpyxl.load_workbook(self.connector.workbook_path)
+
+        results = []
+        for update in updates:
+            sheet_name = update["sheet_name"]
+            cell_ref = update["cell"]
+            value = update["value"]
+
+            if sheet_name not in wb.sheetnames:
+                results.append({"cell": f"{sheet_name}!{cell_ref}", "status": "error",
+                                "message": f"Sheet '{sheet_name}' not found"})
+                continue
+
+            ws = wb[sheet_name]
+            old_value = ws[cell_ref].value
+            ws[cell_ref] = value
+            results.append({
+                "cell": f"{sheet_name}!{cell_ref}",
+                "old_value": str(old_value) if old_value is not None else None,
+                "new_value": str(value) if value is not None else None,
+                "status": "updated",
+            })
+
+        wb.save(self.connector.workbook_path)
+        wb.close()
+
+        # Reset connector cache so subsequent reads pick up changes
+        self.connector.close()
+        self.connector._wb = None
+        self.engine._data = None
+
+        return json.dumps({
+            "status": "success",
+            "updates_applied": len([r for r in results if r["status"] == "updated"]),
+            "results": results,
+        }, indent=2, default=str)
+
     def refresh_dashboard(self, output_path: str = None) -> str:
         from excel_dashboard import DashboardGenerator
         try:
@@ -875,6 +1004,10 @@ class PMOTools:
             return self.get_project_assignments(**input_data)
         elif name == "get_person_utilization":
             return self.get_person_utilization(**input_data)
+        elif name == "read_workbook_cells":
+            return self.read_workbook_cells(**input_data)
+        elif name == "update_workbook":
+            return self.update_workbook(**input_data)
         elif name == "refresh_dashboard":
             return self.refresh_dashboard(**input_data)
         else:
