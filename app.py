@@ -102,9 +102,12 @@ def run_agent(client: anthropic.Anthropic, user_message: str):
         tool_results = []
         for tool_block in tool_use_blocks:
             tool_calls_made.append(tool_block.name)
-            result = st.session_state.tools.execute_tool(
-                tool_block.name, tool_block.input
-            )
+            try:
+                result = st.session_state.tools.execute_tool(
+                    tool_block.name, tool_block.input
+                )
+            except Exception as e:
+                result = json.dumps({"error": f"Tool '{tool_block.name}' failed: {str(e)}"})
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tool_block.id,
@@ -134,7 +137,7 @@ with st.sidebar:
     st.caption("AI Resource Planning Agent")
     st.divider()
 
-    # API Key input
+    # API key (loaded silently)
     api_key = get_api_key()
     if not api_key:
         api_key = st.text_input(
@@ -146,14 +149,7 @@ with st.sidebar:
         if api_key:
             os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    if api_key:
-        st.success("API key set")
-    else:
-        st.warning("Enter API key to start", icon="⚠")
-
-    st.divider()
-
-    # Quick stats
+    # Quick stats — first thing visible
     init_session()
     tools = st.session_state.tools
     try:
@@ -170,7 +166,6 @@ with st.sidebar:
         col3.metric("Scheduled", len(scheduled))
         col4.metric("Unscheduled", len(unscheduled))
 
-        st.divider()
         st.caption("Quick Utilization")
         utilization = tools.engine.compute_utilization()
         for role in ["developer", "technical", "ba", "functional", "pm"]:
@@ -184,25 +179,83 @@ with st.sidebar:
         st.info("Workbook data will load on first query")
 
     st.divider()
-    st.caption("Example questions:")
-    examples = [
-        "What's the status of Highest projects?",
-        "Show me current capacity utilization",
-        "Can we add a 400h project with 60% Developer?",
-        "What if we lose Colin Olson?",
-        "Optimize the schedule for all projects",
-        "What changed since last time?",
-    ]
-    for ex in examples:
-        if st.button(ex, key=f"ex_{ex}", use_container_width=True):
-            st.session_state.pending_input = ex
 
-    st.divider()
+    # Controls
+    if "dark_mode" not in st.session_state:
+        st.session_state.dark_mode = False
+
+    dark_mode = st.toggle("Dark Mode", value=st.session_state.dark_mode)
+    if dark_mode != st.session_state.dark_mode:
+        st.session_state.dark_mode = dark_mode
+        st.rerun()
+
+    if st.button("Refresh Dashboard", use_container_width=True):
+        try:
+            import shutil
+            from excel_dashboard import DashboardGenerator
+            with st.spinner("Generating Excel dashboard..."):
+                gen = DashboardGenerator()
+                output_path = gen.generate_all()
+                gen.connector.close()
+                desktop_path = str(Path.home() / "Desktop" / "ETE_PMO_Dashboard.xlsx")
+                shutil.copy2(output_path, desktop_path)
+            st.success("Dashboard refreshed! Saved to Desktop.")
+        except Exception as e:
+            st.error(f"Dashboard generation failed: {str(e)}")
+
     if st.button("Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.session_state.chat_history = []
         st.rerun()
 
+    # API key status at bottom
+    if api_key:
+        st.caption("✅ API key set")
+    else:
+        st.warning("Enter API key to start", icon="⚠")
+
+
+# ---------------------------------------------------------------------------
+# Dark Mode CSS
+# ---------------------------------------------------------------------------
+if st.session_state.get("dark_mode", False):
+    st.markdown("""
+    <style>
+        /* Main background */
+        .stApp, [data-testid="stAppViewContainer"] { background-color: #1a1a2e; color: #e0e0e0; }
+        /* Sidebar */
+        [data-testid="stSidebar"] { background-color: #16213e; color: #e0e0e0; }
+        [data-testid="stSidebar"] * { color: #e0e0e0 !important; }
+        /* Chat messages */
+        [data-testid="stChatMessage"] { background-color: #1f2940; border-color: #2a3a5c; }
+        /* Chat input bar — keep light */
+        [data-testid="stChatInput"] { background-color: #ffffff !important; }
+        [data-testid="stChatInput"] textarea { background-color: #ffffff !important; color: #333333 !important; }
+        [data-testid="stChatInputContainer"],
+        [data-testid="stBottom"] > div,
+        .stBottom, [data-testid="stBottom"],
+        footer, [data-testid="stFooter"] { background-color: #1a1a2e !important; }
+        /* Buttons */
+        .stButton > button { background-color: #2a3a5c; color: #e0e0e0; border-color: #3a4a6c; }
+        .stButton > button:hover { background-color: #3a4a6c; color: #fff; }
+        /* Metrics */
+        [data-testid="stMetricValue"] { color: #e0e0e0 !important; }
+        [data-testid="stMetricLabel"] { color: #a0a0b0 !important; }
+        /* Headers */
+        h1, h2, h3, h4, h5, h6 { color: #e0e0e0 !important; }
+        /* Captions */
+        .stCaption, small { color: #8888aa !important; }
+        /* Dividers */
+        hr { border-color: #2a3a5c !important; }
+        /* Markdown text */
+        .stMarkdown, .stMarkdown p, .stMarkdown li { color: #e0e0e0; }
+        /* Spinner */
+        .stSpinner > div { color: #e0e0e0 !important; }
+        /* Success/warning/error */
+        .stSuccess { background-color: #1a3a2e; }
+        .stWarning { background-color: #3a3a1e; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Main Chat

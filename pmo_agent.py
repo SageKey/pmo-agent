@@ -63,10 +63,15 @@ DATA MODEL:
 • SDLC Phases: Discovery 10%, Planning 10%, Design 15%, Build 30%, Test 20%, Deploy 15%
 • Each role has different effort weights per phase (e.g., Developer: 0% Discovery → 50% Build → 25% Test)
 • Projects without start/end dates are "unscheduled" — they create NO demand until scheduled
+• Bottom-up estimation: use estimate_timeline to compute how long a project will take based on actual capacity. The bottleneck role in each phase determines duration. If role allocations don't sum to 100%, flag the gap as unallocated hours.
+• ALWAYS show durations in DAYS (business days), never weeks. Do not show weeks alongside days.
+• When asked "how long will this take?" or "does this timeline make sense?", always use estimate_timeline.
+• When asked "when can we start?" or "what dates should this project have?", use suggest_dates — it scans real role availability week by week to find the earliest viable window.
 
 CHANGE DETECTION:
 • Use detect_changes at the start of each session to proactively report what changed since last time.
 • After a planning session or significant discussion, offer to save_snapshot to establish a new baseline.
+• Use refresh_dashboard to regenerate the Excel dashboard when the user asks to update or refresh it, or after significant planning changes.
 • When reporting changes, highlight anything that affects capacity or priority.
 
 Use your tools to fetch live data before answering. Don't guess — always ground answers in the workbook data. Show the "Data as of" timestamp when reporting numbers."""
@@ -221,6 +226,68 @@ TOOLS = [
         }
     },
     {
+        "name": "estimate_timeline",
+        "description": "Bottom-up duration estimate: given a project's total hours and role allocations, compute how long each SDLC phase takes and total project duration based on actual team capacity. The bottleneck role in each phase determines phase length. Use this to answer 'how long will this take?' or 'does this estimate make sense?' Also validates that allocated hours reconcile to the project estimate. Can analyze an existing project by ID or a hypothetical project.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "Existing project ID (e.g., 'ETE-83') to estimate. If provided, uses that project's hours and role allocations."
+                },
+                "est_hours": {
+                    "type": "number",
+                    "description": "Estimated total hours (for hypothetical project, or to override an existing project's estimate)."
+                },
+                "role_allocations": {
+                    "type": "object",
+                    "description": "Role allocation percentages as decimals. Example: {\"developer\": 0.60, \"ba\": 0.20, \"pm\": 0.10}. Keys: ba, functional, technical, developer, infrastructure, dba, pm, wms.",
+                    "additionalProperties": {"type": "number"}
+                },
+                "max_utilization": {
+                    "type": "number",
+                    "description": "Max utilization target as decimal (default 0.85 = 85%). Lower = more conservative estimate."
+                },
+                "concurrent_projects": {
+                    "type": "integer",
+                    "description": "Number of other projects competing for the same resources (default 0 = dedicated team). Higher = longer duration."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "suggest_dates",
+        "description": "Bottom-up date suggestion: scans forward week by week, checking existing project demand against role capacity, and finds the earliest start date where all required roles can handle the new project without exceeding utilization targets. Returns suggested start/end dates, role availability at that time, and full phase breakdown. Use this when asked 'when can we start?' or 'what dates should this project have?'",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "Existing project ID to suggest dates for. Uses that project's hours and role allocations."
+                },
+                "est_hours": {
+                    "type": "number",
+                    "description": "Estimated total hours (for hypothetical project)."
+                },
+                "role_allocations": {
+                    "type": "object",
+                    "description": "Role allocation percentages as decimals. Example: {\"developer\": 0.30, \"ba\": 0.20}",
+                    "additionalProperties": {"type": "number"}
+                },
+                "max_utilization": {
+                    "type": "number",
+                    "description": "Max utilization target as decimal (default 0.85). Lower = more conservative."
+                },
+                "horizon_weeks": {
+                    "type": "integer",
+                    "description": "How far ahead to scan for availability (default 52 weeks)."
+                }
+            },
+            "required": []
+        }
+    },
+    {
         "name": "save_snapshot",
         "description": "Save the current portfolio state as a snapshot for future change detection. Call this after reviewing changes or at the end of a planning session to establish a new baseline.",
         "input_schema": {
@@ -229,6 +296,20 @@ TOOLS = [
                 "notes": {
                     "type": "string",
                     "description": "Optional note describing why this snapshot was taken (e.g., 'After sprint planning', 'Post-rebalance')."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "refresh_dashboard",
+        "description": "Regenerate the Excel dashboard workbook with updated Resource Model, Capacity Summary, Role Capacity Planner, Capacity Heatmap, and Gantt chart sheets. Use this when the user asks to refresh, regenerate, or update the dashboard, or after making changes that should be reflected in the Excel output.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "output_path": {
+                    "type": "string",
+                    "description": "Optional custom output path for the dashboard file. If omitted, uses the default path (workbook name + '_Dashboard')."
                 }
             },
             "required": []
@@ -538,6 +619,92 @@ class PMOTools:
         )
         return json.dumps(self.optimizer.result_to_json(result), indent=2)
 
+    def suggest_dates(self, project_id: str = None,
+                       est_hours: float = None,
+                       role_allocations: dict = None,
+                       max_utilization: float = 0.85,
+                       horizon_weeks: int = 52) -> str:
+        kwargs = {
+            "max_util_pct": max_utilization,
+            "horizon_weeks": horizon_weeks,
+        }
+
+        if project_id:
+            all_projects = self.connector.read_portfolio()
+            search = project_id.upper().strip()
+            project = next((p for p in all_projects if p.id.upper() == search), None)
+            if not project:
+                matches = [p for p in all_projects
+                           if search.lower() in p.name.lower() or search.lower() in p.id.lower()]
+                if len(matches) == 1:
+                    project = matches[0]
+                else:
+                    return json.dumps({"error": f"No project found matching '{project_id}'"})
+
+            allocs = role_allocations or {k: v for k, v in project.role_allocations.items() if v > 0}
+            hours = est_hours or project.est_hours
+            kwargs["exclude_project_id"] = project.id
+            result = self.engine.suggest_dates(hours, allocs, **kwargs)
+            result["project_id"] = project.id
+            result["project_name"] = project.name
+        else:
+            if not est_hours or not role_allocations:
+                return json.dumps({
+                    "error": "For hypothetical projects, provide both est_hours and role_allocations."
+                })
+            result = self.engine.suggest_dates(est_hours, role_allocations, **kwargs)
+
+        return json.dumps(result, indent=2, default=str)
+
+    def estimate_timeline(self, project_id: str = None,
+                           est_hours: float = None,
+                           role_allocations: dict = None,
+                           max_utilization: float = 0.85,
+                           concurrent_projects: int = 0) -> str:
+        kwargs = {
+            "max_util_pct": max_utilization,
+            "concurrent_projects": concurrent_projects,
+        }
+
+        if project_id:
+            # Existing project
+            all_projects = self.connector.read_portfolio()
+            search = project_id.upper().strip()
+            project = next((p for p in all_projects if p.id.upper() == search), None)
+            if not project:
+                matches = [p for p in all_projects
+                           if search.lower() in p.name.lower() or search.lower() in p.id.lower()]
+                if len(matches) == 1:
+                    project = matches[0]
+                elif len(matches) > 1:
+                    return json.dumps({
+                        "error": f"Multiple matches for '{project_id}'",
+                        "matches": [{"id": p.id, "name": p.name} for p in matches]
+                    })
+                else:
+                    return json.dumps({"error": f"No project found matching '{project_id}'"})
+
+            # Allow overrides
+            if est_hours:
+                from dataclasses import replace
+                project = replace(project, est_hours=est_hours)
+            if role_allocations:
+                from dataclasses import replace
+                merged = dict(project.role_allocations)
+                merged.update(role_allocations)
+                project = replace(project, role_allocations=merged)
+
+            result = self.engine.estimate_project_duration(project, **kwargs)
+        else:
+            # Hypothetical project
+            if not est_hours or not role_allocations:
+                return json.dumps({
+                    "error": "For hypothetical projects, provide both est_hours and role_allocations."
+                })
+            result = self.engine.estimate_duration(est_hours, role_allocations, **kwargs)
+
+        return json.dumps(result, indent=2)
+
     def detect_changes(self) -> str:
         changes = self.snapshots.detect_changes(self.connector)
         return json.dumps(changes, indent=2)
@@ -553,6 +720,23 @@ class PMOTools:
             "notes": notes,
             "message": f"Snapshot #{snap_id} saved successfully.",
         }, indent=2)
+
+    def refresh_dashboard(self, output_path: str = None) -> str:
+        from excel_dashboard import DashboardGenerator
+        try:
+            gen = DashboardGenerator(connector=self.connector)
+            path = gen.generate_all(output_path=output_path)
+            return json.dumps({
+                "status": "success",
+                "output_path": path,
+                "message": f"Dashboard regenerated successfully: {path}",
+            }, indent=2)
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "error": str(e),
+                "message": f"Dashboard generation failed: {str(e)}",
+            }, indent=2)
 
     def execute_tool(self, name: str, input_data: dict) -> str:
         """Route tool calls to the appropriate method."""
@@ -570,10 +754,16 @@ class PMOTools:
             return self.what_if_lose_resource(**input_data)
         elif name == "optimize_schedule":
             return self.optimize_schedule(**input_data)
+        elif name == "estimate_timeline":
+            return self.estimate_timeline(**input_data)
+        elif name == "suggest_dates":
+            return self.suggest_dates(**input_data)
         elif name == "detect_changes":
             return self.detect_changes()
         elif name == "save_snapshot":
             return self.save_snapshot(**input_data)
+        elif name == "refresh_dashboard":
+            return self.refresh_dashboard(**input_data)
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})
 

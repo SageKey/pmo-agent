@@ -243,6 +243,114 @@ def main():
     check("Missing params returns error", "error" in bad_params)
 
     # =====================================================================
+    # SCENARIO 7: Bottom-Up Timeline Estimation
+    # "How long will this project take?"
+    # =====================================================================
+    print("\n" + "=" * 70)
+    print("SCENARIO 7: Bottom-Up Timeline Estimation")
+    print("=" * 70)
+
+    # --- Test existing project by ID ---
+    ete37 = json.loads(tools.execute_tool("estimate_timeline",
+                                          {"project_id": "ETE-37"}))
+    check("ETE-37 returns project_id", ete37.get("project_id") == "ETE-37")
+    check("ETE-37 has total_duration_days", "total_duration_days" in ete37)
+    check("ETE-37 has phases breakdown", len(ete37.get("phases", [])) == 6,
+          f"got {len(ete37.get('phases', []))} phases")
+    check("ETE-37 has roles breakdown", len(ete37.get("roles", [])) > 0)
+    check("ETE-37 reconciles", ete37.get("reconciled") == True,
+          f"gap={ete37.get('gap_hours')}")
+    check("ETE-37 allocated = est_hours × alloc_sum",
+          abs(ete37.get("allocated_hours", 0) - ete37.get("est_hours", 0) *
+              float(ete37.get("allocation_sum", "0%").rstrip("%")) / 100) < 0.5)
+
+    # Duration should be realistic (not 3 days for 40 hours)
+    dur_days = ete37.get("total_duration_days", 0)
+    check("ETE-37 duration > 5 days (realistic for 40h)", dur_days >= 5.0,
+          f"got {dur_days} days")
+    check("ETE-37 duration < 60 days (not absurd for 40h)", dur_days <= 60.0,
+          f"got {dur_days} days")
+
+    # Each phase has a bottleneck role
+    for phase in ete37.get("phases", []):
+        if phase.get("total_hours", 0) > 0:
+            check(f"  Phase '{phase['phase']}' has bottleneck_role",
+                  phase.get("bottleneck_role") is not None)
+
+    # --- Test hypothetical project ---
+    hypo = json.loads(tools.execute_tool("estimate_timeline", {
+        "est_hours": 240,
+        "role_allocations": {"developer": 0.30, "technical": 0.25,
+                             "ba": 0.20, "functional": 0.15, "pm": 0.10},
+    }))
+    check("Hypothetical returns total_duration_days",
+          "total_duration_days" in hypo)
+    check("Hypothetical 240h reconciles", hypo.get("reconciled") == True,
+          f"gap={hypo.get('gap_hours')}")
+    check("Hypothetical allocation_sum = 100%",
+          hypo.get("allocation_sum") == "100%")
+    check("Hypothetical has 6 phases", len(hypo.get("phases", [])) == 6)
+    check("Hypothetical has 5 roles", len(hypo.get("roles", [])) == 5)
+
+    hypo_dur = hypo.get("total_duration_days", 0)
+    check("Hypothetical duration > 10 days (240h realistic)",
+          hypo_dur >= 10.0, f"got {hypo_dur}")
+    check("Hypothetical duration < 130 days (not absurd for 240h)",
+          hypo_dur <= 130.0, f"got {hypo_dur}")
+
+    # --- Test per-person capacity is used (not total team) ---
+    # Developer has ~17 hrs/wk per person. A 100h dev-only project
+    # should take ~100 / (17 * 0.85) ≈ 6.9 weeks, NOT 100 / (58 * 0.85) ≈ 2 weeks
+    dev_only = json.loads(tools.execute_tool("estimate_timeline", {
+        "est_hours": 100,
+        "role_allocations": {"developer": 1.0},
+    }))
+    dev_dur = dev_only.get("total_duration_days", 0)
+    check("100h dev-only > 20 days (per-person capacity, not total team)",
+          dev_dur >= 20.0, f"got {dev_dur} — may be using total team capacity")
+    check("100h dev-only < 75 days (sanity check)",
+          dev_dur <= 75.0, f"got {dev_dur}")
+
+    # --- Test concurrent projects increase duration ---
+    solo = json.loads(tools.execute_tool("estimate_timeline", {
+        "est_hours": 200,
+        "role_allocations": {"developer": 0.50, "ba": 0.30, "pm": 0.20},
+        "concurrent_projects": 0,
+    }))
+    concurrent = json.loads(tools.execute_tool("estimate_timeline", {
+        "est_hours": 200,
+        "role_allocations": {"developer": 0.50, "ba": 0.30, "pm": 0.20},
+        "concurrent_projects": 3,
+    }))
+    check("Concurrent projects increase duration",
+          concurrent.get("total_duration_days", 0) >
+          solo.get("total_duration_days", 0),
+          f"solo={solo.get('total_duration_days')} concurrent={concurrent.get('total_duration_days')}")
+
+    # --- Test lower utilization target increases duration ---
+    conservative = json.loads(tools.execute_tool("estimate_timeline", {
+        "est_hours": 200,
+        "role_allocations": {"developer": 0.50, "ba": 0.30, "pm": 0.20},
+        "max_utilization": 0.50,
+    }))
+    check("Lower utilization target increases duration",
+          conservative.get("total_duration_days", 0) >
+          solo.get("total_duration_days", 0),
+          f"85%={solo.get('total_duration_days')} 50%={conservative.get('total_duration_days')}")
+
+    # --- Error cases ---
+    no_params = json.loads(tools.execute_tool("estimate_timeline", {}))
+    check("No params returns error", "error" in no_params)
+
+    bad_project = json.loads(tools.execute_tool("estimate_timeline",
+                                                 {"project_id": "FAKE-999"}))
+    check("Invalid project_id returns error", "error" in bad_project)
+
+    missing_alloc = json.loads(tools.execute_tool("estimate_timeline",
+                                                   {"est_hours": 100}))
+    check("est_hours without allocations returns error", "error" in missing_alloc)
+
+    # =====================================================================
     # SUMMARY
     # =====================================================================
     print("\n" + "=" * 70)
