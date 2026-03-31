@@ -191,15 +191,12 @@ with st.sidebar:
 
     if st.button("Refresh Dashboard", use_container_width=True):
         try:
-            import shutil
             from excel_dashboard import DashboardGenerator
-            with st.spinner("Generating Excel dashboard..."):
+            with st.spinner("Refreshing dashboard..."):
                 gen = DashboardGenerator()
                 output_path = gen.generate_all()
                 gen.connector.close()
-                desktop_path = str(Path.home() / "Desktop" / "ETE_PMO_Dashboard.xlsx")
-                shutil.copy2(output_path, desktop_path)
-            st.success("Dashboard refreshed! Saved to Desktop.")
+            st.success("Dashboard refreshed!")
         except Exception as e:
             st.error(f"Dashboard generation failed: {str(e)}")
 

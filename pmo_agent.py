@@ -68,6 +68,13 @@ DATA MODEL:
 • When asked "how long will this take?" or "does this timeline make sense?", always use estimate_timeline.
 • When asked "when can we start?" or "what dates should this project have?", use suggest_dates — it scans real role availability week by week to find the earliest viable window.
 
+PROJECT ASSIGNMENTS:
+• Assignments are read from Portfolio columns M (PM), N (BA), O (Functional), P (Technical) — each cell names the person assigned to that role on the project.
+• Use get_project_assignments to see who is assigned to which projects.
+• Use get_person_utilization to see individual-level workload (not just role-level).
+• When assignments exist, demand is routed through specific people. For unassigned project-roles, demand is split evenly across all role members (fallback).
+• Always validate assignments: check that the person's role matches the project's role need, and flag if someone is overloaded (RED).
+
 CHANGE DETECTION:
 • Use detect_changes at the start of each session to proactively report what changed since last time.
 • After a planning session or significant discussion, offer to save_snapshot to establish a new baseline.
@@ -296,6 +303,43 @@ TOOLS = [
                 "notes": {
                     "type": "string",
                     "description": "Optional note describing why this snapshot was taken (e.g., 'After sprint planning', 'Post-rebalance')."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_project_assignments",
+        "description": "Get current project-to-person assignments from Portfolio columns M-P (PM, BA, Functional, Technical). Shows who is assigned to which projects, with their role. Can filter by project ID or person name. Also shows person-level utilization for each assigned individual.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "Filter assignments to a specific project (e.g., 'ETE-83')."
+                },
+                "person_name": {
+                    "type": "string",
+                    "description": "Filter assignments to a specific person (partial match)."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_person_utilization",
+        "description": "Get person-level utilization for all team members. Shows each person's capacity, total demand (from assigned projects + even-split fallback for unassigned), utilization %, and status. Use this to identify overloaded individuals, not just overloaded roles.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filter_role": {
+                    "type": "string",
+                    "description": "Filter to a specific role (developer, ba, pm, etc.)."
+                },
+                "filter_status": {
+                    "type": "string",
+                    "enum": ["RED", "YELLOW", "GREEN"],
+                    "description": "Filter to show only people at a specific utilization status."
                 }
             },
             "required": []
@@ -721,6 +765,71 @@ class PMOTools:
             "message": f"Snapshot #{snap_id} saved successfully.",
         }, indent=2)
 
+    def get_project_assignments(self, project_id: str = None,
+                                  person_name: str = None) -> str:
+        assignments = self.connector.read_assignments()
+
+        if project_id:
+            assignments = [a for a in assignments
+                           if a.project_id.upper() == project_id.upper().strip()]
+        if person_name:
+            assignments = [a for a in assignments
+                           if person_name.lower() in a.person_name.lower()]
+
+        # Also compute person-level demand for context
+        person_demand = self.engine.compute_person_demand()
+        person_util_map = {p["name"].lower(): p for p in person_demand}
+
+        items = []
+        for a in assignments:
+            person_info = person_util_map.get(a.person_name.lower(), {})
+            items.append({
+                "project_id": a.project_id,
+                "person_name": a.person_name,
+                "role": a.role_key,
+                "allocation_pct": f"{a.allocation_pct:.0%}",
+                "person_utilization": person_info.get("utilization_pct", "N/A"),
+                "person_status": person_info.get("status", "N/A"),
+            })
+
+        result = {
+            "data_as_of": self._data_timestamp(),
+            "count": len(items),
+            "assignments": items,
+        }
+        if not items:
+            result["note"] = ("No assignments found in Portfolio columns M-P. "
+                              "Without assignments, demand is split evenly across "
+                              "all role members (fallback mode).")
+        return json.dumps(result, indent=2)
+
+    def get_person_utilization(self, filter_role: str = None,
+                                filter_status: str = None) -> str:
+        person_demand = self.engine.compute_person_demand()
+
+        if filter_role:
+            person_demand = [p for p in person_demand
+                            if p["role_key"] == filter_role.lower()]
+        if filter_status:
+            person_demand = [p for p in person_demand
+                            if p["status"] == filter_status.upper()]
+
+        # Summary stats
+        total = len(person_demand)
+        red_count = sum(1 for p in person_demand if p["status"] == "RED")
+        yellow_count = sum(1 for p in person_demand if p["status"] == "YELLOW")
+        green_count = sum(1 for p in person_demand if p["status"] == "GREEN")
+
+        result = {
+            "data_as_of": self._data_timestamp(),
+            "total_people": total,
+            "red": red_count,
+            "yellow": yellow_count,
+            "green": green_count,
+            "people": person_demand,
+        }
+        return json.dumps(result, indent=2)
+
     def refresh_dashboard(self, output_path: str = None) -> str:
         from excel_dashboard import DashboardGenerator
         try:
@@ -762,6 +871,10 @@ class PMOTools:
             return self.detect_changes()
         elif name == "save_snapshot":
             return self.save_snapshot(**input_data)
+        elif name == "get_project_assignments":
+            return self.get_project_assignments(**input_data)
+        elif name == "get_person_utilization":
+            return self.get_person_utilization(**input_data)
         elif name == "refresh_dashboard":
             return self.refresh_dashboard(**input_data)
         else:
