@@ -111,6 +111,20 @@ class CapacityEngine:
             for role, info in self.assumptions.supply_by_role.items()
         }
 
+    def compute_per_person_capacity(self) -> dict[str, float]:
+        """
+        Average project capacity per person per role (hrs/week).
+        A single project typically gets ONE person per role, not the
+        entire team. This is the realistic throughput for duration estimates.
+        """
+        role_hours = defaultdict(list)
+        for member in self.roster:
+            role_hours[member.role_key].append(member.project_capacity_hrs)
+        return {
+            role: sum(hrs) / len(hrs) if hrs else 0.0
+            for role, hrs in role_hours.items()
+        }
+
     # ------------------------------------------------------------------
     # Demand calculation
     # ------------------------------------------------------------------
@@ -274,6 +288,348 @@ class CapacityEngine:
                 current = week_end
 
         return dict(role_timelines)
+
+    # ------------------------------------------------------------------
+    # Bottom-up duration estimation
+    # ------------------------------------------------------------------
+    def estimate_duration(
+        self,
+        est_hours: float,
+        role_allocations: dict,
+        max_util_pct: float = 0.85,
+        concurrent_projects: int = 0,
+    ) -> dict:
+        """
+        Bottom-up duration estimate: given a project's total hours and role
+        allocations, compute how long each SDLC phase takes and the total
+        project duration — based on actual team capacity.
+
+        The math that reconciles (Jim K's template problem):
+        1. role_hours = est_hours × role_allocation_pct
+        2. role_phase_hours = role_hours × role_phase_effort_pct
+        3. Sum across all roles and phases == est_hours × sum(role_allocs)
+        4. Phase duration = max(role_phase_hours / role_available_capacity)
+           → the bottleneck role determines phase length
+        5. Total duration = sum of phase durations (sequential phases)
+
+        Returns a dict with phase breakdown, role breakdown, totals, and
+        reconciliation check.
+        """
+        per_person = self.compute_per_person_capacity()
+        assumptions = self.assumptions
+        role_phase_efforts = assumptions.role_phase_efforts
+
+        # --- Step 1: Compute hours per role per phase ---
+        role_breakdown = {}  # role → {phase → hours}
+        role_totals = {}     # role → total hours on this project
+
+        for role_key, alloc_pct in role_allocations.items():
+            if alloc_pct <= 0:
+                continue
+            if role_key not in role_phase_efforts:
+                continue
+
+            role_hours = est_hours * alloc_pct
+            role_totals[role_key] = role_hours
+
+            phase_hours = {}
+            for phase in SDLC_PHASES:
+                effort_pct = role_phase_efforts[role_key].get(phase, 0.0)
+                phase_hours[phase] = role_hours * effort_pct
+            role_breakdown[role_key] = phase_hours
+
+        # --- Step 2: Reconciliation check ---
+        allocated_hours = sum(role_totals.values())
+        alloc_sum = sum(v for v in role_allocations.values() if v > 0)
+        gap = est_hours - allocated_hours
+
+        # --- Step 3: Phase durations based on bottleneck role ---
+        phase_detail = []
+        total_weeks = 0.0
+
+        for phase in SDLC_PHASES:
+            phase_total_hrs = sum(
+                role_breakdown[r].get(phase, 0.0) for r in role_breakdown
+            )
+
+            # Find bottleneck: which role takes longest in this phase?
+            bottleneck_role = None
+            bottleneck_weeks = 0.0
+            role_phase_info = []
+
+            for role_key in role_breakdown:
+                hrs_in_phase = role_breakdown[role_key].get(phase, 0.0)
+                if hrs_in_phase <= 0:
+                    continue
+
+                # Use ONE person's capacity — a project gets 1 resource per role
+                person_capacity = per_person.get(role_key, 0.0)
+                # Available = one person's weekly project hours × utilization target
+                available = person_capacity * max_util_pct
+                if concurrent_projects > 0:
+                    # This person may be split across multiple projects
+                    available = available / (concurrent_projects + 1)
+
+                weeks_needed = hrs_in_phase / available if available > 0 else float("inf")
+
+                role_phase_info.append({
+                    "role": role_key,
+                    "hours": round(hrs_in_phase, 1),
+                    "capacity_per_week": round(available, 1),
+                    "weeks_needed": round(weeks_needed, 2),
+                })
+
+                if weeks_needed > bottleneck_weeks:
+                    bottleneck_weeks = weeks_needed
+                    bottleneck_role = role_key
+
+            phase_detail.append({
+                "phase": phase,
+                "total_hours": round(phase_total_hrs, 1),
+                "duration_days": round(bottleneck_weeks * 5, 1),  # business days
+                "bottleneck_role": bottleneck_role,
+                "roles": role_phase_info,
+            })
+            total_weeks += bottleneck_weeks
+
+        # --- Step 4: Role summary ---
+        role_summary = []
+        for role_key, total_hrs in sorted(role_totals.items()):
+            phase_hrs = role_breakdown[role_key]
+            role_summary.append({
+                "role": role_key,
+                "allocation_pct": f"{role_allocations[role_key]:.0%}",
+                "total_hours": round(total_hrs, 1),
+                "by_phase": {p: round(h, 1) for p, h in phase_hrs.items() if h > 0},
+            })
+
+        return {
+            "est_hours": est_hours,
+            "allocated_hours": round(allocated_hours, 1),
+            "allocation_sum": f"{alloc_sum:.0%}",
+            "gap_hours": round(gap, 1),
+            "reconciled": abs(gap) < 0.5,
+            "total_duration_days": round(total_weeks * 5, 1),
+            "phases": phase_detail,
+            "roles": role_summary,
+            "assumptions_used": {
+                "max_utilization": f"{max_util_pct:.0%}",
+                "concurrent_projects": concurrent_projects,
+                "sdlc_phase_weights": {
+                    p: f"{w:.0%}" for p, w in assumptions.sdlc_phase_weights.items()
+                },
+            },
+        }
+
+    def estimate_project_duration(self, project: Project, **kwargs) -> dict:
+        """Convenience: estimate duration for an existing project."""
+        active_roles = {k: v for k, v in project.role_allocations.items() if v > 0}
+        result = self.estimate_duration(project.est_hours, active_roles, **kwargs)
+        result["project_id"] = project.id
+        result["project_name"] = project.name
+        return result
+
+    # ------------------------------------------------------------------
+    # Bottom-up date suggestion
+    # ------------------------------------------------------------------
+    def suggest_dates(
+        self,
+        est_hours: float,
+        role_allocations: dict,
+        max_util_pct: float = 0.85,
+        horizon_weeks: int = 52,
+        exclude_project_id: str = None,
+    ) -> dict:
+        """
+        Bottom-up date suggestion: scan forward week by week, find the
+        earliest start date where all required roles have enough capacity,
+        then compute end date from duration.
+
+        Logic:
+        1. Build a weekly demand map for all active scheduled projects
+        2. For each candidate start week, simulate adding this project's
+           phase-by-phase demand onto existing load
+        3. Check if all roles stay under max_util_pct
+        4. First week where it fits = suggested start
+        5. End = start + estimated duration
+        """
+        per_person = self.compute_per_person_capacity()
+        supply = self.compute_supply_by_role()
+        assumptions = self.assumptions
+        role_phase_efforts = assumptions.role_phase_efforts
+        phase_weights = assumptions.sdlc_phase_weights
+
+        # Filter to roles actually allocated
+        active_roles = {k: v for k, v in role_allocations.items()
+                        if v > 0 and k in role_phase_efforts}
+        if not active_roles:
+            return {"error": "No valid role allocations provided."}
+
+        # --- Get duration estimate first ---
+        duration_result = self.estimate_duration(
+            est_hours, role_allocations, max_util_pct
+        )
+        duration_weeks = duration_result["total_duration_days"] / 5.0
+        duration_weeks_ceil = max(1, int(duration_weeks + 0.99))
+
+        # --- Build existing demand by week for each role ---
+        today = date.today()
+        # Start scanning from next Monday
+        days_to_monday = (7 - today.weekday()) % 7
+        scan_start = today + timedelta(days=days_to_monday if days_to_monday else 0)
+
+        # Compute weekly demand from all active scheduled projects
+        existing_demand = defaultdict(lambda: defaultdict(float))
+        # existing_demand[week_index][role_key] = total hrs demanded that week
+
+        for project in self.active_projects:
+            if not project.start_date or not project.end_date:
+                continue
+            if exclude_project_id and project.id == exclude_project_id:
+                continue
+            if project.est_hours <= 0:
+                continue
+
+            proj_duration_days = (project.end_date - project.start_date).days
+            if proj_duration_days <= 0:
+                continue
+
+            # Phase boundaries for this project
+            phase_bounds = []
+            cumulative = 0
+            for phase in SDLC_PHASES:
+                w = phase_weights.get(phase, 0.0)
+                pd = round(proj_duration_days * w)
+                phase_bounds.append((phase, cumulative, cumulative + pd))
+                cumulative += pd
+
+            # For each role on this project, compute weekly demand
+            for role_key, alloc_pct in project.role_allocations.items():
+                if alloc_pct <= 0 or role_key not in role_phase_efforts:
+                    continue
+
+                role_hrs = project.est_hours * alloc_pct
+
+                for week_idx in range(horizon_weeks):
+                    week_start = scan_start + timedelta(weeks=week_idx)
+                    week_end = week_start + timedelta(days=7)
+
+                    # Does this week overlap with the project?
+                    if week_end <= project.start_date or week_start >= project.end_date:
+                        continue
+
+                    # Which phase is this week in?
+                    day_offset = (week_start - project.start_date).days
+                    day_offset = max(0, day_offset)
+                    current_phase = SDLC_PHASES[-1]
+                    for pname, ps, pe in phase_bounds:
+                        if ps <= day_offset < pe:
+                            current_phase = pname
+                            break
+
+                    phase_effort = role_phase_efforts[role_key].get(current_phase, 0.0)
+                    proj_weeks = max(1, proj_duration_days / 7.0)
+                    weekly_demand = role_hrs * phase_effort / proj_weeks
+                    existing_demand[week_idx][role_key] += weekly_demand
+
+        # --- Compute this new project's weekly demand per phase ---
+        # Build demand profile: list of (role_key, hrs_per_week) for each
+        # week offset from start
+        new_proj_weekly = []  # list of dicts: {role_key: hrs_this_week}
+        week_offset = 0
+        for phase_info in duration_result["phases"]:
+            phase_weeks = max(0.2, phase_info["duration_days"] / 5.0)
+            phase_week_count = max(1, int(phase_weeks + 0.99))
+
+            for w in range(phase_week_count):
+                week_demand = {}
+                for role_info in phase_info["roles"]:
+                    role_key = role_info["role"]
+                    # Spread this role's phase hours over the phase duration
+                    hrs_per_week = role_info["hours"] / phase_weeks
+                    week_demand[role_key] = hrs_per_week
+                new_proj_weekly.append(week_demand)
+
+        # --- Scan for earliest viable start ---
+        suggested_start_week = None
+        max_scan = horizon_weeks - len(new_proj_weekly)
+
+        for candidate_week in range(max(0, max_scan)):
+            fits = True
+            worst_util = {}
+
+            for offset, week_demand in enumerate(new_proj_weekly):
+                abs_week = candidate_week + offset
+                for role_key, new_hrs in week_demand.items():
+                    existing_hrs = existing_demand[abs_week].get(role_key, 0.0)
+                    total_demand = existing_hrs + new_hrs
+                    role_supply = supply.get(role_key, 0.0)
+
+                    if role_supply <= 0:
+                        fits = False
+                        break
+
+                    util = total_demand / role_supply
+                    if util > max_util_pct:
+                        fits = False
+                        break
+
+                    # Track worst utilization
+                    if role_key not in worst_util or util > worst_util[role_key]:
+                        worst_util[role_key] = util
+
+                if not fits:
+                    break
+
+            if fits:
+                suggested_start_week = candidate_week
+                break
+
+        # --- Build result ---
+        if suggested_start_week is not None:
+            start_date = scan_start + timedelta(weeks=suggested_start_week)
+            end_date = start_date + timedelta(weeks=duration_weeks)
+
+            role_availability = []
+            for role_key in sorted(active_roles.keys()):
+                role_sup = supply.get(role_key, 0.0)
+                avg_existing = sum(
+                    existing_demand[suggested_start_week + i].get(role_key, 0.0)
+                    for i in range(min(len(new_proj_weekly), 4))
+                ) / min(len(new_proj_weekly), 4)
+                available = role_sup - avg_existing
+                role_availability.append({
+                    "role": role_key,
+                    "total_supply_hrs_wk": round(role_sup, 1),
+                    "existing_demand_hrs_wk": round(avg_existing, 1),
+                    "available_hrs_wk": round(available, 1),
+                    "utilization_at_start": f"{(avg_existing / role_sup * 100):.0f}%" if role_sup > 0 else "N/A",
+                })
+
+            return {
+                "suggested_start": start_date.isoformat(),
+                "suggested_end": end_date.isoformat(),
+                "duration_days": round(duration_weeks * 5, 1),
+                "start_offset_weeks": suggested_start_week,
+                "earliest_available": "immediately" if suggested_start_week == 0
+                    else f"in {suggested_start_week} weeks",
+                "role_availability_at_start": role_availability,
+                "phases": duration_result["phases"],
+                "roles": duration_result["roles"],
+                "reconciled": duration_result["reconciled"],
+                "allocated_hours": duration_result["allocated_hours"],
+                "est_hours": est_hours,
+            }
+        else:
+            return {
+                "suggested_start": None,
+                "suggested_end": None,
+                "error": f"No viable start found within {horizon_weeks}-week horizon at {max_util_pct:.0%} utilization target.",
+                "suggestion": "Try increasing the utilization target, extending the horizon, or reducing role allocations.",
+                "duration_days": round(duration_weeks * 5, 1),
+                "phases": duration_result["phases"],
+                "roles": duration_result["roles"],
+            }
 
     # ------------------------------------------------------------------
     # Summary report
