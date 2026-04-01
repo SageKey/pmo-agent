@@ -19,14 +19,14 @@ DEFAULT_WORKBOOK = "ETE PMO Resource Planner.xlsx"
 
 PORTFOLIO_ROLE_COLUMNS = {
     # col_letter: (col_index, canonical_role_key)
-    "T": (20, "ba"),
-    "U": (21, "functional"),
-    "V": (22, "technical"),
-    "W": (23, "developer"),
-    "X": (24, "infrastructure"),
-    "Y": (25, "dba"),
-    "Z": (26, "pm"),
-    "AA": (27, "wms"),
+    "U": (21, "ba"),
+    "V": (22, "functional"),
+    "W": (23, "technical"),
+    "X": (24, "developer"),
+    "Y": (25, "infrastructure"),
+    "Z": (26, "dba"),
+    "AA": (27, "pm"),
+    "AB": (28, "wms"),
 }
 
 # RM_Assumptions role labels → canonical keys
@@ -227,12 +227,12 @@ class ExcelConnector:
                 ba=ws.cell(row=row, column=14).value,
                 functional_lead=ws.cell(row=row, column=15).value,
                 technical_lead=ws.cell(row=row, column=16).value,
-                tshirt_size=ws.cell(row=row, column=17).value,
-                est_hours=_to_float(ws.cell(row=row, column=18).value, 0.0),
-                est_cost=_to_float(ws.cell(row=row, column=19).value, None),
+                tshirt_size=ws.cell(row=row, column=18).value,
+                est_hours=_to_float(ws.cell(row=row, column=19).value, 0.0),
+                est_cost=_to_float(ws.cell(row=row, column=20).value, None),
                 role_allocations=role_allocs,
-                notes=ws.cell(row=row, column=28).value,
-                sort_order=_to_int(ws.cell(row=row, column=29).value, None),
+                notes=ws.cell(row=row, column=29).value,
+                sort_order=_to_int(ws.cell(row=row, column=30).value, None),
             )
             projects.append(project)
 
@@ -351,6 +351,7 @@ class ExcelConnector:
         14: "ba",         # Column N
         15: "functional", # Column O
         16: "technical",  # Column P
+        17: "developer",  # Column Q
     }
 
     def read_assignments(self, active_only: bool = True) -> list[ProjectAssignment]:
