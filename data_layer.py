@@ -17,7 +17,17 @@ from excel_connector import ExcelConnector, Project, DEFAULT_WORKBOOK
 from capacity_engine import CapacityEngine, SDLC_PHASES
 
 
-WORKBOOK_PATH = str(Path(__file__).parent / DEFAULT_WORKBOOK)
+# OneDrive sync path — the single source of truth.
+# Override with WORKBOOK_PATH env var if needed.
+_ONEDRIVE_PATH = os.path.expanduser(
+    "~/Library/CloudStorage/OneDrive-ETEREMAN/ETE PMO Resource Planner.xlsx"
+)
+_LOCAL_FALLBACK = str(Path(__file__).parent / DEFAULT_WORKBOOK)
+
+WORKBOOK_PATH = os.environ.get(
+    "WORKBOOK_PATH",
+    _ONEDRIVE_PATH if os.path.exists(_ONEDRIVE_PATH) else _LOCAL_FALLBACK,
+)
 
 
 def _clean_health(health: str) -> str:
