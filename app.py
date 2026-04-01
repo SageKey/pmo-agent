@@ -1,11 +1,11 @@
 """
-Streamlit Chat UI for ETE IT PMO Resource Planning Agent.
+ETE PMO Executive Dashboard
 Run with: streamlit run app.py
 """
 
-import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -13,295 +13,131 @@ import streamlit as st
 # Ensure imports work from the project directory
 sys.path.insert(0, str(Path(__file__).parent))
 
-import anthropic
-from pmo_agent import PMOTools, TOOLS, SYSTEM_PROMPT, MODEL
+from components import inject_css, NAVY
+from data_layer import safe_load, get_file_mtime
 
-
-# ---------------------------------------------------------------------------
-# API Key
-# ---------------------------------------------------------------------------
-def get_api_key() -> str:
-    """Get API key from env, .env file, or Streamlit secrets."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("ANTHROPIC_API_KEY="):
-                return line.split("=", 1)[1].strip().strip("'\"")
-
-    try:
-        if hasattr(st, "secrets") and "ANTHROPIC_API_KEY" in st.secrets:
-            return st.secrets["ANTHROPIC_API_KEY"]
-    except Exception:
-        pass
-
-    return ""
-
-
-# ---------------------------------------------------------------------------
-# Session State
-# ---------------------------------------------------------------------------
-def init_session():
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []  # API message format
-    if "tools" not in st.session_state:
-        st.session_state.tools = PMOTools()
-
-
-# ---------------------------------------------------------------------------
-# Agent call with tool loop
-# ---------------------------------------------------------------------------
-def run_agent(client: anthropic.Anthropic, user_message: str):
-    """Run the agent with tool-use loop, yielding status updates."""
-    st.session_state.chat_history.append({
-        "role": "user", "content": user_message
-    })
-
-    tool_calls_made = []
-
-    while True:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=st.session_state.chat_history,
-        )
-
-        if response.stop_reason == "end_turn":
-            text_parts = []
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-            st.session_state.chat_history.append({
-                "role": "assistant", "content": response.content
-            })
-            return "\n".join(text_parts), tool_calls_made
-
-        tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        if not tool_use_blocks:
-            text_parts = []
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-            st.session_state.chat_history.append({
-                "role": "assistant", "content": response.content
-            })
-            return "\n".join(text_parts), tool_calls_made
-
-        st.session_state.chat_history.append({
-            "role": "assistant", "content": response.content
-        })
-
-        tool_results = []
-        for tool_block in tool_use_blocks:
-            tool_calls_made.append(tool_block.name)
-            try:
-                result = st.session_state.tools.execute_tool(
-                    tool_block.name, tool_block.input
-                )
-            except Exception as e:
-                result = json.dumps({"error": f"Tool '{tool_block.name}' failed: {str(e)}"})
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": tool_block.id,
-                "content": result,
-            })
-
-        st.session_state.chat_history.append({
-            "role": "user", "content": tool_results
-        })
+import pages_exec
+import pages_portfolio
+import pages_capacity
+import pages_timeline
+import pages_project
+import pages_assistant
+import pages_editor
 
 
 # ---------------------------------------------------------------------------
 # Page Config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="ETE PMO Resource Agent",
-    page_icon="📊",
+    page_title="ETE PMO Resource Planning",
+    page_icon="\U0001F4CA",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
+
+inject_css()
 
 
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.title("ETE IT PMO")
-    st.caption("AI Resource Planning Agent")
+    st.markdown("""
+    <div style="padding: 0.75rem 0 0.5rem 0;">
+        <div style="font-size: 1.4rem; font-weight: 700; color: #FFFFFF;">
+            ETE IT PMO</div>
+        <div style="font-size: 0.8rem; color: #8BA4C4; margin-top: 0.15rem;">
+            Resource Planning Dashboard</div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.divider()
 
-    # API key (loaded silently)
-    api_key = get_api_key()
+    page = st.radio(
+        "Navigation",
+        ["Executive Summary", "Portfolio", "Project Detail", "Project Editor", "Capacity", "Timeline", "AI Assistant"],
+        label_visibility="collapsed",
+        key="nav_radio",
+    )
+
+    st.divider()
+
+    # Data freshness
+    mtime = get_file_mtime()
+    if mtime > 0:
+        ts = datetime.fromtimestamp(mtime).strftime("%b %d, %Y %I:%M %p")
+        st.caption(f"Data as of: {ts}")
+
+    # API key (for AI Assistant)
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    env_path = Path(__file__).parent / ".env"
+    if not api_key and env_path.exists():
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("ANTHROPIC_API_KEY="):
+                api_key = line.split("=", 1)[1].strip().strip("'\"")
+                break
+
     if not api_key:
-        api_key = st.text_input(
+        try:
+            if hasattr(st, "secrets") and "ANTHROPIC_API_KEY" in st.secrets:
+                api_key = st.secrets["ANTHROPIC_API_KEY"]
+        except Exception:
+            pass
+
+    with st.expander("API Key", expanded=not bool(api_key)):
+        key_input = st.text_input(
             "Anthropic API Key",
+            value=api_key,
             type="password",
             placeholder="sk-ant-...",
-            help="Enter your Anthropic API key to connect.",
+            label_visibility="collapsed",
         )
-        if api_key:
+        if key_input:
+            api_key = key_input
             os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    # Quick stats — first thing visible
-    init_session()
-    tools = st.session_state.tools
-    try:
-        data = tools.engine._load()
-        active = data["active_portfolio"]
-        scheduled = [p for p in active if p.duration_weeks]
-        unscheduled = [p for p in active if not p.duration_weeks]
+    st.session_state["api_key"] = api_key
 
-        col1, col2 = st.columns(2)
-        col1.metric("Active Projects", len(active))
-        col2.metric("Team Size", len(data["roster"]))
-
-        col3, col4 = st.columns(2)
-        col3.metric("Scheduled", len(scheduled))
-        col4.metric("Unscheduled", len(unscheduled))
-
-        st.caption("Quick Utilization")
-        utilization = tools.engine.compute_utilization()
-        for role in ["developer", "technical", "ba", "functional", "pm"]:
-            if role in utilization:
-                u = utilization[role]
-                pct = u.utilization_pct
-                color = "🟢" if pct < 0.80 else ("🟡" if pct < 1.0 else "🔴")
-                st.text(f"{color} {role:<14} {pct:>5.0%}")
-
-    except Exception:
-        st.info("Workbook data will load on first query")
+    if api_key:
+        st.caption("API key set")
 
     st.divider()
 
     # Controls
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = False
-
-    dark_mode = st.toggle("Dark Mode", value=st.session_state.dark_mode)
-    if dark_mode != st.session_state.dark_mode:
-        st.session_state.dark_mode = dark_mode
-        st.rerun()
-
-    if st.button("Refresh Dashboard", use_container_width=True):
-        try:
-            from excel_dashboard import DashboardGenerator
-            with st.spinner("Refreshing dashboard..."):
-                gen = DashboardGenerator()
-                output_path = gen.generate_all()
-                gen.connector.close()
-            st.success("Dashboard refreshed!")
-        except Exception as e:
-            st.error(f"Dashboard generation failed: {str(e)}")
-
-    if st.button("Clear Chat", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.chat_history = []
-        st.rerun()
-
-    # API key status at bottom
-    if api_key:
-        st.caption("✅ API key set")
-    else:
-        st.warning("Enter API key to start", icon="⚠")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Refresh", use_container_width=True, help="Reload data from workbook"):
+            st.cache_data.clear()
+            st.rerun()
+    with col_b:
+        if page == "AI Assistant":
+            if st.button("Clear Chat", use_container_width=True):
+                st.session_state.messages = []
+                st.session_state.chat_history = []
+                st.rerun()
 
 
 # ---------------------------------------------------------------------------
-# Dark Mode CSS
+# Load Data
 # ---------------------------------------------------------------------------
-if st.session_state.get("dark_mode", False):
-    st.markdown("""
-    <style>
-        /* Main background */
-        .stApp, [data-testid="stAppViewContainer"] { background-color: #1a1a2e; color: #e0e0e0; }
-        /* Sidebar */
-        [data-testid="stSidebar"] { background-color: #16213e; color: #e0e0e0; }
-        [data-testid="stSidebar"] * { color: #e0e0e0 !important; }
-        /* Chat messages */
-        [data-testid="stChatMessage"] { background-color: #1f2940; border-color: #2a3a5c; }
-        /* Chat input bar — keep light */
-        [data-testid="stChatInput"] { background-color: #ffffff !important; }
-        [data-testid="stChatInput"] textarea { background-color: #ffffff !important; color: #333333 !important; }
-        [data-testid="stChatInputContainer"],
-        [data-testid="stBottom"] > div,
-        .stBottom, [data-testid="stBottom"],
-        footer, [data-testid="stFooter"] { background-color: #1a1a2e !important; }
-        /* Buttons */
-        .stButton > button { background-color: #2a3a5c; color: #e0e0e0; border-color: #3a4a6c; }
-        .stButton > button:hover { background-color: #3a4a6c; color: #fff; }
-        /* Metrics */
-        [data-testid="stMetricValue"] { color: #e0e0e0 !important; }
-        [data-testid="stMetricLabel"] { color: #a0a0b0 !important; }
-        /* Headers */
-        h1, h2, h3, h4, h5, h6 { color: #e0e0e0 !important; }
-        /* Captions */
-        .stCaption, small { color: #8888aa !important; }
-        /* Dividers */
-        hr { border-color: #2a3a5c !important; }
-        /* Markdown text */
-        .stMarkdown, .stMarkdown p, .stMarkdown li { color: #e0e0e0; }
-        /* Spinner */
-        .stSpinner > div { color: #e0e0e0 !important; }
-        /* Success/warning/error */
-        .stSuccess { background-color: #1a3a2e; }
-        .stWarning { background-color: #3a3a1e; }
-    </style>
-    """, unsafe_allow_html=True)
+data, utilization, person_demand = safe_load()
+
 
 # ---------------------------------------------------------------------------
-# Main Chat
+# Page Routing
 # ---------------------------------------------------------------------------
-st.title("📊 ETE PMO Resource Planning Agent")
-
-# Display chat history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-# Handle pending input from sidebar buttons
-pending = st.session_state.pop("pending_input", None)
-
-# Chat input
-user_input = st.chat_input("Ask about projects, capacity, or scenarios...")
-
-# Use pending input if no direct input
-if pending and not user_input:
-    user_input = pending
-
-if user_input:
-    if not api_key:
-        st.error("Please enter your Anthropic API key in the sidebar.")
-    else:
-        # Show user message
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        # Run agent
-        with st.chat_message("assistant"):
-            with st.spinner("Analyzing..."):
-                try:
-                    client = anthropic.Anthropic(api_key=api_key)
-                    response_text, tools_used = run_agent(client, user_input)
-
-                    if tools_used:
-                        tool_names = ", ".join(tools_used)
-                        st.caption(f"Tools used: {tool_names}")
-
-                    st.markdown(response_text)
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": response_text,
-                    })
-                except anthropic.AuthenticationError:
-                    st.error("Invalid API key. Please check and try again.")
-                except anthropic.RateLimitError:
-                    st.error("Rate limited. Please wait a moment and try again.")
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
+if page == "Executive Summary":
+    pages_exec.render(data, utilization, person_demand)
+elif page == "Portfolio":
+    pages_portfolio.render(data, utilization, person_demand)
+elif page == "Project Detail":
+    pages_project.render(data, utilization, person_demand)
+elif page == "Project Editor":
+    pages_editor.render(data, utilization, person_demand)
+elif page == "Capacity":
+    pages_capacity.render(data, utilization, person_demand)
+elif page == "Timeline":
+    pages_timeline.render(data, utilization, person_demand)
+elif page == "AI Assistant":
+    pages_assistant.render(data, utilization, person_demand)
