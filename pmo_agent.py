@@ -68,6 +68,19 @@ DATA MODEL:
 • When asked "how long will this take?" or "does this timeline make sense?", always use estimate_timeline.
 • When asked "when can we start?" or "what dates should this project have?", use suggest_dates — it scans real role availability week by week to find the earliest viable window.
 
+PROJECT ASSIGNMENTS:
+• Assignments are read from Portfolio columns M (PM), N (BA), O (Functional), P (Technical) — each cell names the person assigned to that role on the project.
+• Use get_project_assignments to see who is assigned to which projects.
+• Use get_person_utilization to see individual-level workload (not just role-level).
+• When assignments exist, demand is routed through specific people. For unassigned project-roles, demand is split evenly across all role members (fallback).
+• Always validate assignments: check that the person's role matches the project's role need, and flag if someone is overloaded (RED).
+
+WORKBOOK EDITING:
+• Use read_workbook_cells to inspect any cells before making changes.
+• Use update_workbook to write to any cell in any sheet — assignments, dates, priorities, hours, notes, etc.
+• After making changes that affect capacity or the dashboard, offer to refresh_dashboard.
+• Always confirm what you're about to change before writing, and show old → new values.
+
 CHANGE DETECTION:
 • Use detect_changes at the start of each session to proactively report what changed since last time.
 • After a planning session or significant discussion, offer to save_snapshot to establish a new baseline.
@@ -299,6 +312,92 @@ TOOLS = [
                 }
             },
             "required": []
+        }
+    },
+    {
+        "name": "get_project_assignments",
+        "description": "Get current project-to-person assignments from Portfolio columns M-P (PM, BA, Functional, Technical). Shows who is assigned to which projects, with their role. Can filter by project ID or person name. Also shows person-level utilization for each assigned individual.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "Filter assignments to a specific project (e.g., 'ETE-83')."
+                },
+                "person_name": {
+                    "type": "string",
+                    "description": "Filter assignments to a specific person (partial match)."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_person_utilization",
+        "description": "Get person-level utilization for all team members. Shows each person's capacity, total demand (from assigned projects + even-split fallback for unassigned), utilization %, and status. Use this to identify overloaded individuals, not just overloaded roles.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "filter_role": {
+                    "type": "string",
+                    "description": "Filter to a specific role (developer, ba, pm, etc.)."
+                },
+                "filter_status": {
+                    "type": "string",
+                    "enum": ["RED", "YELLOW", "GREEN"],
+                    "description": "Filter to show only people at a specific utilization status."
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "read_workbook_cells",
+        "description": "Read cells from any sheet in the workbook. Use this to inspect current values before making changes. Returns cell values for the specified range.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sheet_name": {
+                    "type": "string",
+                    "description": "Sheet name (e.g., 'Project Portfolio', 'Team Roster', 'RM_Assumptions')."
+                },
+                "cell_range": {
+                    "type": "string",
+                    "description": "Cell range to read (e.g., 'A1:P5', 'M4:M42', 'B3'). Use Excel-style references."
+                }
+            },
+            "required": ["sheet_name", "cell_range"]
+        }
+    },
+    {
+        "name": "update_workbook",
+        "description": "Write values to any cells in any sheet of the workbook. Use this to update project data, assignments, dates, priorities, or any other field. Supports single cell or batch updates. After making changes, consider refreshing the dashboard.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "updates": {
+                    "type": "array",
+                    "description": "List of cell updates to apply.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "sheet_name": {
+                                "type": "string",
+                                "description": "Sheet name."
+                            },
+                            "cell": {
+                                "type": "string",
+                                "description": "Cell reference (e.g., 'M4', 'H10')."
+                            },
+                            "value": {
+                                "description": "Value to write. Can be string, number, or null to clear."
+                            }
+                        },
+                        "required": ["sheet_name", "cell", "value"]
+                    }
+                }
+            },
+            "required": ["updates"]
         }
     },
     {
@@ -721,6 +820,145 @@ class PMOTools:
             "message": f"Snapshot #{snap_id} saved successfully.",
         }, indent=2)
 
+    def get_project_assignments(self, project_id: str = None,
+                                  person_name: str = None) -> str:
+        assignments = self.connector.read_assignments()
+
+        if project_id:
+            assignments = [a for a in assignments
+                           if a.project_id.upper() == project_id.upper().strip()]
+        if person_name:
+            assignments = [a for a in assignments
+                           if person_name.lower() in a.person_name.lower()]
+
+        # Also compute person-level demand for context
+        person_demand = self.engine.compute_person_demand()
+        person_util_map = {p["name"].lower(): p for p in person_demand}
+
+        items = []
+        for a in assignments:
+            person_info = person_util_map.get(a.person_name.lower(), {})
+            items.append({
+                "project_id": a.project_id,
+                "person_name": a.person_name,
+                "role": a.role_key,
+                "allocation_pct": f"{a.allocation_pct:.0%}",
+                "person_utilization": person_info.get("utilization_pct", "N/A"),
+                "person_status": person_info.get("status", "N/A"),
+            })
+
+        result = {
+            "data_as_of": self._data_timestamp(),
+            "count": len(items),
+            "assignments": items,
+        }
+        if not items:
+            result["note"] = ("No assignments found in Portfolio columns M-P. "
+                              "Without assignments, demand is split evenly across "
+                              "all role members (fallback mode).")
+        return json.dumps(result, indent=2)
+
+    def get_person_utilization(self, filter_role: str = None,
+                                filter_status: str = None) -> str:
+        person_demand = self.engine.compute_person_demand()
+
+        if filter_role:
+            person_demand = [p for p in person_demand
+                            if p["role_key"] == filter_role.lower()]
+        if filter_status:
+            person_demand = [p for p in person_demand
+                            if p["status"] == filter_status.upper()]
+
+        # Summary stats
+        total = len(person_demand)
+        red_count = sum(1 for p in person_demand if p["status"] == "RED")
+        yellow_count = sum(1 for p in person_demand if p["status"] == "YELLOW")
+        green_count = sum(1 for p in person_demand if p["status"] == "GREEN")
+
+        result = {
+            "data_as_of": self._data_timestamp(),
+            "total_people": total,
+            "red": red_count,
+            "yellow": yellow_count,
+            "green": green_count,
+            "people": person_demand,
+        }
+        return json.dumps(result, indent=2)
+
+    def read_workbook_cells(self, sheet_name: str, cell_range: str) -> str:
+        import openpyxl
+        from openpyxl.utils import range_boundaries
+        wb = openpyxl.load_workbook(self.connector.workbook_path, data_only=True)
+        if sheet_name not in wb.sheetnames:
+            wb.close()
+            return json.dumps({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
+
+        ws = wb[sheet_name]
+
+        # Handle single cell vs range
+        if ":" in cell_range:
+            min_col, min_row, max_col, max_row = range_boundaries(cell_range)
+        else:
+            min_col, min_row, max_col, max_row = range_boundaries(f"{cell_range}:{cell_range}")
+
+        rows = []
+        for row in range(min_row, max_row + 1):
+            row_data = {}
+            for col in range(min_col, max_col + 1):
+                cell = ws.cell(row=row, column=col)
+                col_letter = openpyxl.utils.get_column_letter(col)
+                val = cell.value
+                if isinstance(val, (date, datetime)):
+                    val = val.strftime("%m/%d/%Y")
+                row_data[f"{col_letter}{row}"] = val
+            rows.append(row_data)
+
+        wb.close()
+        return json.dumps({
+            "sheet": sheet_name,
+            "range": cell_range,
+            "data": rows,
+        }, indent=2, default=str)
+
+    def update_workbook(self, updates: list) -> str:
+        import openpyxl
+        wb = openpyxl.load_workbook(self.connector.workbook_path)
+
+        results = []
+        for update in updates:
+            sheet_name = update["sheet_name"]
+            cell_ref = update["cell"]
+            value = update["value"]
+
+            if sheet_name not in wb.sheetnames:
+                results.append({"cell": f"{sheet_name}!{cell_ref}", "status": "error",
+                                "message": f"Sheet '{sheet_name}' not found"})
+                continue
+
+            ws = wb[sheet_name]
+            old_value = ws[cell_ref].value
+            ws[cell_ref] = value
+            results.append({
+                "cell": f"{sheet_name}!{cell_ref}",
+                "old_value": str(old_value) if old_value is not None else None,
+                "new_value": str(value) if value is not None else None,
+                "status": "updated",
+            })
+
+        wb.save(self.connector.workbook_path)
+        wb.close()
+
+        # Reset connector cache so subsequent reads pick up changes
+        self.connector.close()
+        self.connector._wb = None
+        self.engine._data = None
+
+        return json.dumps({
+            "status": "success",
+            "updates_applied": len([r for r in results if r["status"] == "updated"]),
+            "results": results,
+        }, indent=2, default=str)
+
     def refresh_dashboard(self, output_path: str = None) -> str:
         from excel_dashboard import DashboardGenerator
         try:
@@ -762,6 +1000,14 @@ class PMOTools:
             return self.detect_changes()
         elif name == "save_snapshot":
             return self.save_snapshot(**input_data)
+        elif name == "get_project_assignments":
+            return self.get_project_assignments(**input_data)
+        elif name == "get_person_utilization":
+            return self.get_person_utilization(**input_data)
+        elif name == "read_workbook_cells":
+            return self.read_workbook_cells(**input_data)
+        elif name == "update_workbook":
+            return self.update_workbook(**input_data)
         elif name == "refresh_dashboard":
             return self.refresh_dashboard(**input_data)
         else:

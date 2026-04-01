@@ -21,6 +21,7 @@ from typing import Optional
 from excel_connector import (
     ExcelConnector,
     Project,
+    ProjectAssignment,
     TeamMember,
     RMAssumptions,
     SDLC_PHASES,
@@ -229,6 +230,119 @@ class CapacityEngine:
             )
 
         return utilization
+
+    # ------------------------------------------------------------------
+    # Person-level demand (using Project Assignments)
+    # ------------------------------------------------------------------
+    @property
+    def assignments(self) -> list[ProjectAssignment]:
+        return self._load().get("assignments", [])
+
+    def build_assignment_map(self) -> dict[str, list[ProjectAssignment]]:
+        """Group assignments by person name (lowercased).
+        Returns: {person_name_lower: [ProjectAssignment, ...]}"""
+        by_person = defaultdict(list)
+        for a in self.assignments:
+            by_person[a.person_name.strip().lower()].append(a)
+        return dict(by_person)
+
+    def compute_person_demand(self) -> list[dict]:
+        """Compute weekly demand per person using assignments.
+
+        For each person:
+        - If they have explicit assignments, demand = sum of each assigned
+          project's weekly role demand × person's allocation fraction.
+        - If a project has no assignments for a role, demand is split evenly
+          across all roster members in that role (fallback).
+
+        Returns a list of dicts with person details and demand breakdown.
+        """
+        data = self._load()
+        roster = data["roster"]
+        active = data["active_portfolio"]
+        assignments = data.get("assignments", [])
+
+        # Build indexes
+        assignment_map = self.build_assignment_map()
+        # Which projects/roles have explicit assignments?
+        assigned_project_roles = set()
+        for a in assignments:
+            assigned_project_roles.add((a.project_id, a.role_key))
+
+        # Role demand per project (reuse existing computation)
+        project_role_demands = {}  # (project_id, role_key) → RoleDemand
+        for project in active:
+            for demand in self.compute_project_role_demand(project):
+                project_role_demands[(project.id, demand.role_key)] = demand
+
+        # Roster members grouped by role
+        role_members = defaultdict(list)
+        for m in roster:
+            role_members[m.role_key].append(m)
+
+        # Compute per person
+        results = []
+        for member in roster:
+            person_key = member.name.strip().lower()
+            person_assignments = assignment_map.get(person_key, [])
+            demand_items = []
+            total_demand_hrs = 0.0
+
+            # Explicit assignments
+            assigned_project_ids = set()
+            for a in person_assignments:
+                assigned_project_ids.add(a.project_id)
+                rd = project_role_demands.get((a.project_id, a.role_key))
+                if rd:
+                    # Person gets their allocation fraction of the role demand
+                    person_hrs = rd.weekly_hours * a.allocation_pct
+                    demand_items.append({
+                        "project_id": a.project_id,
+                        "project_name": rd.project_name,
+                        "role": a.role_key,
+                        "source": "assigned",
+                        "allocation_pct": f"{a.allocation_pct:.0%}",
+                        "weekly_hours": round(person_hrs, 1),
+                    })
+                    total_demand_hrs += person_hrs
+
+            # Fallback: even split for unassigned project-roles
+            for (pid, role_key), rd in project_role_demands.items():
+                if role_key != member.role_key:
+                    continue
+                if (pid, role_key) in assigned_project_roles:
+                    continue  # This project-role has explicit assignments
+                # Split evenly across all people in this role
+                n_people = len(role_members.get(role_key, []))
+                if n_people > 0:
+                    person_hrs = rd.weekly_hours / n_people
+                    demand_items.append({
+                        "project_id": pid,
+                        "project_name": rd.project_name,
+                        "role": role_key,
+                        "source": "even_split",
+                        "allocation_pct": f"{1/n_people:.0%}",
+                        "weekly_hours": round(person_hrs, 1),
+                    })
+                    total_demand_hrs += person_hrs
+
+            capacity = member.project_capacity_hrs
+            util_pct = total_demand_hrs / capacity if capacity > 0 else 0.0
+
+            results.append({
+                "name": member.name,
+                "role": member.role,
+                "role_key": member.role_key,
+                "team": member.team,
+                "capacity_hrs_week": round(capacity, 1),
+                "demand_hrs_week": round(total_demand_hrs, 1),
+                "utilization_pct": f"{util_pct:.0%}",
+                "status": _utilization_status(util_pct),
+                "project_count": len(demand_items),
+                "projects": demand_items,
+            })
+
+        return results
 
     # ------------------------------------------------------------------
     # Weekly timeline (phase-aware demand by week)

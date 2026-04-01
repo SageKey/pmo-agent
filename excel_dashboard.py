@@ -145,8 +145,7 @@ class DashboardGenerator:
                 wb.move_sheet(name, offset=i - idx)
 
         if output_path is None:
-            base = Path(self.connector.workbook_path)
-            output_path = str(base.parent / f"{base.stem}_Dashboard{base.suffix}")
+            output_path = self.connector.workbook_path
 
         wb.save(output_path)
         print(f"Dashboard saved: {output_path}")
@@ -165,6 +164,12 @@ class DashboardGenerator:
         # ────────────────────────────────────────────────────────────
         ws["A1"] = "Resource Model"
         ws["A1"].font = TITLE_FONT
+        ws["A2"] = ("Auto-updates: Phase weights, role efforts, estimates, allocations, "
+                    "capacity, headcounts, durations, reconciliation, scenario table")
+        ws["A2"].font = SMALL_FONT
+        ws["A3"] = ("Refresh required: Capacity Heatmap, Gantt, weekly role heatmap, "
+                    "demand column, project duration estimates, suggested dates")
+        ws["A3"].font = Font(size=9, color="CC0000")
         ws["A2"] = "All values are formulas — change source data and this sheet recalculates"
         ws["A2"].font = SMALL_FONT
 
@@ -761,8 +766,8 @@ class DashboardGenerator:
                     bn_label = rl
                     break
 
-            start_str = project.start_date.isoformat() if project.start_date else ""
-            end_str = project.end_date.isoformat() if project.end_date else ""
+            start_str = project.start_date.strftime("%m/%d/%Y") if project.start_date else ""
+            end_str = project.end_date.strftime("%m/%d/%Y") if project.end_date else ""
 
             if not project.start_date:
                 try:
@@ -770,8 +775,10 @@ class DashboardGenerator:
                         project.est_hours, active_roles_p,
                         exclude_project_id=project.id
                     )
-                    start_str = f"→ {dates.get('suggested_start', '')}"
-                    end_str = f"→ {dates.get('suggested_end', '')}"
+                    s = dates.get('suggested_start', '')
+                    e = dates.get('suggested_end', '')
+                    start_str = f"→ {date.fromisoformat(s).strftime('%m/%d/%Y')}" if s else "TBD"
+                    end_str = f"→ {date.fromisoformat(e).strftime('%m/%d/%Y')}" if e else "TBD"
                 except Exception:
                     start_str = "TBD"
                     end_str = "TBD"
@@ -1180,6 +1187,16 @@ class DashboardGenerator:
         start_date = today + timedelta(days=days_to_monday if days_to_monday else 0)
         num_weeks = 26
 
+        # Build assignment index: (project_id, role_key) → [(person_name, alloc_pct)]
+        assignments = self._data.get("assignments", [])
+        assigned_project_roles = set()
+        assignment_index = defaultdict(list)  # (pid, role_key) → [(name, pct)]
+        for a in assignments:
+            assignment_index[(a.project_id, a.role_key)].append(
+                (a.person_name, a.allocation_pct)
+            )
+            assigned_project_roles.add((a.project_id, a.role_key))
+
         person_demand = defaultdict(lambda: defaultdict(float))
 
         for project in active:
@@ -1206,7 +1223,16 @@ class DashboardGenerator:
 
                 role_hrs = project.est_hours * alloc_pct
                 proj_weeks = max(1, proj_days / 7.0)
-                per_member_share = 1.0 / len(role_members)
+
+                # Determine how to distribute demand to people
+                key = (project.id, role_key)
+                if key in assigned_project_roles:
+                    # Use explicit assignments
+                    person_shares = assignment_index[key]
+                else:
+                    # Fallback: even split across all role members
+                    even_share = 1.0 / len(role_members)
+                    person_shares = [(m.name, even_share) for m in role_members]
 
                 for week_idx in range(num_weeks):
                     ws_date = start_date + timedelta(weeks=week_idx)
@@ -1224,8 +1250,8 @@ class DashboardGenerator:
                     effort = role_phase_efforts[role_key].get(cur_phase, 0.0)
                     weekly_hrs = role_hrs * effort / proj_weeks
 
-                    for member in role_members:
-                        person_demand[member.name][week_idx] += weekly_hrs * per_member_share
+                    for person_name, share_pct in person_shares:
+                        person_demand[person_name][week_idx] += weekly_hrs * share_pct
 
         row = 4
         for col, label in [(1, "Resource"), (2, "Role"), (3, "Team"), (4, "Capacity\n(hrs/wk)")]:
@@ -1289,7 +1315,7 @@ class DashboardGenerator:
         ws.merge_cells("A1:AZ1")
         ws["A1"] = "ETE IT PMO — Project Gantt Chart"
         ws["A1"].font = TITLE_FONT
-        ws["A2"] = f"Generated: {date.today().isoformat()}  |  Color = priority"
+        ws["A2"] = f"Generated: {date.today().strftime('%m/%d/%Y')}  |  Color = priority"
         ws["A2"].font = SMALL_FONT
 
         active = self._data["active_portfolio"]
@@ -1363,8 +1389,8 @@ class DashboardGenerator:
                     except Exception:
                         pass
 
-            ws.cell(row=row, column=5, value=start.isoformat() if start else "TBD").border = THIN_BORDER
-            ws.cell(row=row, column=6, value=end.isoformat() if end else "TBD").border = THIN_BORDER
+            ws.cell(row=row, column=5, value=start.strftime("%m/%d/%Y") if start else "TBD").border = THIN_BORDER
+            ws.cell(row=row, column=6, value=end.strftime("%m/%d/%Y") if end else "TBD").border = THIN_BORDER
             ws.cell(row=row, column=7, value=dur_str).border = THIN_BORDER
 
             for c in range(1, 8):

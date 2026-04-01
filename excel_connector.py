@@ -11,7 +11,7 @@ from typing import Optional
 
 import openpyxl
 
-DEFAULT_WORKBOOK = "ETE_PMO_Resource_Budget_Manager 3 (1).xlsx"
+DEFAULT_WORKBOOK = "ETE PMO Resource Planner.xlsx"
 
 # --- Role name mapping ---
 # Maps Portfolio column names → canonical role keys used across the system.
@@ -19,14 +19,14 @@ DEFAULT_WORKBOOK = "ETE_PMO_Resource_Budget_Manager 3 (1).xlsx"
 
 PORTFOLIO_ROLE_COLUMNS = {
     # col_letter: (col_index, canonical_role_key)
-    "T": (20, "ba"),
-    "U": (21, "functional"),
-    "V": (22, "technical"),
-    "W": (23, "developer"),
-    "X": (24, "infrastructure"),
-    "Y": (25, "dba"),
-    "Z": (26, "pm"),
-    "AA": (27, "wms"),
+    "U": (21, "ba"),
+    "V": (22, "functional"),
+    "W": (23, "technical"),
+    "X": (24, "developer"),
+    "Y": (25, "infrastructure"),
+    "Z": (26, "dba"),
+    "AA": (27, "pm"),
+    "AB": (28, "wms"),
 }
 
 # RM_Assumptions role labels → canonical keys
@@ -54,6 +54,15 @@ ROSTER_ROLE_MAP = {
 }
 
 SDLC_PHASES = ["discovery", "planning", "design", "build", "test", "deploy"]
+
+
+@dataclass
+class ProjectAssignment:
+    """One person assigned to one project with a time allocation."""
+    project_id: str
+    person_name: str
+    role_key: str
+    allocation_pct: float  # 0.0-1.0, fraction of person's project capacity
 
 
 @dataclass
@@ -218,12 +227,12 @@ class ExcelConnector:
                 ba=ws.cell(row=row, column=14).value,
                 functional_lead=ws.cell(row=row, column=15).value,
                 technical_lead=ws.cell(row=row, column=16).value,
-                tshirt_size=ws.cell(row=row, column=17).value,
-                est_hours=_to_float(ws.cell(row=row, column=18).value, 0.0),
-                est_cost=_to_float(ws.cell(row=row, column=19).value, None),
+                tshirt_size=ws.cell(row=row, column=18).value,
+                est_hours=_to_float(ws.cell(row=row, column=19).value, 0.0),
+                est_cost=_to_float(ws.cell(row=row, column=20).value, None),
                 role_allocations=role_allocs,
-                notes=ws.cell(row=row, column=28).value,
-                sort_order=_to_int(ws.cell(row=row, column=29).value, None),
+                notes=ws.cell(row=row, column=29).value,
+                sort_order=_to_int(ws.cell(row=row, column=30).value, None),
             )
             projects.append(project)
 
@@ -334,19 +343,72 @@ class ExcelConnector:
         )
 
     # ------------------------------------------------------------------
+    # Project Assignments (read from Portfolio columns M-P)
+    # ------------------------------------------------------------------
+    # Portfolio column mapping: col_index → canonical role key
+    _ASSIGNMENT_COLUMNS = {
+        13: "pm",         # Column M
+        14: "ba",         # Column N
+        15: "functional", # Column O
+        16: "technical",  # Column P
+        17: "developer",  # Column Q
+    }
+
+    def read_assignments(self, active_only: bool = True) -> list[ProjectAssignment]:
+        """Read person assignments from Portfolio columns M (PM), N (BA),
+        O (Functional), P (Technical). Each cell contains a person name.
+        Allocation defaults to 1.0 (100%) since a named person owns that
+        role for the project.
+
+        If active_only=True (default), skips completed and postponed projects
+        so they don't appear in capacity/heatmap calculations.
+        """
+        wb = self._open()
+        ws = wb["Project Portfolio"]
+        assignments = []
+
+        for row in range(4, 43):
+            pid = ws.cell(row=row, column=1).value
+            if not pid:
+                continue
+
+            if active_only:
+                health = ws.cell(row=row, column=6).value
+                pct_complete = _to_float(ws.cell(row=row, column=7).value, 0.0)
+                if health and "POSTPONED" in str(health):
+                    continue
+                if pct_complete >= 1.0:
+                    continue
+
+            for col_idx, role_key in self._ASSIGNMENT_COLUMNS.items():
+                name = ws.cell(row=row, column=col_idx).value
+                if not name:
+                    continue
+                assignments.append(ProjectAssignment(
+                    project_id=str(pid).strip(),
+                    person_name=str(name).strip(),
+                    role_key=role_key,
+                    allocation_pct=1.0,
+                ))
+
+        return assignments
+
+    # ------------------------------------------------------------------
     # Convenience: load everything
     # ------------------------------------------------------------------
     def load_all(self) -> dict:
-        """Load all three sheets and return as a dict."""
+        """Load all sheets and return as a dict."""
         portfolio = self.read_portfolio()
         active = [p for p in portfolio if p.is_active]
         roster = self.read_roster()
         assumptions = self.read_assumptions()
+        assignments = self.read_assignments()
         return {
             "portfolio": portfolio,
             "active_portfolio": active,
             "roster": roster,
             "assumptions": assumptions,
+            "assignments": assignments,
             "data_as_of": self.file_modified_time,
         }
 
