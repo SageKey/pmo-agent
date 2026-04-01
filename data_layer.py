@@ -17,17 +17,29 @@ from excel_connector import ExcelConnector, Project, DEFAULT_WORKBOOK
 from capacity_engine import CapacityEngine, SDLC_PHASES
 
 
-# OneDrive sync path — the single source of truth.
+# SharePoint sync path (via Teams > IT Leadership Team) — the single source of truth.
 # Override with WORKBOOK_PATH env var if needed.
+_SHAREPOINT_PATH = os.path.expanduser(
+    "~/Library/CloudStorage/OneDrive-SharedLibraries-ETEREMAN/"
+    "IT Leadership Team - 2026/ETE PMO Resource Planner.xlsx"
+)
 _ONEDRIVE_PATH = os.path.expanduser(
     "~/Library/CloudStorage/OneDrive-ETEREMAN/ETE PMO Resource Planner.xlsx"
 )
 _LOCAL_FALLBACK = str(Path(__file__).parent / DEFAULT_WORKBOOK)
 
-WORKBOOK_PATH = os.environ.get(
-    "WORKBOOK_PATH",
-    _ONEDRIVE_PATH if os.path.exists(_ONEDRIVE_PATH) else _LOCAL_FALLBACK,
-)
+def _resolve_workbook_path() -> str:
+    """Find the workbook: SharePoint sync > OneDrive > local fallback."""
+    env = os.environ.get("WORKBOOK_PATH")
+    if env:
+        return env
+    for path in [_SHAREPOINT_PATH, _ONEDRIVE_PATH, _LOCAL_FALLBACK]:
+        if os.path.exists(path):
+            return path
+    return _LOCAL_FALLBACK
+
+
+WORKBOOK_PATH = _resolve_workbook_path()
 
 
 def _clean_health(health: str) -> str:
