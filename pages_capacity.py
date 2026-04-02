@@ -63,36 +63,6 @@ def render(data: dict, utilization: dict, person_demand: list):
                     delta_str,
                 )
 
-    # --- Demand Breakdown ---
-    section_header("Demand Breakdown by Role")
-
-    role_options = [ROLE_DISPLAY.get(r, r) for r in roles_with_data]
-    role_key_map = {ROLE_DISPLAY.get(r, r): r for r in roles_with_data}
-
-    if role_options:
-        selected_role_label = st.selectbox("Select Role", role_options, label_visibility="collapsed")
-        selected_role = role_key_map[selected_role_label]
-
-        u = utilization[selected_role]
-        breakdown = u["demand_breakdown"]
-
-        if breakdown:
-            df = pd.DataFrame(breakdown)
-            df = df.sort_values("Weekly Hours", ascending=False)
-            st.dataframe(
-                df,
-                column_config={
-                    "Allocation %": st.column_config.NumberColumn("Allocation", format="%d%%"),
-                    "Weekly Hours": st.column_config.NumberColumn("Hrs/Week", format="%.1f"),
-                },
-                hide_index=True,
-                use_container_width=True,
-            )
-            total = sum(d["Weekly Hours"] for d in breakdown)
-            st.caption(f"Total demand: **{total:.1f} hrs/wk** | Supply: **{u['supply_hrs_week']:.1f} hrs/wk**")
-        else:
-            st.info(f"No demand for {selected_role_label} from active projects.")
-
     # --- Person-Level Utilization ---
     section_header("Person-Level Utilization")
 

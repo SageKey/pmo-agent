@@ -1,6 +1,8 @@
 """Project Detail page for the ETE PMO Dashboard."""
 
-from datetime import datetime
+import os
+from collections import defaultdict
+from datetime import datetime, date
 
 import altair as alt
 import pandas as pd
@@ -11,8 +13,10 @@ from components import (
     ROLE_DISPLAY, ROLE_ORDER, NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
     HEALTH_COLOR_MAP,
 )
-from data_layer import _build_engine, get_file_mtime
+from data_layer import _build_engine, get_file_mtime, DB_PATH
 from capacity_engine import SDLC_PHASES
+from sqlite_connector import SQLiteConnector
+from models import ROSTER_ROLE_MAP
 
 
 PHASE_DISPLAY = {
@@ -30,11 +34,34 @@ HEALTH_KPI_COLOR = {
     "Complete": "green",
     "At Risk": "yellow",
     "Needs Spec": "yellow",
-    "Critical": "red",
+    "Needs Func Spec": "yellow",
+    "Needs Tech Spec": "yellow",
+    "Needs Help": "red",
     "Not Started": "navy",
     "Postponed": "navy",
     "Unknown": "navy",
 }
+
+# --- Editor constants ---
+HEALTH_OPTIONS = [
+    "🟢 ON TRACK", "🟡 AT RISK", "🔴 NEEDS HELP",
+    "NEEDS TECHNICAL SPEC", "NEEDS FUNCTIONAL SPEC",
+    "NOT STARTED", "COMPLETE", "POSTPONED",
+]
+PRIORITY_OPTIONS = ["Highest", "High", "Medium", "Low"]
+TSHIRT_OPTIONS = [
+    "XS: < 40 Hours", "S: 40-80 Hours", "M: 80-160 Hours",
+    "L: 160-320 Hours", "XL: 320-640 Hours", "XXL: > 640 Hours",
+]
+TYPE_OPTIONS = ["Key Initiative", "Enhancement", "Support", "Infrastructure", "Research"]
+
+
+def _get_people_by_role(roster: list) -> dict:
+    """Build {role_key: [name1, name2, ...]} from roster."""
+    by_role = defaultdict(list)
+    for m in roster:
+        by_role[m.role_key].append(m.name)
+    return dict(by_role)
 
 
 @st.cache_data(ttl=30)
@@ -96,79 +123,462 @@ def _get_project_analysis(_mtime: float, project_id: str) -> dict:
         engine.connector.close()
 
 
-def _navigate_back():
-    """Navigate back to the originating page."""
-    nav_from = st.session_state.get("nav_from")
-    if nav_from:
-        st.session_state.nav_radio = nav_from
-        st.session_state.nav_from = None
-        st.session_state.selected_project_id = None
+
+def _render_new_project_form(data):
+    """Render the form for creating a new project."""
+    all_projects = data["portfolio"]
+    roster = data["roster"]
+    people_by_role = _get_people_by_role(roster)
+
+    existing_portfolios = sorted(set(p.portfolio for p in all_projects if p.portfolio))
+    existing_teams = sorted(set(p.team for p in all_projects if p.team))
+
+    with st.form("new_project_form", clear_on_submit=False):
+        section_header("Project Identity")
+        id_col, name_col = st.columns(2)
+        with id_col:
+            proj_id = st.text_input("Project ID *", placeholder="e.g. ETE-125")
+        with name_col:
+            proj_name = st.text_input("Project Name *", placeholder="Enter project name")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            proj_type = st.selectbox("Type", TYPE_OPTIONS, index=None, placeholder="Select type...")
+        with c2:
+            proj_priority = st.selectbox("Priority *", PRIORITY_OPTIONS, index=None,
+                                         placeholder="Select priority...")
+        with c3:
+            proj_health = st.selectbox("Health", HEALTH_OPTIONS, index=None,
+                                       placeholder="Select health...")
+
+        c4, c5 = st.columns(2)
+        with c4:
+            proj_portfolio = st.selectbox("Portfolio", existing_portfolios, index=None,
+                                          placeholder="Select portfolio...")
+        with c5:
+            proj_pct = st.slider("% Complete", min_value=0, max_value=100, value=0, format="%d%%")
+
+        section_header("Schedule & Sizing")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            proj_start = st.date_input("Start Date", value=None, format="MM/DD/YYYY")
+        with sc2:
+            proj_end = st.date_input("End Date", value=None, format="MM/DD/YYYY")
+        with sc3:
+            proj_tshirt = st.selectbox("T-Shirt Size", TSHIRT_OPTIONS, index=None,
+                                       placeholder="Select size...")
+
+        proj_hours = st.number_input("Estimated Hours *", min_value=0, max_value=50000,
+                                      value=0, step=10)
+
+        section_header("Team Assignments & Role Allocations")
+        st.caption("When a lead is assigned, their role allocation must be > 0% for capacity planning to work.")
+
+        lead_roles = [
+            ("PM", "pm", "pm", "alloc_pm"),
+            ("Business Analyst", "ba", "ba", "alloc_ba"),
+            ("Functional Lead", "functional_lead", "functional", "alloc_functional"),
+            ("Technical Lead", "technical_lead", "technical", "alloc_technical"),
+            ("Developer", "developer_lead", "developer", "alloc_developer"),
+        ]
+
+        lead_values = {}
+        alloc_values = {}
+
+        for label, proj_attr, role_key, alloc_key in lead_roles:
+            lc, rc = st.columns([3, 2])
+            with lc:
+                people = ["(Unassigned)"] + people_by_role.get(role_key, [])
+                lead_values[proj_attr] = st.selectbox(f"{label}", people, index=0,
+                                                       key=f"new_lead_{proj_attr}")
+            with rc:
+                alloc_values[alloc_key] = st.number_input(f"{label} Allocation %",
+                                                           min_value=0, max_value=100,
+                                                           value=0, step=5,
+                                                           key=f"new_alloc_{role_key}")
+
+        st.markdown("**Additional Role Allocations**")
+        extra_roles = [
+            ("Infrastructure", "infrastructure", "alloc_infrastructure"),
+            ("DBA", "dba", "alloc_dba"),
+            ("WMS Consultant", "wms", "alloc_wms"),
+        ]
+        er_cols = st.columns(3)
+        for i, (label, role_key, alloc_key) in enumerate(extra_roles):
+            with er_cols[i]:
+                alloc_values[alloc_key] = st.number_input(f"{label} %",
+                                                           min_value=0, max_value=100,
+                                                           value=0, step=5,
+                                                           key=f"new_alloc_{role_key}")
+
+        section_header("Additional Details")
+        o1, o2 = st.columns(2)
+        with o1:
+            proj_team = st.selectbox("Team", existing_teams, index=None,
+                                     placeholder="Select team...")
+        with o2:
+            proj_sponsor = st.text_input("Sponsor", value="")
+
+        proj_notes = st.text_area("Notes", value="", height=80)
+
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            submitted = st.form_submit_button("Create Project", type="primary",
+                                               use_container_width=True)
+        with btn_col2:
+            cancelled = st.form_submit_button("Cancel", use_container_width=True)
+
+    if cancelled:
+        st.session_state["new_project"] = False
+        st.session_state["edit_mode"] = False
+        st.session_state["_pending_nav"] = "Portfolio"
+        st.rerun()
+
+    if submitted:
+        errors = []
+        if not proj_id.strip():
+            errors.append("Project ID is required.")
+        if not proj_name.strip():
+            errors.append("Project Name is required.")
+        if not proj_priority:
+            errors.append("Priority is required.")
+
+        # Check for duplicate ID
+        existing_ids = {p.id for p in all_projects}
+        if proj_id.strip() in existing_ids:
+            errors.append(f"Project ID '{proj_id.strip()}' already exists.")
+
+        lead_alloc_checks = [
+            ("PM", lead_values.get("pm"), alloc_values.get("alloc_pm", 0)),
+            ("BA", lead_values.get("ba"), alloc_values.get("alloc_ba", 0)),
+            ("Functional Lead", lead_values.get("functional_lead"), alloc_values.get("alloc_functional", 0)),
+            ("Technical Lead", lead_values.get("technical_lead"), alloc_values.get("alloc_technical", 0)),
+            ("Developer", lead_values.get("developer_lead"), alloc_values.get("alloc_developer", 0)),
+        ]
+        for label, person, alloc in lead_alloc_checks:
+            if person and person != "(Unassigned)" and (alloc is None or alloc <= 0):
+                errors.append(f"{label} is assigned ({person}) but allocation is 0%.")
+
+        if proj_start and proj_end and proj_end < proj_start:
+            errors.append("End date cannot be before start date.")
+
+        if errors:
+            for err in errors:
+                st.error(err, icon="🚫")
+            return
+
+        fields = {
+            "id": proj_id.strip(),
+            "name": proj_name.strip(),
+            "type": proj_type,
+            "portfolio": proj_portfolio,
+            "sponsor": proj_sponsor.strip() if proj_sponsor else None,
+            "health": proj_health,
+            "pct_complete": proj_pct / 100.0,
+            "priority": proj_priority,
+            "start_date": proj_start if proj_start else None,
+            "end_date": proj_end if proj_end else None,
+            "team": proj_team,
+            "tshirt_size": proj_tshirt,
+            "est_hours": proj_hours,
+            "notes": proj_notes.strip() if proj_notes else None,
+        }
+
+        for proj_attr in ["pm", "ba", "functional_lead", "technical_lead", "developer_lead"]:
+            val = lead_values.get(proj_attr)
+            fields[proj_attr] = val if val and val != "(Unassigned)" else None
+
+        for alloc_key, pct_val in alloc_values.items():
+            fields[alloc_key] = (pct_val or 0) / 100.0
+
+        connector = SQLiteConnector(DB_PATH)
+        try:
+            result = connector.save_project(fields, is_new=True)
+        finally:
+            connector.close()
+
+        if result:
+            st.error(result, icon="🚫")
+        else:
+            # Push health to Jira if token available
+            jira_token = os.environ.get("JIRA_API_TOKEN", "")
+            if jira_token and fields.get("health"):
+                from jira_sync import push_health_to_jira
+                jira_err = push_health_to_jira(proj_id.strip(), fields["health"], jira_token)
+                if jira_err:
+                    st.warning(f"Saved locally but Jira push failed: {jira_err}", icon="⚠️")
+                else:
+                    st.success(f"Created **{proj_id}: {proj_name}** and synced health to Jira.", icon="✅")
+            else:
+                st.success(f"Created **{proj_id}: {proj_name}** successfully.", icon="✅")
+            st.session_state["new_project"] = False
+            st.session_state["edit_mode"] = False
+            st.session_state["selected_project_id"] = proj_id.strip()
+            st.cache_data.clear()
+            st.rerun()
 
 
-def render(data: dict, utilization: dict, person_demand: list):
-    """Render the Project Detail page."""
-    active = data["active_portfolio"]
+def _render_edit_form(project, data):
+    """Render the inline edit form for a project."""
+    all_projects = data["portfolio"]
+    roster = data["roster"]
+    people_by_role = _get_people_by_role(roster)
 
-    if not active:
-        st.info("No active projects found.")
-        return
+    existing_portfolios = sorted(set(p.portfolio for p in all_projects if p.portfolio))
+    existing_teams = sorted(set(p.team for p in all_projects if p.team))
 
-    # --- Back Button ---
-    nav_from = st.session_state.get("nav_from")
-    if nav_from:
-        st.button(f"← Back to {nav_from}", on_click=_navigate_back, type="tertiary")
+    with st.form("project_editor", clear_on_submit=False):
+        # Group 1: Identity
+        section_header("Project Identity")
+        id_col, name_col = st.columns(2)
+        with id_col:
+            proj_id = st.text_input("Project ID *", value=project.id, disabled=True)
+        with name_col:
+            proj_name = st.text_input("Project Name *", value=project.name)
 
-    # --- Project Selector ---
-    project_options = {f"{p.id}: {p.name}": p.id for p in active}
-    option_labels = list(project_options.keys())
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            type_idx = None
+            if project.type:
+                for i, t in enumerate(TYPE_OPTIONS):
+                    if t == project.type:
+                        type_idx = i
+                        break
+            proj_type = st.selectbox("Type", TYPE_OPTIONS, index=type_idx,
+                                     placeholder="Select type...")
+        with c2:
+            priority_idx = None
+            if project.priority:
+                for i, p in enumerate(PRIORITY_OPTIONS):
+                    if p == project.priority:
+                        priority_idx = i
+                        break
+            proj_priority = st.selectbox("Priority *", PRIORITY_OPTIONS,
+                                         index=priority_idx,
+                                         placeholder="Select priority...")
+        with c3:
+            health_idx = None
+            if project.health:
+                for i, h in enumerate(HEALTH_OPTIONS):
+                    if project.health.strip() in h or h in (project.health or ""):
+                        health_idx = i
+                        break
+            proj_health = st.selectbox("Health", HEALTH_OPTIONS,
+                                       index=health_idx,
+                                       placeholder="Select health...")
 
-    # Check if a project was selected from another page
-    preselected_id = st.session_state.get("selected_project_id")
-    default_index = None
-    if preselected_id:
-        for i, label in enumerate(option_labels):
-            if project_options[label] == preselected_id:
-                default_index = i
-                break
+        c4, c5 = st.columns(2)
+        with c4:
+            port_idx = None
+            if project.portfolio:
+                for i, po in enumerate(existing_portfolios):
+                    if po == project.portfolio:
+                        port_idx = i
+                        break
+            proj_portfolio = st.selectbox("Portfolio", existing_portfolios,
+                                          index=port_idx,
+                                          placeholder="Select portfolio...")
+        with c5:
+            proj_pct = st.slider("% Complete", min_value=0, max_value=100,
+                                  value=round(project.pct_complete * 100), format="%d%%")
 
-    selected_label = st.selectbox(
-        "Select a project",
-        option_labels,
-        index=default_index,
-        label_visibility="collapsed",
-        placeholder="Search or select a project...",
-    )
+        # Group 2: Schedule
+        section_header("Schedule & Sizing")
+        sc1, sc2, sc3 = st.columns(3)
+        with sc1:
+            proj_start = st.date_input("Start Date",
+                                        value=project.start_date if project.start_date else None,
+                                        format="MM/DD/YYYY")
+        with sc2:
+            proj_end = st.date_input("End Date",
+                                      value=project.end_date if project.end_date else None,
+                                      format="MM/DD/YYYY")
+        with sc3:
+            tshirt_idx = None
+            if project.tshirt_size:
+                for i, t in enumerate(TSHIRT_OPTIONS):
+                    if project.tshirt_size.strip() in t:
+                        tshirt_idx = i
+                        break
+            proj_tshirt = st.selectbox("T-Shirt Size", TSHIRT_OPTIONS,
+                                       index=tshirt_idx,
+                                       placeholder="Select size...")
 
-    # --- Landing State ---
-    if selected_label is None:
-        st.markdown("<div style='height: 3rem'></div>", unsafe_allow_html=True)
-        st.markdown(f"""
-        <div style="text-align: center; padding: 3rem 2rem;">
-            <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;">📋</div>
-            <div style="font-size: 1.3rem; font-weight: 600; color: {NAVY}; margin-bottom: 0.5rem;">
-                Select a Project</div>
-            <div style="font-size: 0.95rem; color: {GRAY}; max-width: 400px; margin: 0 auto;">
-                Choose a project from the dropdown above, or click
-                <strong>View Details</strong> from the Portfolio or Executive Summary pages.
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        return
+        proj_hours = st.number_input("Estimated Hours *", min_value=0, max_value=50000,
+                                      value=int(project.est_hours), step=10)
 
-    selected_id = project_options[selected_label]
-    project = next(p for p in active if p.id == selected_id)
+        # Group 3: Team Assignments + Role Allocations
+        section_header("Team Assignments & Role Allocations")
+        st.caption("When a lead is assigned, their role allocation must be > 0% for capacity planning to work.")
 
-    # Update session state so the selector stays synced
-    st.session_state.selected_project_id = selected_id
+        lead_roles = [
+            ("PM", "pm", "pm", "alloc_pm"),
+            ("Business Analyst", "ba", "ba", "alloc_ba"),
+            ("Functional Lead", "functional_lead", "functional", "alloc_functional"),
+            ("Technical Lead", "technical_lead", "technical", "alloc_technical"),
+            ("Developer", "developer_lead", "developer", "alloc_developer"),
+        ]
 
-    # --- Header ---
-    st.markdown(f"""
-    <div style="margin-bottom: 0.5rem;">
-        <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
-            {project.id}: {project.name}
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
+        lead_values = {}
+        alloc_values = {}
+
+        for label, proj_attr, role_key, alloc_key in lead_roles:
+            lc, rc = st.columns([3, 2])
+            with lc:
+                people = ["(Unassigned)"] + people_by_role.get(role_key, [])
+                current = getattr(project, proj_attr, None)
+                idx = 0
+                if current:
+                    for i, p in enumerate(people):
+                        if p == current:
+                            idx = i
+                            break
+                lead_values[proj_attr] = st.selectbox(f"{label}", people, index=idx,
+                                                       key=f"lead_{proj_attr}")
+            with rc:
+                current_alloc = round(project.role_allocations.get(role_key, 0.0) * 100)
+                alloc_values[alloc_key] = st.number_input(f"{label} Allocation %",
+                                                           min_value=0, max_value=100,
+                                                           value=current_alloc, step=5,
+                                                           key=f"alloc_{role_key}")
+
+        st.markdown("**Additional Role Allocations**")
+        extra_roles = [
+            ("Infrastructure", "infrastructure", "alloc_infrastructure"),
+            ("DBA", "dba", "alloc_dba"),
+            ("WMS Consultant", "wms", "alloc_wms"),
+        ]
+        er_cols = st.columns(3)
+        for i, (label, role_key, alloc_key) in enumerate(extra_roles):
+            with er_cols[i]:
+                current_alloc = round(project.role_allocations.get(role_key, 0.0) * 100)
+                alloc_values[alloc_key] = st.number_input(f"{label} %",
+                                                           min_value=0, max_value=100,
+                                                           value=current_alloc, step=5,
+                                                           key=f"alloc_{role_key}")
+
+        # Group 4: Other
+        section_header("Additional Details")
+        o1, o2 = st.columns(2)
+        with o1:
+            team_idx = None
+            if project.team:
+                for i, t in enumerate(existing_teams):
+                    if t == project.team:
+                        team_idx = i
+                        break
+            proj_team = st.selectbox("Team", existing_teams, index=team_idx,
+                                     placeholder="Select team...")
+        with o2:
+            proj_sponsor = st.text_input("Sponsor", value=project.sponsor or "")
+
+        proj_notes = st.text_area("Notes", value=project.notes or "", height=80)
+
+        # --- Submit buttons ---
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            submitted = st.form_submit_button("Save", type="primary",
+                                               use_container_width=True)
+        with btn_col2:
+            cancelled = st.form_submit_button("Cancel", use_container_width=True)
+
+    # --- Handle cancel ---
+    if cancelled:
+        st.session_state["edit_mode"] = False
+        st.rerun()
+
+    # --- Validation & Save ---
+    if submitted:
+        errors = []
+        form_warnings = []
+
+        if not proj_name.strip():
+            errors.append("Project Name is required.")
+        if not proj_priority:
+            errors.append("Priority is required.")
+
+        lead_alloc_checks = [
+            ("PM", lead_values.get("pm"), alloc_values.get("alloc_pm", 0)),
+            ("BA", lead_values.get("ba"), alloc_values.get("alloc_ba", 0)),
+            ("Functional Lead", lead_values.get("functional_lead"), alloc_values.get("alloc_functional", 0)),
+            ("Technical Lead", lead_values.get("technical_lead"), alloc_values.get("alloc_technical", 0)),
+            ("Developer", lead_values.get("developer_lead"), alloc_values.get("alloc_developer", 0)),
+        ]
+        for label, person, alloc in lead_alloc_checks:
+            if person and person != "(Unassigned)" and (alloc is None or alloc <= 0):
+                errors.append(
+                    f"{label} is assigned ({person}) but allocation is 0%. "
+                    f"Set a percentage so capacity planning includes this role."
+                )
+
+        if proj_start and proj_end and proj_end < proj_start:
+            errors.append("End date cannot be before start date.")
+
+        if (proj_start or proj_end) and proj_hours <= 0:
+            form_warnings.append("Project has dates but no estimated hours — demand will show as zero.")
+
+        if proj_hours > 0 and all(v == 0 for v in alloc_values.values()):
+            form_warnings.append("Project has estimated hours but all role allocations are 0%.")
+
+        if errors:
+            for err in errors:
+                st.error(err, icon="🚫")
+            return
+
+        for w in form_warnings:
+            st.warning(w, icon="⚠️")
+
+        fields = {
+            "id": project.id,
+            "name": proj_name.strip(),
+            "type": proj_type,
+            "portfolio": proj_portfolio,
+            "sponsor": proj_sponsor.strip() if proj_sponsor else None,
+            "health": proj_health,
+            "pct_complete": proj_pct / 100.0,
+            "priority": proj_priority,
+            "start_date": proj_start if proj_start else None,
+            "end_date": proj_end if proj_end else None,
+            "team": proj_team,
+            "tshirt_size": proj_tshirt,
+            "est_hours": proj_hours,
+            "notes": proj_notes.strip() if proj_notes else None,
+        }
+
+        for proj_attr in ["pm", "ba", "functional_lead", "technical_lead", "developer_lead"]:
+            val = lead_values.get(proj_attr)
+            fields[proj_attr] = val if val and val != "(Unassigned)" else None
+
+        for alloc_key, pct_val in alloc_values.items():
+            fields[alloc_key] = (pct_val or 0) / 100.0
+
+        connector = SQLiteConnector(DB_PATH)
+        try:
+            result = connector.save_project(fields, is_new=False)
+        finally:
+            connector.close()
+
+        if result:
+            st.error(result, icon="🚫")
+        else:
+            # Push health to Jira if token available
+            jira_token = os.environ.get("JIRA_API_TOKEN", "")
+            if jira_token and fields.get("health"):
+                from jira_sync import push_health_to_jira
+                jira_err = push_health_to_jira(project.id, fields["health"], jira_token)
+                if jira_err:
+                    st.warning(f"Saved locally but Jira push failed: {jira_err}", icon="⚠️")
+                else:
+                    st.success(f"Updated **{project.id}: {proj_name}** and synced health to Jira.", icon="✅")
+            else:
+                st.success(f"Updated **{project.id}: {proj_name}** successfully.", icon="✅")
+            st.session_state["edit_mode"] = False
+            st.cache_data.clear()
+            st.rerun()
+
+
+def _render_view_mode(project, data, utilization, person_demand):
+    """Render the read-only project detail view."""
 
     # --- KPI Row ---
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -189,7 +599,15 @@ def render(data: dict, utilization: dict, person_demand: list):
         else:
             kpi_card("Duration", "Not scheduled", "navy")
 
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    # Jira link
+    jira_url = f"https://etedevops.atlassian.net/browse/{project.id}"
+    st.markdown(
+        f'<div style="margin: 0.5rem 0 1rem 0;">'
+        f'<a href="{jira_url}" target="_blank" '
+        f'style="color:#1565C0; text-decoration:none; font-size:0.85rem; font-weight:500;">'
+        f'🔗 View in Jira: {project.id}</a></div>',
+        unsafe_allow_html=True,
+    )
 
     # --- Overview + Assignments ---
     left, right = st.columns(2)
@@ -225,6 +643,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             ("Business Analyst", project.ba),
             ("Functional Lead", project.functional_lead),
             ("Technical Lead", project.technical_lead),
+            ("Developer", getattr(project, "developer_lead", None)),
         ]
         for label, val in assignment_fields:
             icon = "●" if val else "○"
@@ -257,6 +676,98 @@ def render(data: dict, utilization: dict, person_demand: list):
                     hide_index=True,
                     use_container_width=True,
                 )
+
+def render(data: dict, utilization: dict, person_demand: list):
+    """Render the Project Detail page."""
+    all_projects = data["portfolio"]
+    active = data["active_portfolio"]
+
+    if not all_projects:
+        st.info("No projects found.")
+        return
+
+    # --- New Project Mode ---
+    if st.session_state.get("new_project", False):
+        st.markdown(f"""
+        <div style="margin-bottom: 0.5rem;">
+            <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
+                New Project
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+        _render_new_project_form(data)
+        return
+
+    # --- Project Selector + Edit Button ---
+    project_options = {f"{p.id}: {p.name}": p.id for p in all_projects}
+    option_labels = list(project_options.keys())
+
+    preselected_id = st.session_state.get("selected_project_id")
+    default_index = None
+    if preselected_id:
+        for i, label in enumerate(option_labels):
+            if project_options[label] == preselected_id:
+                default_index = i
+                break
+
+    sel_col, btn_col = st.columns([5, 1])
+    with sel_col:
+        selected_label = st.selectbox(
+            "Select a project",
+            option_labels,
+            index=default_index,
+            label_visibility="collapsed",
+            placeholder="Search or select a project...",
+        )
+    with btn_col:
+        if selected_label is not None:
+            edit_mode = st.session_state.get("edit_mode", False)
+            if edit_mode:
+                if st.button("View", use_container_width=True):
+                    st.session_state["edit_mode"] = False
+                    st.rerun()
+            else:
+                if st.button("Edit", use_container_width=True, type="primary"):
+                    st.session_state["edit_mode"] = True
+                    st.rerun()
+
+    # --- Landing State ---
+    if selected_label is None:
+        st.markdown("<div style='height: 3rem'></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="text-align: center; padding: 3rem 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;">📋</div>
+            <div style="font-size: 1.3rem; font-weight: 600; color: {NAVY}; margin-bottom: 0.5rem;">
+                Select a Project</div>
+            <div style="font-size: 0.95rem; color: {GRAY}; max-width: 400px; margin: 0 auto;">
+                Choose a project from the dropdown above.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
+    selected_id = project_options[selected_label]
+    project = next((p for p in all_projects if p.id == selected_id), None)
+    if not project:
+        st.error("Project not found.")
+        return
+
+    st.session_state.selected_project_id = selected_id
+
+    # --- Header ---
+    st.markdown(f"""
+    <div style="margin-bottom: 0.5rem;">
+        <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
+            {project.id}: {project.name}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- Edit vs View Mode ---
+    if st.session_state.get("edit_mode", False):
+        _render_edit_form(project, data)
+        return
+
+    _render_view_mode(project, data, utilization, person_demand)
 
     # --- Demand Analysis ---
     mtime = get_file_mtime()

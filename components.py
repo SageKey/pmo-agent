@@ -213,7 +213,7 @@ def status_badge_html(status: str) -> str:
         return f'<span class="badge badge-green">{status}</span>'
     elif label in ("At Risk", "Needs Spec"):
         return f'<span class="badge badge-yellow">{status}</span>'
-    elif label == "Critical":
+    elif label == "Needs Help":
         return f'<span class="badge badge-red">{status}</span>'
     return f'<span class="badge badge-gray">{status}</span>'
 
@@ -307,8 +307,8 @@ def health_label(health: str) -> str:
         return "On Track"
     elif "AT RISK" in h or "YELLOW" in h:
         return "At Risk"
-    elif "CRITICAL" in h or "RED" in h and "NOT" not in h:
-        return "Critical"
+    elif "NEEDS HELP" in h or "CRITICAL" in h or "RED" in h and "NOT" not in h:
+        return "Needs Help"
     elif "POSTPONED" in h:
         return "Postponed"
     elif "COMPLETE" in h:
@@ -327,7 +327,7 @@ def health_label(health: str) -> str:
 HEALTH_COLOR_MAP = {
     "On Track": GREEN,
     "At Risk": YELLOW,
-    "Critical": RED,
+    "Needs Help": RED,
     "Postponed": GRAY,
     "Complete": "#17A2B8",
     "Not Started": LIGHT_GRAY,

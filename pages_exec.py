@@ -96,7 +96,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             st.rerun()
 
     # --- Upcoming Milestones ---
-    section_header("Upcoming Milestones")
+    section_header("Projects Ending Soon")
     today = date.today()
     horizon = today + timedelta(days=60)
 
@@ -117,18 +117,38 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     if milestones:
         df = pd.DataFrame(milestones).sort_values("Days Remaining")
-        display_df = df.drop(columns=["ID"])
-        st.dataframe(
-            display_df,
-            column_config={
-                "End Date": st.column_config.DateColumn("End Date", format="MMM DD, YYYY"),
-                "% Complete": st.column_config.ProgressColumn(
-                    "% Complete", min_value=0, max_value=100, format="%d%%"),
-                "Days Remaining": st.column_config.NumberColumn("Days Left"),
-            },
-            hide_index=True,
-            use_container_width=True,
-        )
+
+        html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+        <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.03em;">
+            <th style="text-align:left; padding:0.4rem 0.5rem;">Project</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">End Date</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Days Left</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">Priority</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">Health</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">% Done</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">PM</th>
+            <th style="text-align:center; padding:0.4rem 0.5rem;">Jira</th>
+        </tr></thead><tbody>"""
+
+        for _, row in df.iterrows():
+            pid = row["ID"]
+            link = f'<a href="?project={pid}" target="_self" style="color:#1565C0; text-decoration:none; font-weight:500;">{row["Project"]}</a>'
+            jira_url = f"https://etedevops.atlassian.net/browse/{pid}"
+            jira_link = f'<a href="{jira_url}" target="_blank" style="color:#1565C0; text-decoration:none; font-size:0.8rem;" title="Open in Jira">🔗 Jira</a>'
+            end_str = row["End Date"].strftime("%b %d, %Y")
+            html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
+                <td style="padding:0.45rem 0.5rem;">{link}</td>
+                <td style="padding:0.45rem 0.5rem;">{end_str}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{row['Days Remaining']}</td>
+                <td style="padding:0.45rem 0.5rem;">{row['Priority']}</td>
+                <td style="padding:0.45rem 0.5rem;">{row['Health']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{row['% Complete']}%</td>
+                <td style="padding:0.45rem 0.5rem;">{row['PM']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:center;">{jira_link}</td>
+            </tr>"""
+
+        html += "</tbody></table>"
+        st.markdown(html, unsafe_allow_html=True)
 
     else:
         st.info("No projects ending within the next 60 days.")
