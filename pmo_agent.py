@@ -13,7 +13,7 @@ from typing import Optional
 
 import anthropic
 
-from excel_connector import ExcelConnector
+from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
 from snapshot_store import SnapshotStore
 from schedule_optimizer import ScheduleOptimizer
@@ -422,7 +422,7 @@ TOOLS = [
 # ---------------------------------------------------------------------------
 class PMOTools:
     def __init__(self):
-        self.connector = ExcelConnector()
+        self.connector = SQLiteConnector()
         self.engine = CapacityEngine(self.connector)
         self.snapshots = SnapshotStore()
         self.optimizer = ScheduleOptimizer(self.connector)
@@ -886,71 +886,53 @@ class PMOTools:
         return json.dumps(result, indent=2)
 
     def read_workbook_cells(self, sheet_name: str, cell_range: str) -> str:
-        import openpyxl
-        from openpyxl.utils import range_boundaries
-        wb = openpyxl.load_workbook(self.connector.workbook_path, data_only=True)
-        if sheet_name not in wb.sheetnames:
-            wb.close()
-            return json.dumps({"error": f"Sheet '{sheet_name}' not found. Available: {wb.sheetnames}"})
+        """Read data from the SQLite database.
+        sheet_name maps to table: 'Project Portfolio' → projects, 'Team Roster' → team_members."""
+        table_map = {
+            "Project Portfolio": "projects",
+            "Team Roster": "team_members",
+            "RM_Assumptions": "rm_assumptions",
+        }
+        table = table_map.get(sheet_name)
+        if not table:
+            return json.dumps({"error": f"Unknown data source '{sheet_name}'. Available: {list(table_map.keys())}"})
 
-        ws = wb[sheet_name]
-
-        # Handle single cell vs range
-        if ":" in cell_range:
-            min_col, min_row, max_col, max_row = range_boundaries(cell_range)
-        else:
-            min_col, min_row, max_col, max_row = range_boundaries(f"{cell_range}:{cell_range}")
-
-        rows = []
-        for row in range(min_row, max_row + 1):
-            row_data = {}
-            for col in range(min_col, max_col + 1):
-                cell = ws.cell(row=row, column=col)
-                col_letter = openpyxl.utils.get_column_letter(col)
-                val = cell.value
-                if isinstance(val, (date, datetime)):
-                    val = val.strftime("%m/%d/%Y")
-                row_data[f"{col_letter}{row}"] = val
-            rows.append(row_data)
-
-        wb.close()
+        conn = self.connector._open()
+        rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+        data = [dict(r) for r in rows]
         return json.dumps({
-            "sheet": sheet_name,
-            "range": cell_range,
-            "data": rows,
+            "source": sheet_name,
+            "table": table,
+            "row_count": len(data),
+            "data": data,
         }, indent=2, default=str)
 
     def update_workbook(self, updates: list) -> str:
-        import openpyxl
-        wb = openpyxl.load_workbook(self.connector.workbook_path)
-
+        """Update project fields in the SQLite database."""
         results = []
         for update in updates:
-            sheet_name = update["sheet_name"]
-            cell_ref = update["cell"]
-            value = update["value"]
+            project_id = update.get("project_id")
+            field_name = update.get("field") or update.get("cell", "")
+            value = update.get("value")
 
-            if sheet_name not in wb.sheetnames:
-                results.append({"cell": f"{sheet_name}!{cell_ref}", "status": "error",
-                                "message": f"Sheet '{sheet_name}' not found"})
+            if not project_id:
+                results.append({"field": field_name, "status": "error",
+                                "message": "project_id is required"})
                 continue
 
-            ws = wb[sheet_name]
-            old_value = ws[cell_ref].value
-            ws[cell_ref] = value
-            results.append({
-                "cell": f"{sheet_name}!{cell_ref}",
-                "old_value": str(old_value) if old_value is not None else None,
-                "new_value": str(value) if value is not None else None,
-                "status": "updated",
-            })
+            fields = {"id": project_id, field_name: value}
+            err = self.connector.save_project(fields, is_new=False)
+            if err:
+                results.append({"field": field_name, "status": "error", "message": err})
+            else:
+                results.append({
+                    "project_id": project_id,
+                    "field": field_name,
+                    "new_value": str(value) if value is not None else None,
+                    "status": "updated",
+                })
 
-        wb.save(self.connector.workbook_path)
-        wb.close()
-
-        # Reset connector cache so subsequent reads pick up changes
-        self.connector.close()
-        self.connector._wb = None
+        # Reset engine cache
         self.engine._data = None
 
         return json.dumps({

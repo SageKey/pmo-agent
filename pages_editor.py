@@ -1,47 +1,22 @@
 """Project Editor page for the ETE PMO Dashboard.
 Provides form-based editing of project data with validation,
-writes changes back to the Excel workbook via openpyxl.
+writes changes to the SQLite database.
 """
 
 from collections import defaultdict
 from datetime import datetime, date
-from pathlib import Path
 from typing import Optional
 
-import openpyxl
 import streamlit as st
 
 from components import (
     section_header, ROLE_DISPLAY, ROLE_ORDER,
     NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
 )
-from data_layer import WORKBOOK_PATH
-from excel_connector import PORTFOLIO_ROLE_COLUMNS, ROSTER_ROLE_MAP
+from data_layer import DB_PATH
+from sqlite_connector import SQLiteConnector
+from models import ROSTER_ROLE_MAP
 
-
-# ---------------------------------------------------------------------------
-# Column index map for writing back to "Project Portfolio" sheet
-# ---------------------------------------------------------------------------
-FIELD_COLUMNS = {
-    "id": 1, "name": 2, "type": 3, "portfolio": 4, "sponsor": 5,
-    "health": 6, "pct_complete": 7, "priority": 8,
-    "start_date": 9, "end_date": 10, "actual_end": 11,
-    "team": 12, "pm": 13, "ba": 14, "functional_lead": 15, "technical_lead": 16,
-    # column 17 is skipped/unused
-    "tshirt_size": 18, "est_hours": 19, "est_cost": 20,
-    "alloc_ba": 21, "alloc_functional": 22, "alloc_technical": 23,
-    "alloc_developer": 24, "alloc_infrastructure": 25, "alloc_dba": 26,
-    "alloc_pm": 27, "alloc_wms": 28,
-    "notes": 29, "sort_order": 30,
-}
-
-# Named lead → allocation role key linkage
-LEAD_ALLOC_LINK = {
-    "pm": {"label": "PM", "name_col": 13, "alloc_key": "alloc_pm"},
-    "ba": {"label": "BA", "name_col": 14, "alloc_key": "alloc_ba"},
-    "functional": {"label": "Functional Lead", "name_col": 15, "alloc_key": "alloc_functional"},
-    "technical": {"label": "Technical Lead", "name_col": 16, "alloc_key": "alloc_technical"},
-}
 
 HEALTH_OPTIONS = [
     "🟢 ON TRACK", "🟡 AT RISK", "🔴 CRITICAL",
@@ -60,63 +35,6 @@ TYPE_OPTIONS = ["Key Initiative", "Enhancement", "Support", "Infrastructure", "R
 
 
 # ---------------------------------------------------------------------------
-# Excel Write-back
-# ---------------------------------------------------------------------------
-def _find_project_row(ws, project_id: str) -> Optional[int]:
-    """Find the Excel row for a given project ID (rows 4-42)."""
-    for row in range(4, 43):
-        cell_val = ws.cell(row=row, column=1).value
-        if cell_val and str(cell_val).strip() == project_id.strip():
-            return row
-    return None
-
-
-def _find_empty_row(ws) -> Optional[int]:
-    """Find the first empty row in the project data range (rows 4-42)."""
-    for row in range(4, 43):
-        if not ws.cell(row=row, column=1).value:
-            return row
-    return None
-
-
-def _write_project(project_id: str, fields: dict, is_new: bool = False) -> Optional[str]:
-    """Write project fields to the Excel workbook.
-    Returns None on success, or an error message string."""
-    try:
-        wb = openpyxl.load_workbook(WORKBOOK_PATH)
-        ws = wb["Project Portfolio"]
-
-        if is_new:
-            row = _find_empty_row(ws)
-            if not row:
-                wb.close()
-                return "Portfolio sheet is full (max 39 projects). Cannot add new project."
-        else:
-            row = _find_project_row(ws, project_id)
-            if not row:
-                wb.close()
-                return f"Could not find project {project_id} in the workbook."
-
-        for field_key, value in fields.items():
-            col = FIELD_COLUMNS.get(field_key)
-            if col is None:
-                continue
-            # Convert dates to datetime for openpyxl
-            if isinstance(value, date) and not isinstance(value, datetime):
-                value = datetime.combine(value, datetime.min.time())
-            ws.cell(row=row, column=col, value=value)
-
-        wb.save(WORKBOOK_PATH)
-        wb.close()
-        return None
-
-    except PermissionError:
-        return "Cannot save — the workbook is open in Excel. Please close it and try again."
-    except Exception as e:
-        return f"Error saving: {e}"
-
-
-# ---------------------------------------------------------------------------
 # Health Check Warnings
 # ---------------------------------------------------------------------------
 def _compute_warnings(projects: list) -> list[dict]:
@@ -129,6 +47,7 @@ def _compute_warnings(projects: list) -> list[dict]:
         ("ba", "BA", "ba"),
         ("functional_lead", "Functional Lead", "functional"),
         ("technical_lead", "Technical Lead", "technical"),
+        ("developer_lead", "Developer", "developer"),
     ]
 
     for p in projects:
@@ -176,6 +95,7 @@ def _get_people_by_role(roster: list) -> dict:
 # ---------------------------------------------------------------------------
 def render(data: dict, utilization: dict, person_demand: list):
     """Render the Project Editor page."""
+
     all_projects = data["portfolio"]
     active = data["active_portfolio"]
     roster = data["roster"]
@@ -345,21 +265,12 @@ def render(data: dict, utilization: dict, person_demand: list):
                                        index=tshirt_idx,
                                        placeholder="Select size...")
 
-        sz1, sz2 = st.columns(2)
-        with sz1:
-            proj_hours = st.number_input(
-                "Estimated Hours *",
-                min_value=0, max_value=50000,
-                value=int(project.est_hours) if project else 0,
-                step=10,
-            )
-        with sz2:
-            proj_cost = st.number_input(
-                "Estimated Cost",
-                min_value=0, max_value=10000000,
-                value=int(project.est_cost or 0) if project else 0,
-                step=100,
-            )
+        proj_hours = st.number_input(
+            "Estimated Hours *",
+            min_value=0, max_value=50000,
+            value=int(project.est_hours) if project else 0,
+            step=10,
+        )
 
         # Group 3: Team Assignments + Role Allocations (side-by-side)
         section_header("Team Assignments & Role Allocations")
@@ -370,6 +281,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             ("Business Analyst", "ba", "ba", "alloc_ba"),
             ("Functional Lead", "functional_lead", "functional", "alloc_functional"),
             ("Technical Lead", "technical_lead", "technical", "alloc_technical"),
+            ("Developer", "developer_lead", "developer", "alloc_developer"),
         ]
 
         lead_values = {}
@@ -404,17 +316,16 @@ def render(data: dict, utilization: dict, person_demand: list):
                     key=f"alloc_{role_key}",
                 )
 
-        # Additional role allocations (no named lead)
+        # Additional role allocations (no named lead in the spreadsheet)
         st.markdown("**Additional Role Allocations**")
         extra_roles = [
-            ("Developer", "developer", "alloc_developer"),
             ("Infrastructure", "infrastructure", "alloc_infrastructure"),
             ("DBA", "dba", "alloc_dba"),
             ("WMS Consultant", "wms", "alloc_wms"),
         ]
 
-        er1, er2, er3, er4 = st.columns(4)
-        extra_cols = [er1, er2, er3, er4]
+        er1, er2, er3 = st.columns(3)
+        extra_cols = [er1, er2, er3]
         for i, (label, role_key, alloc_key) in enumerate(extra_roles):
             with extra_cols[i]:
                 current_alloc = 0
@@ -430,7 +341,7 @@ def render(data: dict, utilization: dict, person_demand: list):
 
         # Group 4: Other
         section_header("Additional Details")
-        o1, o2, o3 = st.columns(3)
+        o1, o2 = st.columns(2)
         with o1:
             team_options = existing_teams
             team_idx = None
@@ -445,12 +356,6 @@ def render(data: dict, utilization: dict, person_demand: list):
             proj_sponsor = st.text_input(
                 "Sponsor",
                 value=project.sponsor or "" if project else "",
-            )
-        with o3:
-            proj_sort = st.number_input(
-                "Sort Order",
-                min_value=0, max_value=999,
-                value=project.sort_order or 0 if project else 0,
             )
 
         proj_notes = st.text_area(
@@ -482,6 +387,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             ("BA", lead_values.get("ba"), alloc_values.get("alloc_ba", 0)),
             ("Functional Lead", lead_values.get("functional_lead"), alloc_values.get("alloc_functional", 0)),
             ("Technical Lead", lead_values.get("technical_lead"), alloc_values.get("alloc_technical", 0)),
+            ("Developer", lead_values.get("developer_lead"), alloc_values.get("alloc_developer", 0)),
         ]
         for label, person, alloc in lead_alloc_checks:
             if person and person != "(Unassigned)" and (alloc is None or alloc <= 0):
@@ -515,7 +421,7 @@ def render(data: dict, utilization: dict, person_demand: list):
         for w in form_warnings:
             st.warning(w, icon="⚠️")
 
-        # Build the fields dict for write-back
+        # Build the fields dict for save
         fields = {
             "id": proj_id.strip(),
             "name": proj_name.strip(),
@@ -531,11 +437,10 @@ def render(data: dict, utilization: dict, person_demand: list):
             "tshirt_size": proj_tshirt,
             "est_hours": proj_hours,
             "notes": proj_notes.strip() if proj_notes else None,
-            "sort_order": proj_sort if proj_sort else None,
         }
 
         # Named leads — write None for unassigned
-        for proj_attr in ["pm", "ba", "functional_lead", "technical_lead"]:
+        for proj_attr in ["pm", "ba", "functional_lead", "technical_lead", "developer_lead"]:
             val = lead_values.get(proj_attr)
             fields[proj_attr] = val if val and val != "(Unassigned)" else None
 
@@ -543,12 +448,12 @@ def render(data: dict, utilization: dict, person_demand: list):
         for alloc_key, pct_val in alloc_values.items():
             fields[alloc_key] = (pct_val or 0) / 100.0
 
-        # Est cost — only write if > 0
-        if proj_cost and proj_cost > 0:
-            fields["est_cost"] = proj_cost
-
-        # Write to Excel
-        result = _write_project(proj_id.strip(), fields, is_new=is_new)
+        # Write to SQLite
+        connector = SQLiteConnector(DB_PATH)
+        try:
+            result = connector.save_project(fields, is_new=is_new)
+        finally:
+            connector.close()
 
         if result:
             st.error(result, icon="🚫")

@@ -83,6 +83,7 @@ class Project:
     ba: Optional[str]
     functional_lead: Optional[str]
     technical_lead: Optional[str]
+    developer_lead: Optional[str]
     tshirt_size: Optional[str]
     est_hours: float
     est_cost: Optional[float]
@@ -227,6 +228,7 @@ class ExcelConnector:
                 ba=ws.cell(row=row, column=14).value,
                 functional_lead=ws.cell(row=row, column=15).value,
                 technical_lead=ws.cell(row=row, column=16).value,
+                developer_lead=ws.cell(row=row, column=17).value,
                 tshirt_size=ws.cell(row=row, column=18).value,
                 est_hours=_to_float(ws.cell(row=row, column=19).value, 0.0),
                 est_cost=_to_float(ws.cell(row=row, column=20).value, None),

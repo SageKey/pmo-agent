@@ -19,7 +19,8 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
 from openpyxl.utils import get_column_letter
 
-from excel_connector import ExcelConnector, SDLC_PHASES
+from models import SDLC_PHASES
+from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
 
 
@@ -111,12 +112,18 @@ def _safe_delete(wb, name):
 class DashboardGenerator:
 
     def __init__(self, connector=None):
-        self.connector = connector or ExcelConnector()
+        self.connector = connector or SQLiteConnector()
         self.engine = CapacityEngine(self.connector)
         self._data = self.engine._load()
 
-    def generate_all(self, output_path=None):
-        wb = openpyxl.load_workbook(self.connector.workbook_path)
+    def generate_all(self, output_path=None, template_path=None):
+        """Generate Excel dashboard sheets.
+        template_path: existing .xlsx to add sheets to (optional).
+        output_path: where to save the result."""
+        if template_path and os.path.exists(template_path):
+            wb = openpyxl.load_workbook(template_path)
+        else:
+            wb = openpyxl.Workbook()
 
         # Remove old computed sheets
         for name in ["Dashboard", "Capacity Heatmap", "Resource Scheduler",
@@ -145,7 +152,7 @@ class DashboardGenerator:
                 wb.move_sheet(name, offset=i - idx)
 
         if output_path is None:
-            output_path = self.connector.workbook_path
+            output_path = str(Path(__file__).parent / "ETE PMO Report.xlsx")
 
         wb.save(output_path)
         print(f"Dashboard saved: {output_path}")

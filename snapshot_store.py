@@ -11,7 +11,8 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
-from excel_connector import ExcelConnector, Project
+from models import Project
+from sqlite_connector import SQLiteConnector
 
 DB_PATH = Path(__file__).parent / "pmo_snapshots.db"
 
@@ -86,7 +87,7 @@ class SnapshotStore:
     # ------------------------------------------------------------------
     # Save snapshot
     # ------------------------------------------------------------------
-    def save_snapshot(self, connector: Optional[ExcelConnector] = None,
+    def save_snapshot(self, connector: Optional[SQLiteConnector] = None,
                       notes: str = "") -> int:
         """
         Take a snapshot of the current portfolio state.
@@ -94,7 +95,7 @@ class SnapshotStore:
         """
         conn = self._get_conn()
         if connector is None:
-            connector = ExcelConnector()
+            connector = SQLiteConnector()
 
         all_projects = connector.read_portfolio()
         active = [p for p in all_projects if p.is_active]
@@ -161,13 +162,13 @@ class SnapshotStore:
     # ------------------------------------------------------------------
     # Change detection
     # ------------------------------------------------------------------
-    def detect_changes(self, connector: Optional[ExcelConnector] = None) -> dict:
+    def detect_changes(self, connector: Optional[SQLiteConnector] = None) -> dict:
         """
         Compare current workbook state against the last snapshot.
         Returns a structured diff of all changes.
         """
         if connector is None:
-            connector = ExcelConnector()
+            connector = SQLiteConnector()
 
         latest = self.get_latest_snapshot()
         if not latest:
@@ -321,7 +322,7 @@ class SnapshotStore:
 
 if __name__ == "__main__":
     store = SnapshotStore()
-    connector = ExcelConnector()
+    connector = SQLiteConnector()
 
     # Take a snapshot
     print("Taking snapshot...")

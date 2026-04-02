@@ -17,7 +17,8 @@ from typing import Optional
 
 from ortools.sat.python import cp_model
 
-from excel_connector import ExcelConnector, Project, SDLC_PHASES
+from models import Project, SDLC_PHASES
+from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
 
 # Max shift by priority (in weeks)
@@ -59,8 +60,8 @@ class OptimizationResult:
 class ScheduleOptimizer:
     """Constraint-based schedule optimizer using OR-Tools CP-SAT."""
 
-    def __init__(self, connector: Optional[ExcelConnector] = None):
-        self.connector = connector or ExcelConnector()
+    def __init__(self, connector: Optional[SQLiteConnector] = None):
+        self.connector = connector or SQLiteConnector()
         self.engine = CapacityEngine(self.connector)
 
     def _estimate_duration_weeks(self, est_hours: float) -> int:

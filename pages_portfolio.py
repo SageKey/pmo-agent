@@ -3,50 +3,65 @@
 import pandas as pd
 import streamlit as st
 
-from components import section_header, clean_health
+from components import section_header, clean_health, health_label
 
-
-def _navigate_to_project(project_id: str):
-    """Navigate to the Project Detail page for a given project."""
-    st.session_state.selected_project_id = project_id
-    st.session_state.nav_from = "Portfolio"
-    st.session_state.nav_radio = "Project Detail"
 
 
 def render(data: dict, utilization: dict, person_demand: list):
     """Render the Portfolio View page."""
     portfolio_df = data["portfolio_df"]
-    active = data["active_portfolio"]
 
-    # Filter to active only
-    df = portfolio_df[portfolio_df["Active"]].copy()
+    # Use full portfolio — show everything by default
+    df = portfolio_df.copy()
+
+
+    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+
+    # --- Status pre-filter (from exec status cards) ---
+    status_preset = st.session_state.pop("portfolio_status_filter", None)
+    if status_preset:
+        active_ids = {p.id for p in data["active_portfolio"]}
+        if status_preset == "active":
+            df = df[df["ID"].isin(active_ids)]
+        elif status_preset == "complete":
+            df = df[df["% Complete"] >= 100]
+        elif status_preset == "postponed":
+            df = df[df["Health"].str.upper().str.contains("POSTPONED", na=False)]
 
     # --- Filters ---
+    # Check if navigated here from a donut click
+    health_preset = st.session_state.pop("portfolio_health_filter", None)
+
     col1, col2, col3 = st.columns(3)
 
     with col1:
         priorities = sorted(df["Priority"].unique().tolist())
-        selected_priorities = st.multiselect("Priority", priorities, default=priorities)
+        selected_priorities = st.multiselect("Priority", priorities)
 
     with col2:
         healths = sorted(df["Health"].unique().tolist())
-        selected_healths = st.multiselect("Health", healths, default=healths)
+        # Pre-select health filter if coming from donut click
+        default_healths = []
+        if health_preset:
+            # Match raw health values whose normalized label matches the clicked donut slice
+            default_healths = [h for h in healths if health_label(h) == health_preset]
+        selected_healths = st.multiselect("Health", healths, default=default_healths)
 
     with col3:
         portfolios = sorted([p for p in df["Portfolio"].unique().tolist() if p])
-        if portfolios:
-            selected_portfolios = st.multiselect("Portfolio", portfolios, default=portfolios)
-        else:
-            selected_portfolios = []
+        selected_portfolios = st.multiselect("Portfolio", portfolios)
 
-    # Apply filters
-    mask = df["Priority"].isin(selected_priorities) & df["Health"].isin(selected_healths)
+    # Apply filters — empty selection means show all (no filter)
+    filtered = df.copy()
+    if selected_priorities:
+        filtered = filtered[filtered["Priority"].isin(selected_priorities)]
+    if selected_healths:
+        filtered = filtered[filtered["Health"].isin(selected_healths)]
     if selected_portfolios:
-        mask = mask & (df["Portfolio"].isin(selected_portfolios) | (df["Portfolio"] == ""))
-    filtered = df[mask]
+        filtered = filtered[filtered["Portfolio"].isin(selected_portfolios) | (filtered["Portfolio"] == "")]
 
     # --- Project Table ---
-    section_header(f"Active Projects ({len(filtered)})")
+    section_header(f"Projects ({len(filtered)})")
 
     display_cols = ["ID", "Name", "Priority", "Health", "% Complete",
                     "Start Date", "End Date", "Est Hours", "PM", "Team"]
@@ -63,35 +78,5 @@ def render(data: dict, utilization: dict, person_demand: list):
         },
         hide_index=True,
         use_container_width=True,
-        height=min(400, max(200, len(display_df) * 38 + 40)),
     )
 
-    # --- Quick Navigation to Project Detail ---
-    if not filtered.empty:
-        nav_col1, nav_col2 = st.columns([3, 1])
-        with nav_col1:
-            nav_options = {f"{row['ID']}: {row['Name']}": row["ID"]
-                          for _, row in filtered.iterrows()}
-            selected_nav = st.selectbox(
-                "Navigate to project",
-                list(nav_options.keys()),
-                label_visibility="collapsed",
-                placeholder="Select a project to view details...",
-                index=None,
-            )
-        with nav_col2:
-            if selected_nav:
-                project_id = nav_options[selected_nav]
-                st.button(
-                    "View Details →",
-                    on_click=_navigate_to_project,
-                    args=(project_id,),
-                    use_container_width=True,
-                    type="primary",
-                )
-            else:
-                st.button(
-                    "View Details →",
-                    disabled=True,
-                    use_container_width=True,
-                )

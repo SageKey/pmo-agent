@@ -18,8 +18,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Optional
 
-from excel_connector import (
-    ExcelConnector,
+from models import (
     Project,
     ProjectAssignment,
     TeamMember,
@@ -70,8 +69,11 @@ def _utilization_status(pct: float) -> str:
 class CapacityEngine:
     """Calculates resource utilization from PMO workbook data."""
 
-    def __init__(self, connector: Optional[ExcelConnector] = None):
-        self.connector = connector or ExcelConnector()
+    def __init__(self, connector=None):
+        if connector is None:
+            from sqlite_connector import SQLiteConnector
+            connector = SQLiteConnector()
+        self.connector = connector
         self._data = None
 
     def _load(self):
@@ -86,6 +88,14 @@ class CapacityEngine:
     @property
     def active_projects(self) -> list[Project]:
         return self._load()["active_portfolio"]
+
+    @property
+    def scheduled_projects(self) -> list[Project]:
+        """All projects with start/end dates and hours — regardless of status."""
+        return [
+            p for p in self._load()["portfolio"]
+            if p.start_date and p.end_date and p.est_hours and p.est_hours > 0
+        ]
 
     @property
     def roster(self) -> list[TeamMember]:
@@ -187,6 +197,7 @@ class CapacityEngine:
         """
         Aggregate demand across all active projects, grouped by role.
         Only includes scheduled projects (those with start/end dates).
+        Excludes completed and postponed projects.
         """
         demand_by_role = defaultdict(list)
 

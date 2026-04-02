@@ -315,6 +315,10 @@ def health_label(health: str) -> str:
         return "Complete"
     elif "NOT STARTED" in h:
         return "Not Started"
+    elif "NEEDS" in h and "FUNC" in h:
+        return "Needs Func Spec"
+    elif "NEEDS" in h and "TECH" in h:
+        return "Needs Tech Spec"
     elif "NEEDS" in h:
         return "Needs Spec"
     return health.strip()
@@ -327,6 +331,8 @@ HEALTH_COLOR_MAP = {
     "Postponed": GRAY,
     "Complete": "#17A2B8",
     "Not Started": LIGHT_GRAY,
+    "Needs Func Spec": "#6F42C1",
+    "Needs Tech Spec": "#9B59B6",
     "Needs Spec": "#6F42C1",
     "Unknown": LIGHT_GRAY,
 }
@@ -349,14 +355,21 @@ def health_donut(projects: list) -> alt.Chart:
     domain = list(health_counts.keys())
     range_colors = [HEALTH_COLOR_MAP.get(d, GRAY) for d in domain]
 
+    selection = alt.selection_point(fields=["Health"])
+
     chart = alt.Chart(df).mark_arc(innerRadius=50, outerRadius=90, cornerRadius=3).encode(
         theta=alt.Theta("Count:Q"),
         color=alt.Color("Health:N",
                         scale=alt.Scale(domain=domain, range=range_colors),
-                        legend=alt.Legend(title=None, orient="bottom",
-                                         labelFontSize=11, columns=2,
-                                         symbolSize=80)),
+                        legend=alt.Legend(title=None, orient="none",
+                                         direction="horizontal",
+                                         labelFontSize=11, columns=3,
+                                         symbolSize=80,
+                                         legendX=40, legendY=210)),
+        opacity=alt.condition(selection, alt.value(1.0), alt.value(0.6)),
         tooltip=["Health:N", "Count:Q"],
+    ).add_params(
+        selection,
     ).properties(
         height=250,
         width=300,
@@ -459,18 +472,37 @@ def capacity_heatmap(heatmap_df: pd.DataFrame) -> alt.Chart:
     # Melt to long format
     df_long = heatmap_df.melt(id_vars=["Role"], var_name="Week", value_name="Utilization")
 
-    chart = alt.Chart(df_long).mark_rect(cornerRadius=2).encode(
+    # Classify utilization into status buckets
+    def _status(val):
+        if val <= 0:
+            return "None"
+        elif val < 0.8:
+            return "Green"
+        elif val < 1.0:
+            return "Yellow"
+        else:
+            return "Red"
+
+    df_long["Status"] = df_long["Utilization"].apply(_status)
+
+    # Only draw cells that have utilization > 0
+    df_active = df_long[df_long["Utilization"] > 0]
+
+    chart = alt.Chart(df_active).mark_rect(cornerRadius=2).encode(
         x=alt.X("Week:N", title=None,
                 axis=alt.Axis(labelFontSize=9, labelAngle=-45)),
         y=alt.Y("Role:N", title=None,
                 sort=["PM", "BA", "FUNCTIONAL", "TECHNICAL", "DEVELOPER",
                       "INFRASTRUCTURE", "DBA", "WMS"],
                 axis=alt.Axis(labelFontSize=11)),
-        color=alt.Color("Utilization:Q",
-                        scale=alt.Scale(domain=[0, 0.8, 1.0, 1.5],
-                                        range=["#D4EDDA", GREEN, YELLOW, RED],
-                                        type="linear"),
-                        legend=alt.Legend(title="Utilization", format=".0%")),
+        color=alt.Color("Status:N",
+                        scale=alt.Scale(
+                            domain=["Green", "Yellow", "Red"],
+                            range=[GREEN, YELLOW, RED],
+                        ),
+                        legend=alt.Legend(title="Utilization",
+                                         symbolType="square",
+                                         labelExpr="datum.label === 'Green' ? 'Under 80%' : datum.label === 'Yellow' ? '80–99%' : 'Over 100%'")),
         tooltip=[
             alt.Tooltip("Role:N"),
             alt.Tooltip("Week:N"),

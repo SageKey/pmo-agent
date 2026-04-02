@@ -11,12 +11,6 @@ from components import (
 )
 
 
-def _navigate_to_project(project_id: str):
-    """Navigate to the Project Detail page for a given project."""
-    st.session_state.selected_project_id = project_id
-    st.session_state.nav_from = "Executive Summary"
-    st.session_state.nav_radio = "Project Detail"
-
 
 def render(data: dict, utilization: dict, person_demand: list):
     """Render the Executive Summary page."""
@@ -33,11 +27,10 @@ def render(data: dict, utilization: dict, person_demand: list):
         kpi_card("Team Size", len(roster), "navy")
 
     with col3:
-        # Weighted average utilization across roles with demand
-        total_demand = sum(u["demand_hrs_week"] for u in utilization.values())
-        total_supply = sum(u["supply_hrs_week"] for u in utilization.values()
-                          if u["supply_hrs_week"] > 0)
-        avg_util = total_demand / total_supply if total_supply > 0 else 0
+        # Unweighted average of per-role utilization percentages
+        role_utils = [u["utilization_pct"] for u in utilization.values()
+                      if u["supply_hrs_week"] > 0]
+        avg_util = sum(role_utils) / len(role_utils) if role_utils else 0
         color = util_status(avg_util).lower()
         kpi_card("Avg Utilization", f"{avg_util:.0%}", color)
 
@@ -48,8 +41,8 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
-    # --- Utilization + Health Row ---
-    left, right = st.columns([3, 2.5])
+    # --- Utilization + Health + Status Row ---
+    left, mid, right = st.columns([3, 2, 1.5])
 
     with left:
         section_header("Role Utilization")
@@ -59,13 +52,48 @@ def render(data: dict, utilization: dict, person_demand: list):
         else:
             st.info("No utilization data available.")
 
-    with right:
-        section_header("Project Health")
+    with mid:
+        section_header("Active Project Health")
         chart = health_donut(active)
         if chart:
-            st.altair_chart(chart, use_container_width=False)
+            selection = st.altair_chart(chart, use_container_width=False,
+                                        on_select="rerun", key="health_donut")
+            sel_data = selection.get("selection", {}) if selection else {}
+            points = sel_data.get("param_1", [])
+            if points and "Health" in points[0]:
+                clicked_health = points[0]["Health"]
+                st.session_state["portfolio_health_filter"] = clicked_health
+                st.session_state["_pending_nav"] = "Portfolio"
+                st.rerun()
         else:
             st.info("No health data available.")
+
+    with right:
+        all_projects = data["portfolio"]
+        n_active = len(active)
+        n_complete = sum(1 for p in all_projects if p.pct_complete >= 1.0)
+        n_postponed = sum(1 for p in all_projects
+                         if p.health and "POSTPONED" in p.health.upper())
+
+        section_header("Project Status")
+        st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
+        if st.button(f"**{n_active}** Active", use_container_width=True,
+                     key="status_active"):
+            st.session_state["portfolio_status_filter"] = "active"
+            st.session_state["_pending_nav"] = "Portfolio"
+            st.rerun()
+        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+        if st.button(f"**{n_complete}** Complete", use_container_width=True,
+                     key="status_complete"):
+            st.session_state["portfolio_status_filter"] = "complete"
+            st.session_state["_pending_nav"] = "Portfolio"
+            st.rerun()
+        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+        if st.button(f"**{n_postponed}** Postponed", use_container_width=True,
+                     key="status_postponed"):
+            st.session_state["portfolio_status_filter"] = "postponed"
+            st.session_state["_pending_nav"] = "Portfolio"
+            st.rerun()
 
     # --- Upcoming Milestones ---
     section_header("Upcoming Milestones")
@@ -102,36 +130,6 @@ def render(data: dict, utilization: dict, person_demand: list):
             use_container_width=True,
         )
 
-        # Quick navigation from milestones
-        nav_col1, nav_col2 = st.columns([3, 1])
-        with nav_col1:
-            nav_options = {row["Project"]: row["ID"] for _, row in df.iterrows()}
-            selected_nav = st.selectbox(
-                "Navigate to project",
-                list(nav_options.keys()),
-                label_visibility="collapsed",
-                placeholder="Select a milestone project to view details...",
-                index=None,
-                key="exec_project_nav",
-            )
-        with nav_col2:
-            if selected_nav:
-                project_id = nav_options[selected_nav]
-                st.button(
-                    "View Details →",
-                    on_click=_navigate_to_project,
-                    args=(project_id,),
-                    use_container_width=True,
-                    type="primary",
-                    key="exec_nav_btn",
-                )
-            else:
-                st.button(
-                    "View Details →",
-                    disabled=True,
-                    use_container_width=True,
-                    key="exec_nav_btn",
-                )
     else:
         st.info("No projects ending within the next 60 days.")
 

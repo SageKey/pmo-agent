@@ -4,7 +4,8 @@ Tests against known values from the ETE PMO workbook.
 """
 
 import math
-from excel_connector import ExcelConnector, SDLC_PHASES
+from models import SDLC_PHASES
+from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
 
 PASS = 0
@@ -30,7 +31,7 @@ def approx(a, b, tol=0.01):
 
 def main():
     global PASS, FAIL
-    conn = ExcelConnector()
+    conn = SQLiteConnector()
     engine = CapacityEngine(conn)
 
     # ===== EXCEL CONNECTOR TESTS =====

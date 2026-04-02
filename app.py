@@ -53,6 +53,11 @@ with st.sidebar:
 
     st.divider()
 
+    # Handle pending navigation (e.g. donut click-through) before widget renders
+    pending = st.session_state.pop("_pending_nav", None)
+    if pending:
+        st.session_state["nav_radio"] = pending
+
     page = st.radio(
         "Navigation",
         ["Executive Summary", "Portfolio", "Project Detail", "Project Editor", "Capacity", "Timeline", "AI Assistant"],
