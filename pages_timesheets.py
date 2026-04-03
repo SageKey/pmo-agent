@@ -305,6 +305,9 @@ def _render_entry_tab(consultants: list[dict]):
 def _render_review_tab(consultants: list[dict]):
     """Monthly review — manager view of all timesheets."""
 
+    MSA_MONTHLY_FEE = 50000.0
+    BLENDED_RATE = 65.0
+
     today = date.today()
     col1, col2 = st.columns([2, 4])
     with col1:
@@ -323,65 +326,176 @@ def _render_review_tab(consultants: list[dict]):
         st.info(f"No timesheet data for {selected_month}.")
         return
 
-    # --- KPI Summary ---
+    # --- Compute MSA vs T&M splits ---
     total_hrs = sum(s["total_hours"] for s in summary)
     project_hrs = sum(s["project_hours"] for s in summary)
     support_hrs = sum(s["support_hours"] for s in summary)
-    tm_cost = sum(s["tm_cost"] for s in summary)
 
-    kc1, kc2, kc3, kc4 = st.columns(4)
+    msa_hrs = sum(s["total_hours"] for s in summary if s["billing_type"] == "MSA")
+    tm_hrs = sum(s["total_hours"] for s in summary if s["billing_type"] == "T&M")
+    tm_cost = sum(s["total_hours"] * s["hourly_rate"]
+                  for s in summary if s["billing_type"] == "T&M")
+    work_value = total_hrs * BLENDED_RATE
+    total_cost = MSA_MONTHLY_FEE + tm_cost
+    msa_effective_rate = MSA_MONTHLY_FEE / msa_hrs if msa_hrs > 0 else 0
+
+    # --- Top-level KPIs ---
+    kc1, kc2, kc3, kc4, kc5 = st.columns(5)
     with kc1:
         kpi_card("Total Hours", f"{total_hrs:,.0f}", "navy")
     with kc2:
-        kpi_card("Project Hours", f"{project_hrs:,.0f}", "navy")
+        kpi_card("MSA Hours", f"{msa_hrs:,.0f}", "navy")
     with kc3:
-        kpi_card("Support Hours", f"{support_hrs:,.0f}", "navy")
+        kpi_card("T&M Hours", f"{tm_hrs:,.0f}", "navy")
     with kc4:
         kpi_card("T&M Cost", f"${tm_cost:,.0f}", "navy")
+    with kc5:
+        kpi_card("Total Cost", f"${total_cost:,.0f}", "navy")
 
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 
-    # --- Consultant Summary Table ---
-    section_header("Consultant Summary")
+    # ==================================================================
+    # MSA Utilization Analysis
+    # ==================================================================
+    section_header("MSA Utilization")
 
-    html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
-    <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.03em;">
-        <th style="text-align:left; padding:0.4rem 0.5rem;">Consultant</th>
-        <th style="text-align:left; padding:0.4rem 0.5rem;">Billing</th>
-        <th style="text-align:right; padding:0.4rem 0.5rem;">Project Hrs</th>
-        <th style="text-align:right; padding:0.4rem 0.5rem;">Support Hrs</th>
-        <th style="text-align:right; padding:0.4rem 0.5rem;">Total Hrs</th>
-        <th style="text-align:right; padding:0.4rem 0.5rem;">T&M Cost</th>
-    </tr></thead><tbody>"""
+    msa_members = [s for s in summary if s["billing_type"] == "MSA"]
+    msa_work_value = msa_hrs * BLENDED_RATE
 
-    for s in summary:
-        rate_str = f"${s['hourly_rate']:.0f}/hr" if s["hourly_rate"] > 0 else "—"
-        billing = f"{s['billing_type']} {rate_str}" if s["hourly_rate"] > 0 else s["billing_type"]
-        cost_str = f"${s['tm_cost']:,.0f}" if s["tm_cost"] > 0 else "—"
+    mu1, mu2, mu3, mu4 = st.columns(4)
+    with mu1:
+        kpi_card("MSA Fee", f"${MSA_MONTHLY_FEE:,.0f}", "navy")
+    with mu2:
+        kpi_card("Work Value", f"${msa_work_value:,.0f}",
+                 "green" if msa_work_value >= MSA_MONTHLY_FEE else "red")
+    with mu3:
+        roi_pct = (msa_work_value / MSA_MONTHLY_FEE * 100) if MSA_MONTHLY_FEE > 0 else 0
+        color = "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")
+        kpi_card("MSA ROI", f"{roi_pct:.0f}%", color)
+    with mu4:
+        color = "green" if msa_effective_rate <= BLENDED_RATE else ("yellow" if msa_effective_rate <= 80 else "red")
+        kpi_card("Effective Rate", f"${msa_effective_rate:.0f}/hr", color)
 
-        html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
-            <td style="padding:0.45rem 0.5rem; font-weight:500;">{s['name']}</td>
-            <td style="padding:0.45rem 0.5rem;">{billing}</td>
-            <td style="padding:0.45rem 0.5rem; text-align:right;">{s['project_hours']:.0f}</td>
-            <td style="padding:0.45rem 0.5rem; text-align:right;">{s['support_hours']:.0f}</td>
-            <td style="padding:0.45rem 0.5rem; text-align:right; font-weight:600;">{s['total_hours']:.0f}</td>
-            <td style="padding:0.45rem 0.5rem; text-align:right;">{cost_str}</td>
+    # MSA insight text
+    if msa_work_value >= MSA_MONTHLY_FEE:
+        delta = msa_work_value - MSA_MONTHLY_FEE
+        st.markdown(f"""<div style="font-size:0.85rem; color:#27AE60; margin:0.5rem 0 0.75rem 0;">
+            The MSA delivered <strong>${msa_work_value:,.0f}</strong> of work value
+            for a <strong>${MSA_MONTHLY_FEE:,.0f}</strong> fee —
+            saving <strong>${delta:,.0f}</strong> vs. hourly billing at ${BLENDED_RATE:.0f}/hr.
+        </div>""", unsafe_allow_html=True)
+    else:
+        delta = MSA_MONTHLY_FEE - msa_work_value
+        st.markdown(f"""<div style="font-size:0.85rem; color:#E74C3C; margin:0.5rem 0 0.75rem 0;">
+            MSA work value (<strong>${msa_work_value:,.0f}</strong>) is below the
+            <strong>${MSA_MONTHLY_FEE:,.0f}</strong> fee — <strong>${delta:,.0f}</strong>
+            gap. Consider shifting more work to MSA resources.
+        </div>""", unsafe_allow_html=True)
+
+    # MSA member breakdown
+    if msa_members:
+        html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+        <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem;">
+            <th style="text-align:left; padding:0.4rem 0.5rem;">MSA Consultant</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Project Hrs</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Support Hrs</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Total Hrs</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Work Value</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Share of MSA</th>
+        </tr></thead><tbody>"""
+
+        for s in msa_members:
+            wv = s["total_hours"] * BLENDED_RATE
+            share = (s["total_hours"] / msa_hrs * 100) if msa_hrs > 0 else 0
+            html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
+                <td style="padding:0.45rem 0.5rem; font-weight:500;">{s['name']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{s['project_hours']:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{s['support_hours']:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; font-weight:600;">{s['total_hours']:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${wv:,.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{share:.0f}%</td>
+            </tr>"""
+
+        html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
+            <td style="padding:0.45rem 0.5rem;">MSA TOTAL</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{sum(s['project_hours'] for s in msa_members):.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{sum(s['support_hours'] for s in msa_members):.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{msa_hrs:.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${msa_work_value:,.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">100%</td>
         </tr>"""
 
-    # Totals row
-    html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
-        <td style="padding:0.45rem 0.5rem;" colspan="2">TOTAL</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right;">{project_hrs:.0f}</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right;">{support_hrs:.0f}</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right;">{total_hrs:.0f}</td>
-        <td style="padding:0.45rem 0.5rem; text-align:right;">${tm_cost:,.0f}</td>
-    </tr>"""
+        html += "</tbody></table>"
+        st.markdown(html, unsafe_allow_html=True)
 
-    html += "</tbody></table>"
-    st.markdown(html, unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # T&M Cost Detail
+    # ==================================================================
+    section_header("T&M Cost Detail")
+
+    tm_members = [s for s in summary if s["billing_type"] == "T&M"]
+    if tm_members:
+        html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+        <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem;">
+            <th style="text-align:left; padding:0.4rem 0.5rem;">T&M Consultant</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Rate</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Project Hrs</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Support Hrs</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Total Hrs</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Cost</th>
+        </tr></thead><tbody>"""
+
+        for s in tm_members:
+            cost = s["total_hours"] * s["hourly_rate"]
+            html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
+                <td style="padding:0.45rem 0.5rem; font-weight:500;">{s['name']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${s['hourly_rate']:.0f}/hr</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{s['project_hours']:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{s['support_hours']:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; font-weight:600;">{s['total_hours']:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; font-weight:600;">${cost:,.0f}</td>
+            </tr>"""
+
+        html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
+            <td style="padding:0.45rem 0.5rem;" colspan="2">T&M TOTAL</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{sum(s['project_hours'] for s in tm_members):.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{sum(s['support_hours'] for s in tm_members):.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{tm_hrs:.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${tm_cost:,.0f}</td>
+        </tr>"""
+
+        html += "</tbody></table>"
+        st.markdown(html, unsafe_allow_html=True)
+    else:
+        st.caption("No T&M hours this month.")
+
+    # --- Monthly Cost Summary Bar ---
+    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    section_header("Monthly Cost Breakdown")
+
+    msa_frac = MSA_MONTHLY_FEE / total_cost if total_cost > 0 else 0
+    tm_frac = tm_cost / total_cost if total_cost > 0 else 0
+    st.markdown(f"""
+    <div style="position: relative; background: #E8ECF1; border-radius: 8px; height: 32px; overflow: hidden; margin-bottom: 0.25rem;">
+        <div style="position: absolute; top: 0; left: 0; height: 100%;
+                    width: {msa_frac*100:.1f}%; background: #1B3A5C;
+                    border-radius: 8px 0 0 8px;"></div>
+        <div style="position: absolute; top: 0; left: {msa_frac*100:.1f}%; height: 100%;
+                    width: {tm_frac*100:.1f}%; background: #4A90D9;
+                    border-radius: 0 8px 8px 0;"></div>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #5A6A7E; margin-top: 0.25rem;">
+        <span><span style="color:#1B3A5C;">&#9632;</span> MSA: ${MSA_MONTHLY_FEE:,.0f} ({msa_frac*100:.0f}%)</span>
+        <span><span style="color:#4A90D9;">&#9632;</span> T&M: ${tm_cost:,.0f} ({tm_frac*100:.0f}%)</span>
+        <span>Total: ${total_cost:,.0f}</span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 
     # --- Hours Distribution Chart ---
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
     section_header("Hours by Consultant")
 
     chart_rows = []
