@@ -127,17 +127,11 @@ with st.sidebar:
     st.divider()
 
     # Controls
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if st.button("Refresh", use_container_width=True, help="Reload data from workbook"):
-            st.cache_data.clear()
+    if page == "AI Assistant":
+        if st.button("Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.session_state.chat_history = []
             st.rerun()
-    with col_b:
-        if page == "AI Assistant":
-            if st.button("Clear Chat", use_container_width=True):
-                st.session_state.messages = []
-                st.session_state.chat_history = []
-                st.rerun()
 
     # Jira Sync — auto-sync every 15 min, manual button available
     JIRA_SYNC_COOLDOWN = 15 * 60  # seconds
