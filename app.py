@@ -139,6 +139,11 @@ with st.sidebar:
     JIRA_SYNC_COOLDOWN = 15 * 60  # seconds
 
     jira_token = os.environ.get("JIRA_API_TOKEN", "")
+    if not jira_token:
+        try:
+            jira_token = st.secrets.get("JIRA_API_TOKEN", "")
+        except Exception:
+            pass
     if not jira_token and env_path.exists():
         for line in env_path.read_text().splitlines():
             line = line.strip()
