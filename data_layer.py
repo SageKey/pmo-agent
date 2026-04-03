@@ -29,6 +29,8 @@ SEED_SQL = Path(__file__).parent / "seed_data.sql"
 def _seed_database_if_missing():
     """Create the database from seed_data.sql if it doesn't exist."""
     if os.path.exists(DB_PATH):
+        # DB exists — ensure new tables are populated (migration path)
+        _migrate_vendor_tables()
         return
     if not SEED_SQL.exists():
         return
@@ -37,6 +39,54 @@ def _seed_database_if_missing():
         conn.executescript(SEED_SQL.read_text())
     finally:
         conn.close()
+
+
+def _migrate_vendor_tables():
+    """Populate vendor tables from seed_data.sql if they exist but are empty.
+    This handles the case where the DB predates the vendor/timesheet feature."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("PRAGMA foreign_keys=ON")
+
+        # Check if vendor_consultants table exists and is empty
+        try:
+            row = conn.execute("SELECT COUNT(*) FROM vendor_consultants").fetchone()
+            if row[0] > 0:
+                conn.close()
+                return  # Already populated
+        except Exception:
+            conn.close()
+            return  # Table doesn't exist yet — _ensure_schema will create it
+
+        # Extract vendor-related INSERTs from seed_data.sql
+        if not SEED_SQL.exists():
+            conn.close()
+            return
+
+        vendor_tables = (
+            "vendor_consultants", "vendor_timesheets", "vendor_approvals",
+            "approved_work", "vendor_invoices",
+        )
+        seed_text = SEED_SQL.read_text()
+        insert_lines = []
+        for line in seed_text.splitlines():
+            stripped = line.strip()
+            for tbl in vendor_tables:
+                if stripped.upper().startswith(f"INSERT INTO {tbl.upper()}"):
+                    insert_lines.append(stripped)
+                    break
+
+        if insert_lines:
+            for stmt in insert_lines:
+                try:
+                    conn.execute(stmt)
+                except Exception:
+                    pass  # Skip duplicates
+            conn.commit()
+
+        conn.close()
+    except Exception:
+        pass  # Non-fatal — app still works, just without seed data
 
 
 def _clean_health(health: str) -> str:
