@@ -43,22 +43,27 @@ def _seed_database_if_missing():
 
 def _migrate_vendor_tables():
     """Populate vendor tables from seed_data.sql if they exist but are empty.
-    This handles the case where the DB predates the vendor/timesheet feature."""
+    Also handles name unification (short names → full names) for existing DBs."""
     try:
         conn = sqlite3.connect(DB_PATH)
-        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA foreign_keys=OFF")
 
-        # Check if vendor_consultants table exists and is empty
+        # Check if vendor_consultants table exists
         try:
             row = conn.execute("SELECT COUNT(*) FROM vendor_consultants").fetchone()
-            if row[0] > 0:
-                conn.close()
-                return  # Already populated
+            count = row[0]
         except Exception:
             conn.close()
             return  # Table doesn't exist yet — _ensure_schema will create it
 
-        # Extract vendor-related INSERTs from seed_data.sql
+        # If populated, check if names need unification (short → full)
+        if count > 0:
+            _unify_vendor_names(conn)
+            _fix_team_classifications(conn)
+            conn.close()
+            return
+
+        # Empty — seed from seed_data.sql
         if not SEED_SQL.exists():
             conn.close()
             return
@@ -87,6 +92,57 @@ def _migrate_vendor_tables():
         conn.close()
     except Exception:
         pass  # Non-fatal — app still works, just without seed data
+
+
+def _unify_vendor_names(conn):
+    """Rename short first-name-only entries to full names matching team_members."""
+    NAME_MAP = {
+        "Ajay": "Ajay Kumar",
+        "Akhilesh": "Akhilesh Mishra",
+        "Bhavya": "Bhavya Reddy",
+        "Deepak": "Deepak Gudwani",
+        "Ravi": "Ravindra Reddy",
+        "Sangam": "Sangamesh Koti",
+        "Sarath": "Sarath Yeturu",
+        "Vinod": "Vinod Bollepally",
+        "Vishnu": "Vishnu Premen",
+    }
+    changed = False
+    for short, full in NAME_MAP.items():
+        cur = conn.execute(
+            "SELECT COUNT(*) FROM vendor_consultants WHERE name = ?", (short,)
+        ).fetchone()
+        if cur[0] > 0:
+            conn.execute(
+                "UPDATE vendor_consultants SET name = ? WHERE name = ?", (full, short)
+            )
+            changed = True
+    if changed:
+        conn.commit()
+
+
+def _fix_team_classifications(conn):
+    """Fix billing classification mismatches in team_members and add missing Akhilesh."""
+    fixes = {
+        "Bhavya Reddy": "T&M",
+        "Deepak Gudwani": "T&M",
+        "Sangamesh Koti": "MSA",
+        "Sarath Yeturu": "T&M",
+        "Vishnu Premen": "T&M",
+    }
+    for name, cls in fixes.items():
+        conn.execute(
+            "UPDATE team_members SET classification = ? WHERE name = ? AND (classification IS NULL OR classification != ?)",
+            (cls, name, cls),
+        )
+
+    # Add Akhilesh if missing
+    conn.execute("""
+        INSERT OR IGNORE INTO team_members
+        (name, role, role_key, team, vendor, classification, rate_per_hour, weekly_hrs_available, support_reserve_pct)
+        VALUES ('Akhilesh Mishra', 'Technical', 'technical', 'ERP', 'Synnergie', 'T&M', 65.0, 35.0, 0.0)
+    """)
+    conn.commit()
 
 
 def _clean_health(health: str) -> str:

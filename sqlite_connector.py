@@ -103,9 +103,9 @@ CREATE TABLE IF NOT EXISTS role_phase_efforts (
 
 CREATE TABLE IF NOT EXISTS vendor_consultants (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    name            TEXT UNIQUE NOT NULL,
-    billing_type    TEXT NOT NULL DEFAULT 'MSA',   -- 'MSA' or 'T&M'
-    hourly_rate     REAL NOT NULL DEFAULT 0.0,     -- 0 for MSA-covered
+    name            TEXT UNIQUE NOT NULL,           -- must match team_members.name
+    billing_type    TEXT NOT NULL DEFAULT 'MSA',    -- 'MSA' or 'T&M'
+    hourly_rate     REAL NOT NULL DEFAULT 0.0,      -- 0 for MSA-covered
     role_key        TEXT,
     active          INTEGER NOT NULL DEFAULT 1
 );

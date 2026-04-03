@@ -20,17 +20,18 @@ from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
 
 
-# Consultant billing model from the March 2026 invoice
+# Excel sheet name → (canonical full name, billing info)
+# Full names match team_members.name exactly
 CONSULTANT_BILLING = {
-    "Ajay":     {"billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "functional"},
-    "Bhavya":   {"billing_type": "T&M", "hourly_rate": 60.0,  "role_key": "technical"},
-    "Deepak":   {"billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "functional"},
-    "Ravi":     {"billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "technical"},
-    "Sangam":   {"billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "technical"},
-    "Sarath":   {"billing_type": "T&M", "hourly_rate": 200.0, "role_key": "technical"},
-    "Vinod":    {"billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "dba"},
-    "Vishnu":   {"billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "technical"},
-    "Akhilesh": {"billing_type": "T&M", "hourly_rate": 65.0,  "role_key": "technical"},
+    "Ajay":     {"full_name": "Ajay Kumar",       "billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "functional"},
+    "Bhavya":   {"full_name": "Bhavya Reddy",     "billing_type": "T&M", "hourly_rate": 60.0,  "role_key": "technical"},
+    "Deepak":   {"full_name": "Deepak Gudwani",   "billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "functional"},
+    "Ravi":     {"full_name": "Ravindra Reddy",    "billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "technical"},
+    "Sangam":   {"full_name": "Sangamesh Koti",    "billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "technical"},
+    "Sarath":   {"full_name": "Sarath Yeturu",     "billing_type": "T&M", "hourly_rate": 200.0, "role_key": "technical"},
+    "Vinod":    {"full_name": "Vinod Bollepally",   "billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "dba"},
+    "Vishnu":   {"full_name": "Vishnu Premen",     "billing_type": "MSA", "hourly_rate": 0.0,   "role_key": "technical"},
+    "Akhilesh": {"full_name": "Akhilesh Mishra",   "billing_type": "T&M", "hourly_rate": 65.0,  "role_key": "technical"},
 }
 
 
@@ -52,9 +53,9 @@ def import_data(xlsx_path: str):
         # 1. Vendor Consultants
         # ---------------------------------------------------------------
         print("Importing vendor consultants...")
-        for name, info in CONSULTANT_BILLING.items():
+        for sheet_name, info in CONSULTANT_BILLING.items():
             connector.save_vendor_consultant({
-                "name": name,
+                "name": info["full_name"],
                 "billing_type": info["billing_type"],
                 "hourly_rate": info["hourly_rate"],
                 "role_key": info["role_key"],
@@ -62,8 +63,14 @@ def import_data(xlsx_path: str):
             })
         print(f"  {len(CONSULTANT_BILLING)} consultants upserted.")
 
-        # Build consultant ID lookup
+        # Build consultant ID lookup: full_name → id
         consultants = {c["name"]: c["id"] for c in connector.read_vendor_consultants()}
+        # Also build sheet_name → consultant_id mapping
+        sheet_to_id = {}
+        for sheet_name, info in CONSULTANT_BILLING.items():
+            cid = consultants.get(info["full_name"])
+            if cid:
+                sheet_to_id[sheet_name] = cid
 
         # ---------------------------------------------------------------
         # 2. Timesheet Entries
@@ -78,9 +85,9 @@ def import_data(xlsx_path: str):
                 continue
 
             ws = wb[sheet_name]
-            consultant_id = consultants.get(sheet_name)
+            consultant_id = sheet_to_id.get(sheet_name)
             if not consultant_id:
-                print(f"  WARNING: Consultant '{sheet_name}' not in DB, skipping.")
+                print(f"  WARNING: Consultant '{sheet_name}' not mapped, skipping.")
                 continue
 
             entries = 0

@@ -391,11 +391,11 @@ CREATE TABLE team_members (
 );
 INSERT INTO team_members VALUES('Ajay Kumar','Functional','functional','ERP','Synnergie','MSA',65.0,35.0,0.4000000000000000222);
 INSERT INTO team_members VALUES('Ravindra Reddy','Technical','technical','ERP','Synnergie','MSA',65.0,35.0,0.4000000000000000222);
-INSERT INTO team_members VALUES('Vishnu Premen','Technical','technical','ERP','Synnergie',NULL,65.0,35.0,0.4000000000000000222);
-INSERT INTO team_members VALUES('Deepak Gudwani','Functional','functional','ERP','Synnergie',NULL,65.0,35.0,0.4000000000000000222);
-INSERT INTO team_members VALUES('Sangamesh Koti','Technical','technical','ERP','Synnergie','T&M',65.0,35.0,0.0);
-INSERT INTO team_members VALUES('Bhavya Reddy','Technical','technical','ERP','Synnergie',NULL,65.0,35.0,0.0);
-INSERT INTO team_members VALUES('Sarath Yeturu','Technical','technical','ERP','Synnergie','MSA',65.0,35.0,0.5999999999999999778);
+INSERT INTO team_members VALUES('Vishnu Premen','Technical','technical','ERP','Synnergie','T&M',65.0,35.0,0.4000000000000000222);
+INSERT INTO team_members VALUES('Deepak Gudwani','Functional','functional','ERP','Synnergie','T&M',65.0,35.0,0.4000000000000000222);
+INSERT INTO team_members VALUES('Sangamesh Koti','Technical','technical','ERP','Synnergie','MSA',65.0,35.0,0.0);
+INSERT INTO team_members VALUES('Bhavya Reddy','Technical','technical','ERP','Synnergie','T&M',65.0,35.0,0.0);
+INSERT INTO team_members VALUES('Sarath Yeturu','Technical','technical','ERP','Synnergie','T&M',65.0,35.0,0.5999999999999999778);
 INSERT INTO team_members VALUES('Vinod Bollepally','DBA','dba','ERP','Synnergie','MSA',65.0,35.0,0.8000000000000000444);
 INSERT INTO team_members VALUES('Jim Young','Business Analyst','ba','Business Analysts','ETE',NULL,65.0,40.0,0.5999999999999999778);
 INSERT INTO team_members VALUES('Alex Young','Developer','developer','Systems Applications','ETE',NULL,65.0,25.0,0.0);
@@ -412,6 +412,7 @@ INSERT INTO team_members VALUES('Donna Wiedemeier','WMS Consultant','wms','WMS',
 INSERT INTO team_members VALUES('Justin Senour','Infrastructure','infrastructure','Infrastructure','ETE',NULL,65.0,40.0,0.5999999999999999778);
 INSERT INTO team_members VALUES('Michael House','Infrastructure','infrastructure','Infrastructure','ETE',NULL,65.0,40.0,0.5999999999999999778);
 INSERT INTO team_members VALUES('Andrew Shaefer','Infrastructure','infrastructure','Infrastructure','ETE',NULL,65.0,40.0,0.5999999999999999778);
+INSERT INTO team_members VALUES('Akhilesh Mishra','Technical','technical','ERP','Synnergie','T&M',65.0,35.0,0.0);
 CREATE TABLE project_assignments (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -632,15 +633,15 @@ CREATE TABLE vendor_consultants (
     role_key        TEXT,
     active          INTEGER NOT NULL DEFAULT 1
 );
-INSERT INTO vendor_consultants VALUES(1,'Ajay','MSA',0.0,'functional',1);
-INSERT INTO vendor_consultants VALUES(2,'Bhavya','T&M',60.0,'technical',1);
-INSERT INTO vendor_consultants VALUES(3,'Deepak','MSA',0.0,'functional',1);
-INSERT INTO vendor_consultants VALUES(4,'Ravi','MSA',0.0,'technical',1);
-INSERT INTO vendor_consultants VALUES(5,'Sangam','MSA',0.0,'technical',1);
-INSERT INTO vendor_consultants VALUES(6,'Sarath','T&M',200.0,'technical',1);
-INSERT INTO vendor_consultants VALUES(7,'Vinod','MSA',0.0,'dba',1);
-INSERT INTO vendor_consultants VALUES(8,'Vishnu','MSA',0.0,'technical',1);
-INSERT INTO vendor_consultants VALUES(9,'Akhilesh','T&M',65.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(1,'Ajay Kumar','MSA',0.0,'functional',1);
+INSERT INTO vendor_consultants VALUES(2,'Bhavya Reddy','T&M',60.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(3,'Deepak Gudwani','T&M',0.0,'functional',1);
+INSERT INTO vendor_consultants VALUES(4,'Ravindra Reddy','MSA',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(5,'Sangamesh Koti','MSA',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(6,'Sarath Yeturu','T&M',200.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(7,'Vinod Bollepally','MSA',0.0,'dba',1);
+INSERT INTO vendor_consultants VALUES(8,'Vishnu Premen','T&M',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(9,'Akhilesh Mishra','T&M',65.0,'technical',1);
 CREATE TABLE vendor_timesheets (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     consultant_id   INTEGER NOT NULL REFERENCES vendor_consultants(id),
