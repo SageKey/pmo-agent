@@ -191,12 +191,15 @@ def render(data: dict, utilization: dict, person_demand: list):
     # ------------------------------------------------------------------
     fy_projects = [p for p in all_projects if _project_overlaps_year(p, fiscal_year)]
 
-    total_spent = sum(p.actual_cost for p in fy_projects)
+    total_spent_projects = sum(p.actual_cost for p in fy_projects)
     total_forecast = sum(p.forecast_cost for p in fy_projects)
     effective_forecast = sum(
         p.forecast_cost if p.forecast_cost > 0 else p.actual_cost
         for p in fy_projects
     )
+    # Note: total_spent will be recalculated after vendor data is loaded
+    # to include timesheet-derived costs. Set initial value here.
+    total_spent = total_spent_projects
 
     # ==================================================================
     # 1. ANNUAL BUDGET — KPIs + Edit
@@ -294,6 +297,85 @@ def render(data: dict, utilization: dict, person_demand: list):
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
     # ==================================================================
+    # 1b. SYNNERGIE VENDOR BILLING (from timesheets)
+    # ==================================================================
+    MSA_MONTHLY_FEE = 50000.0
+    BLENDED_RATE = 65.0
+
+    connector = SQLiteConnector(DB_PATH)
+    try:
+        monthly_vendor = connector.get_vendor_costs_by_month(fiscal_year)
+        ete_project_costs = connector.get_vendor_costs_by_ete_project(fiscal_year)
+        ts_summary = connector.get_timesheet_summary(year=fiscal_year)
+    finally:
+        connector.close()
+
+    # Compute vendor billing totals from timesheets
+    ts_months = sorted(set(r["month"] for r in monthly_vendor))
+    n_months_billed = len(ts_months)
+    ts_msa_hrs = sum(r["total_hours"] for r in monthly_vendor if r["billing_type"] == "MSA")
+    ts_tm_hrs = sum(r["total_hours"] for r in monthly_vendor if r["billing_type"] == "T&M")
+    ts_tm_cost = sum(r["total_cost"] for r in monthly_vendor if r["billing_type"] == "T&M")
+    ts_total_hrs = ts_msa_hrs + ts_tm_hrs
+    ts_msa_cost = n_months_billed * MSA_MONTHLY_FEE
+    ts_msa_work_value = ts_msa_hrs * BLENDED_RATE
+    ts_total_vendor_cost = ts_msa_cost + ts_tm_cost
+
+    if ts_total_hrs > 0:
+        section_header(f"FY{fiscal_year} Synnergie Vendor Billing")
+
+        vc1, vc2, vc3, vc4, vc5 = st.columns(5)
+        with vc1:
+            kpi_card("MSA Fees", f"${ts_msa_cost:,.0f}", "navy")
+        with vc2:
+            kpi_card("T&M Cost", f"${ts_tm_cost:,.0f}", "navy")
+        with vc3:
+            kpi_card("Total Vendor", f"${ts_total_vendor_cost:,.0f}", "navy")
+        with vc4:
+            kpi_card("Total Hours", f"{ts_total_hrs:,.0f}", "navy")
+        with vc5:
+            roi_pct = (ts_msa_work_value / ts_msa_cost * 100) if ts_msa_cost > 0 else 0
+            color = "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")
+            kpi_card("MSA ROI", f"{roi_pct:.0f}%", color)
+
+        # MSA + T&M cost bar per month
+        vendor_month_rows = []
+        for m in ts_months:
+            m_msa = sum(r["total_hours"] for r in monthly_vendor
+                        if r["month"] == m and r["billing_type"] == "MSA")
+            m_tm_cost = sum(r["total_cost"] for r in monthly_vendor
+                           if r["month"] == m and r["billing_type"] == "T&M")
+            try:
+                m_label = date.fromisoformat(m + "-01").strftime("%b")
+            except Exception:
+                m_label = m
+            vendor_month_rows.append({"Month": m_label, "Type": "MSA Fee", "Amount": MSA_MONTHLY_FEE, "Sort": m})
+            vendor_month_rows.append({"Month": m_label, "Type": "T&M", "Amount": m_tm_cost, "Sort": m})
+
+        if vendor_month_rows:
+            vm_df = pd.DataFrame(vendor_month_rows)
+            vm_chart = alt.Chart(vm_df).mark_bar(
+                cornerRadiusTopLeft=4, cornerRadiusTopRight=4
+            ).encode(
+                x=alt.X("Month:N", sort=list(dict.fromkeys(vm_df["Month"])), title=None,
+                         axis=alt.Axis(labelAngle=0, labelFontSize=12)),
+                y=alt.Y("Amount:Q", title="Cost ($)", stack="zero",
+                         axis=alt.Axis(format="$,.0f", labelFontSize=11)),
+                color=alt.Color("Type:N", scale=alt.Scale(
+                    domain=["MSA Fee", "T&M"],
+                    range=["#1B3A5C", "#4A90D9"]
+                ), legend=alt.Legend(orient="top", title=None)),
+                tooltip=[
+                    alt.Tooltip("Month:N"),
+                    alt.Tooltip("Type:N"),
+                    alt.Tooltip("Amount:Q", format="$,.0f"),
+                ],
+            ).properties(height=280)
+            st.altair_chart(vm_chart, use_container_width=True)
+
+        st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
     # 2. MONTHLY SPEND TREND
     # ==================================================================
     section_header(f"FY{fiscal_year} Monthly Spend")
@@ -319,6 +401,26 @@ def render(data: dict, utilization: dict, person_demand: list):
         merged["Amount"] = 0
 
     monthly_budget = annual_budget / 12 if annual_budget > 0 else 0
+
+    # Overlay vendor costs from timesheets onto monthly spend
+    if monthly_vendor:
+        for m_rec in monthly_vendor:
+            m_str = m_rec["month"]
+            try:
+                m_date = date.fromisoformat(m_str + "-01")
+                m_label = m_date.strftime("%b")
+            except Exception:
+                continue
+            # Add T&M cost to the matching month
+            if m_rec["billing_type"] == "T&M":
+                mask = merged["Label"] == m_label
+                if mask.any():
+                    merged.loc[mask, "Amount"] += m_rec["total_cost"]
+            # Add MSA monthly fee once per month (only on first billing_type hit)
+            if m_rec["billing_type"] == "MSA":
+                mask = merged["Label"] == m_label
+                if mask.any():
+                    merged.loc[mask, "Amount"] += MSA_MONTHLY_FEE
 
     bars = alt.Chart(merged).mark_bar(
         cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#1B3A5C"
@@ -362,6 +464,23 @@ def render(data: dict, utilization: dict, person_demand: list):
     section_header(f"FY{fiscal_year} Spend by Vendor / Team")
 
     vendor_df = _vendor_spend(roster, assignments, fy_projects)
+
+    # Inject real Synnergie costs from timesheets (replaces estimation)
+    if ts_total_vendor_cost > 0:
+        synnergie_members = set(s["name"] for s in ts_summary)
+        if not vendor_df.empty and "Synnergie" in vendor_df["Vendor"].values:
+            idx = vendor_df[vendor_df["Vendor"] == "Synnergie"].index[0]
+            vendor_df.loc[idx, "Actual Spend"] = round(ts_total_vendor_cost)
+            vendor_df.loc[idx, "Headcount"] = len(synnergie_members)
+        else:
+            new_row = pd.DataFrame([{
+                "Vendor": "Synnergie",
+                "Headcount": len(synnergie_members),
+                "Actual Spend": round(ts_total_vendor_cost),
+                "Forecast Spend": round(ts_total_vendor_cost),
+            }])
+            vendor_df = pd.concat([vendor_df, new_row], ignore_index=True)
+
     if not vendor_df.empty:
         v_cols = st.columns(len(vendor_df))
         for col, (_, row) in zip(v_cols, vendor_df.iterrows()):
@@ -533,14 +652,27 @@ def render(data: dict, utilization: dict, person_demand: list):
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
     # ==================================================================
-    # 5. PROJECT COST DETAIL
+    # 5. PROJECT COST DETAIL (enhanced with timesheet data)
     # ==================================================================
     section_header(f"FY{fiscal_year} Project Cost Detail")
 
+    # Build ETE project cost lookup from timesheets
+    ts_cost_by_ete = {}
+    ts_hrs_by_ete = {}
+    for pc in ete_project_costs:
+        ete_id = pc["ete_project_id"]
+        ts_cost_by_ete[ete_id] = pc["total_cost"]
+        ts_hrs_by_ete[ete_id] = pc["total_hours"]
+
     cost_rows = []
     for p in fy_projects:
-        if p.actual_cost > 0 or p.forecast_cost > 0:
-            variance = p.forecast_cost - p.actual_cost if p.forecast_cost > 0 else 0
+        ts_cost = ts_cost_by_ete.get(p.id, 0)
+        ts_hrs = ts_hrs_by_ete.get(p.id, 0)
+        has_data = p.actual_cost > 0 or p.forecast_cost > 0 or ts_cost > 0
+        if has_data:
+            # Use timesheet cost if available, otherwise manual actual_cost
+            effective_actual = ts_cost if ts_cost > 0 else p.actual_cost
+            variance = p.forecast_cost - effective_actual if p.forecast_cost > 0 else 0
             cost_rows.append({
                 "ID": p.id,
                 "Project": p.name,
@@ -548,6 +680,8 @@ def render(data: dict, utilization: dict, person_demand: list):
                     "Postponed" if p.health and "POSTPONED" in p.health.upper() else "Active"
                 ),
                 "% Complete": round(p.pct_complete * 100),
+                "TS Hours": ts_hrs,
+                "TS Cost": ts_cost,
                 "Actual Cost": p.actual_cost,
                 "Forecast Cost": p.forecast_cost,
                 "Variance": variance,
@@ -555,17 +689,31 @@ def render(data: dict, utilization: dict, person_demand: list):
             })
 
     if cost_rows:
-        df = pd.DataFrame(cost_rows).sort_values("Actual Cost", ascending=False)
+        df = pd.DataFrame(cost_rows)
+        # Sort by whichever cost is higher — timesheet or manual
+        df["_sort"] = df[["TS Cost", "Actual Cost"]].max(axis=1)
+        df = df.sort_values("_sort", ascending=False).drop(columns=["_sort"])
 
+        total_ts_hrs = df["TS Hours"].sum()
+        total_ts_cost = df["TS Cost"].sum()
         total_actual = df["Actual Cost"].sum()
         total_fc = df["Forecast Cost"].sum()
         total_var = df["Variance"].sum()
+
+        has_any_ts = total_ts_cost > 0
 
         html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
         <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.03em;">
             <th style="text-align:left; padding:0.4rem 0.5rem;">Project</th>
             <th style="text-align:left; padding:0.4rem 0.5rem;">Status</th>
-            <th style="text-align:right; padding:0.4rem 0.5rem;">% Done</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">% Done</th>"""
+
+        if has_any_ts:
+            html += """
+            <th style="text-align:right; padding:0.4rem 0.5rem;">TS Hours</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">TS Cost</th>"""
+
+        html += """
             <th style="text-align:right; padding:0.4rem 0.5rem;">Actual</th>
             <th style="text-align:right; padding:0.4rem 0.5rem;">Forecast</th>
             <th style="text-align:right; padding:0.4rem 0.5rem;">Variance</th>
@@ -576,18 +724,36 @@ def render(data: dict, utilization: dict, person_demand: list):
             pid = row["ID"]
             link = f'<a href="?project={pid}" target="_self" style="color:#1565C0; text-decoration:none; font-weight:500;">{pid}: {row["Project"]}</a>'
             var_color = "#27AE60" if row["Variance"] <= 0 else "#E74C3C"
+
             html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
                 <td style="padding:0.45rem 0.5rem;">{link}</td>
                 <td style="padding:0.45rem 0.5rem;">{row['Status']}</td>
-                <td style="padding:0.45rem 0.5rem; text-align:right;">{row['% Complete']}%</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{row['% Complete']}%</td>"""
+
+            if has_any_ts:
+                ts_h = f"{row['TS Hours']:.0f}" if row['TS Hours'] > 0 else "—"
+                ts_c = f"${row['TS Cost']:,.0f}" if row['TS Cost'] > 0 else "—"
+                html += f"""
+                <td style="padding:0.45rem 0.5rem; text-align:right; color:#4A90D9;">{ts_h}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; color:#4A90D9; font-weight:500;">{ts_c}</td>"""
+
+            html += f"""
                 <td style="padding:0.45rem 0.5rem; text-align:right;">${row['Actual Cost']:,.0f}</td>
                 <td style="padding:0.45rem 0.5rem; text-align:right;">${row['Forecast Cost']:,.0f}</td>
                 <td style="padding:0.45rem 0.5rem; text-align:right; color:{var_color};">${row['Variance']:,.0f}</td>
                 <td style="padding:0.45rem 0.5rem;">{row['PM']}</td>
             </tr>"""
 
+        # Totals row
         html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
-            <td style="padding:0.45rem 0.5rem;" colspan="3">TOTAL</td>
+            <td style="padding:0.45rem 0.5rem;" colspan="3">TOTAL</td>"""
+
+        if has_any_ts:
+            html += f"""
+            <td style="padding:0.45rem 0.5rem; text-align:right; color:#4A90D9;">{total_ts_hrs:.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right; color:#4A90D9;">${total_ts_cost:,.0f}</td>"""
+
+        html += f"""
             <td style="padding:0.45rem 0.5rem; text-align:right;">${total_actual:,.0f}</td>
             <td style="padding:0.45rem 0.5rem; text-align:right;">${total_fc:,.0f}</td>
             <td style="padding:0.45rem 0.5rem; text-align:right;">${total_var:,.0f}</td>
@@ -596,6 +762,11 @@ def render(data: dict, utilization: dict, person_demand: list):
 
         html += "</tbody></table>"
         st.markdown(html, unsafe_allow_html=True)
+
+        if has_any_ts:
+            st.markdown("""<div style="font-size:0.78rem; color:#4A90D9; margin-top:0.4rem;">
+                <strong>TS Hours / TS Cost</strong> = actual vendor hours and cost from Synnergie timesheets (via project mapping).
+            </div>""", unsafe_allow_html=True)
     else:
         st.info(f"No project cost data for FY{fiscal_year}.")
 

@@ -916,6 +916,52 @@ class SQLiteConnector:
         except Exception as e:
             return f"Error deleting mapping: {e}"
 
+    def get_vendor_costs_by_month(self, year: int) -> list[dict]:
+        """Return monthly vendor costs: MSA fee + T&M from timesheets."""
+        conn = self._open()
+        rows = conn.execute("""
+            SELECT strftime('%Y-%m', vt.entry_date) as month,
+                   vc.billing_type,
+                   SUM(vt.hours) as total_hours,
+                   SUM(vt.hours * vc.hourly_rate) as total_cost
+            FROM vendor_timesheets vt
+            JOIN vendor_consultants vc ON vc.id = vt.consultant_id
+            WHERE strftime('%Y', vt.entry_date) = ?
+            GROUP BY month, vc.billing_type
+            ORDER BY month
+        """, (str(year),)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_vendor_costs_by_ete_project(self, year: int = None) -> list[dict]:
+        """Return vendor costs aggregated by ETE project via mapping.
+        Includes hours, cost, and work type breakdown."""
+        conn = self._open()
+        year_filter = ""
+        params = []
+        if year:
+            year_filter = "AND strftime('%Y', vt.entry_date) = ?"
+            params.append(str(year))
+
+        rows = conn.execute(f"""
+            SELECT pm.ete_project_id,
+                   p.name as ete_project_name,
+                   SUM(CASE WHEN vt.work_type = 'Project' THEN vt.hours ELSE 0 END) as project_hours,
+                   SUM(CASE WHEN vt.work_type = 'Support' THEN vt.hours ELSE 0 END) as support_hours,
+                   SUM(vt.hours) as total_hours,
+                   SUM(vt.hours * vc.hourly_rate) as total_cost,
+                   SUM(CASE WHEN vc.billing_type = 'T&M' THEN vt.hours * vc.hourly_rate ELSE 0 END) as tm_cost,
+                   SUM(CASE WHEN vc.billing_type = 'MSA' THEN vt.hours ELSE 0 END) as msa_hours,
+                   SUM(CASE WHEN vc.billing_type = 'T&M' THEN vt.hours ELSE 0 END) as tm_hours
+            FROM vendor_timesheets vt
+            JOIN vendor_consultants vc ON vc.id = vt.consultant_id
+            JOIN project_mapping pm ON pm.sse_key = vt.project_key
+            LEFT JOIN projects p ON p.id = pm.ete_project_id
+            WHERE vt.project_key IS NOT NULL {year_filter}
+            GROUP BY pm.ete_project_id
+            ORDER BY total_cost DESC
+        """, params).fetchall()
+        return [dict(r) for r in rows]
+
     def get_unmapped_sse_keys(self) -> list[dict]:
         """Return SSE keys from timesheets that have no mapping yet."""
         conn = self._open()
