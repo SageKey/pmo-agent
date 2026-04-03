@@ -524,11 +524,18 @@ def _render_review_tab(consultants: list[dict]):
 
     st.altair_chart(chart, use_container_width=True)
 
-    # --- Project breakdown ---
+    # --- Project breakdown with ETE mapping ---
     st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
     section_header("Hours by Project")
 
-    project_hours = defaultdict(lambda: {"project": 0.0, "support": 0.0})
+    # Load SSE → ETE mapping lookup
+    connector = _get_connector()
+    try:
+        mapping_lookup = connector.get_mapping_lookup()
+    finally:
+        connector.close()
+
+    project_hours = defaultdict(lambda: {"project": 0.0, "support": 0.0, "ete": ""})
     for e in entries:
         key = e.get("project_key") or "General Support"
         name = e.get("project_name") or "General Support"
@@ -538,12 +545,17 @@ def _render_review_tab(consultants: list[dict]):
             project_hours[label]["project"] += e["hours"]
         else:
             project_hours[label]["support"] += e["hours"]
+        # Attach ETE mapping
+        if key in mapping_lookup:
+            m = mapping_lookup[key]
+            project_hours[label]["ete"] = f"{m['ete_project_id']}: {m['ete_project_name']}"
 
     proj_rows = []
     for label, hrs in sorted(project_hours.items(), key=lambda x: -(x[1]["project"] + x[1]["support"])):
         total = hrs["project"] + hrs["support"]
         proj_rows.append({
-            "Project": label[:60],
+            "SSE Task": label[:50],
+            "ETE Project": hrs["ete"] or "Unmapped",
             "Project Hrs": hrs["project"],
             "Support Hrs": hrs["support"],
             "Total": total,
@@ -551,6 +563,14 @@ def _render_review_tab(consultants: list[dict]):
 
     if proj_rows:
         proj_df = pd.DataFrame(proj_rows)
+        n_unmapped = sum(1 for r in proj_rows if r["ETE Project"] == "Unmapped")
+        if n_unmapped > 0:
+            st.markdown(f"""<div style="font-size:0.83rem; color:#5A6A7E; margin-bottom:0.5rem;
+                padding:0.5rem 0.75rem; background:#FFF8E1; border-left:3px solid #F39C12; border-radius:4px;">
+                <strong>{n_unmapped}</strong> SSE task(s) not yet mapped to an ETE project.
+                Use the <strong>Project Mapping</strong> tab to link them.
+            </div>""", unsafe_allow_html=True)
+
         st.dataframe(proj_df, hide_index=True, use_container_width=True,
                      column_config={
                          "Project Hrs": st.column_config.NumberColumn(format="%.0f"),
@@ -1019,6 +1039,259 @@ def _render_approved_work_tab():
 
 
 # ---------------------------------------------------------------------------
+# Tab: Project Mapping (SSE → ETE)
+# ---------------------------------------------------------------------------
+
+def _render_mapping_tab(data: dict):
+    """SSE → ETE project mapping management."""
+
+    connector = _get_connector()
+    try:
+        mappings = connector.read_project_mappings()
+        unmapped = connector.get_unmapped_sse_keys()
+        projects = connector.read_portfolio()
+    finally:
+        connector.close()
+
+    # ETE project options for dropdowns
+    ete_options = [""] + [f"{p.id}: {p.name}" for p in sorted(projects, key=lambda p: p.id)]
+    ete_id_map = {f"{p.id}: {p.name}": p.id for p in projects}
+
+    # --- Summary KPIs ---
+    total_sse = len(mappings) + len(unmapped)
+    n_mapped = len(mappings)
+    n_unmapped = len(unmapped)
+    unmapped_hrs = sum(u["total_hours"] for u in unmapped)
+    coverage_pct = (n_mapped / total_sse * 100) if total_sse > 0 else 0
+
+    kc1, kc2, kc3, kc4 = st.columns(4)
+    with kc1:
+        kpi_card("SSE Tasks", total_sse, "navy")
+    with kc2:
+        color = "green" if coverage_pct >= 80 else ("yellow" if coverage_pct >= 50 else "red")
+        kpi_card("Mapped", f"{n_mapped} ({coverage_pct:.0f}%)", color)
+    with kc3:
+        color = "green" if n_unmapped == 0 else ("yellow" if n_unmapped <= 5 else "red")
+        kpi_card("Unmapped", n_unmapped, color)
+    with kc4:
+        kpi_card("Unmapped Hours", f"{unmapped_hrs:,.0f}h", "navy")
+
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # Unmapped SSE Keys — Priority Action
+    # ==================================================================
+    if unmapped:
+        section_header("Unmapped SSE Tasks")
+        st.markdown("""<div style="font-size:0.83rem; color:#5A6A7E; margin-bottom:0.75rem;">
+            These SSE Jira keys appear in timesheets but are not linked to any ETE portfolio project.
+            Map them below to enable cross-project reporting.
+        </div>""", unsafe_allow_html=True)
+
+        for u in unmapped:
+            sse_key = u["project_key"]
+            proj_name = (u.get("project_name") or "")[:50]
+            hrs = u["total_hours"]
+            entries = u["entry_count"]
+
+            with st.container():
+                mc1, mc2, mc3, mc4 = st.columns([1.5, 2.5, 3, 1])
+                with mc1:
+                    st.markdown(f"""<div style="font-size:0.85rem; font-weight:600; color:#1565C0;
+                        padding:0.4rem 0;">{sse_key}</div>""", unsafe_allow_html=True)
+                with mc2:
+                    st.markdown(f"""<div style="font-size:0.83rem; color:#5A6A7E;
+                        padding:0.4rem 0;">{proj_name}</div>""", unsafe_allow_html=True)
+                with mc3:
+                    selected_ete = st.selectbox(
+                        "ETE Project", ete_options,
+                        key=f"_map_ete_{sse_key}",
+                        label_visibility="collapsed",
+                    )
+                with mc4:
+                    if st.button("Map", key=f"_map_btn_{sse_key}",
+                                 use_container_width=True, type="primary"):
+                        ete_id = ete_id_map.get(selected_ete)
+                        if ete_id:
+                            connector = _get_connector()
+                            try:
+                                err = connector.save_project_mapping({
+                                    "sse_key": sse_key,
+                                    "ete_project_id": ete_id,
+                                    "sse_title": proj_name,
+                                    "relationship": "subtask",
+                                })
+                            finally:
+                                connector.close()
+                            if err:
+                                st.error(err)
+                            else:
+                                st.cache_data.clear()
+                                st.rerun()
+                        else:
+                            st.error("Select an ETE project first.")
+
+                st.markdown(f"""<div style="font-size:0.75rem; color:#8A9AB5;
+                    margin:-0.25rem 0 0.25rem 0;">{entries} entries | {hrs:.0f} hours</div>""",
+                    unsafe_allow_html=True)
+
+        st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # Current Mappings Table
+    # ==================================================================
+    section_header("Current Mappings")
+
+    if mappings:
+        # Group by ETE project for a board-ready view
+        ete_groups = defaultdict(list)
+        for m in mappings:
+            ete_label = f"{m['ete_project_id']}: {m.get('ete_project_name') or 'Unknown'}" if m.get("ete_project_id") else "No ETE Link"
+            ete_groups[ete_label].append(m)
+
+        html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+        <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem;">
+            <th style="text-align:left; padding:0.4rem 0.5rem;">SSE Key</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">SSE Title</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">ETE Project</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">Relationship</th>
+        </tr></thead><tbody>"""
+
+        for ete_label in sorted(ete_groups.keys()):
+            group = ete_groups[ete_label]
+            for i, m in enumerate(group):
+                sse_url = f"https://etedevops.atlassian.net/browse/{m['sse_key']}"
+                sse_link = f'<a href="{sse_url}" target="_blank" style="color:#1565C0; text-decoration:none; font-weight:500;">{m["sse_key"]}</a>'
+                title = (m.get("sse_title") or "")[:45]
+                rel = m.get("relationship") or "subtask"
+                rel_badge_color = {"subtask": "#1565C0", "support": "#27AE60", "related": "#F39C12"}.get(rel, "#5A6A7E")
+
+                # Show ETE project name only on first row of group
+                ete_cell = ete_label if i == 0 else ""
+                ete_style = "font-weight:600;" if i == 0 else ""
+                border = "border-top:2px solid #D5DCE5;" if i == 0 else "border-bottom:1px solid #F0F2F5;"
+
+                html += f"""<tr style="{border}">
+                    <td style="padding:0.4rem 0.5rem;">{sse_link}</td>
+                    <td style="padding:0.4rem 0.5rem; color:#5A6A7E;">{title}</td>
+                    <td style="padding:0.4rem 0.5rem; {ete_style}">{ete_cell}</td>
+                    <td style="padding:0.4rem 0.5rem;">
+                        <span style="font-size:0.75rem; padding:0.15rem 0.5rem; border-radius:10px;
+                            background:{rel_badge_color}15; color:{rel_badge_color}; font-weight:500;">
+                            {rel}
+                        </span>
+                    </td>
+                </tr>"""
+
+        html += "</tbody></table>"
+        st.markdown(html, unsafe_allow_html=True)
+
+    else:
+        st.info("No project mappings configured yet. Map unmapped SSE tasks above, or add mappings manually below.")
+
+    # ==================================================================
+    # Hours by ETE Project (aggregated from timesheets via mapping)
+    # ==================================================================
+    if mappings:
+        st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
+        section_header("Timesheet Hours by ETE Project")
+
+        connector = _get_connector()
+        try:
+            all_entries = connector.read_timesheets()
+            lookup = connector.get_mapping_lookup()
+        finally:
+            connector.close()
+
+        ete_hours = defaultdict(lambda: {"project": 0.0, "support": 0.0})
+        unmapped_total = {"project": 0.0, "support": 0.0}
+
+        for e in all_entries:
+            sse_key = e.get("project_key")
+            hrs = e["hours"]
+            wt = e.get("work_type", "Support")
+            bucket = "project" if wt == "Project" else "support"
+
+            if sse_key and sse_key in lookup:
+                m = lookup[sse_key]
+                label = f"{m['ete_project_id']}: {m['ete_project_name']}"
+                ete_hours[label][bucket] += hrs
+            else:
+                unmapped_total[bucket] += hrs
+
+        # Build chart data
+        chart_rows = []
+        for label, hrs in sorted(ete_hours.items(), key=lambda x: -(x[1]["project"] + x[1]["support"])):
+            chart_rows.append({"ETE Project": label[:40], "Type": "Project", "Hours": hrs["project"]})
+            chart_rows.append({"ETE Project": label[:40], "Type": "Support", "Hours": hrs["support"]})
+
+        if unmapped_total["project"] + unmapped_total["support"] > 0:
+            chart_rows.append({"ETE Project": "Unmapped / General", "Type": "Project", "Hours": unmapped_total["project"]})
+            chart_rows.append({"ETE Project": "Unmapped / General", "Type": "Support", "Hours": unmapped_total["support"]})
+
+        if chart_rows:
+            chart_df = pd.DataFrame(chart_rows)
+            chart = alt.Chart(chart_df).mark_bar(
+                cornerRadiusTopRight=4, cornerRadiusBottomRight=4
+            ).encode(
+                y=alt.Y("ETE Project:N", title=None, sort="-x",
+                        axis=alt.Axis(labelFontSize=11, labelLimit=280)),
+                x=alt.X("Hours:Q", title="Hours", stack="zero",
+                        axis=alt.Axis(labelFontSize=11)),
+                color=alt.Color("Type:N", scale=alt.Scale(
+                    domain=["Project", "Support"],
+                    range=["#1B3A5C", "#8BA4C4"]
+                ), legend=alt.Legend(orient="top", title=None)),
+                tooltip=[
+                    alt.Tooltip("ETE Project:N"),
+                    alt.Tooltip("Type:N"),
+                    alt.Tooltip("Hours:Q", format=".0f"),
+                ],
+            ).properties(height=max(len(ete_hours) * 40 + 40, 200))
+
+            st.altair_chart(chart, use_container_width=True)
+
+    # --- Manual Add Mapping ---
+    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    with st.expander("Add Mapping Manually"):
+        with st.form("add_mapping_form", clear_on_submit=True):
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                new_sse = st.text_input("SSE Key", placeholder="SSE-526", key="_map_new_sse")
+                new_title = st.text_input("SSE Title", placeholder="Task description",
+                                          key="_map_new_title")
+            with mc2:
+                new_ete = st.selectbox("ETE Project", ete_options, key="_map_new_ete")
+                new_rel = st.selectbox("Relationship",
+                                       ["subtask", "support", "related"],
+                                       key="_map_new_rel")
+            new_notes = st.text_input("Notes", key="_map_new_notes")
+
+            if st.form_submit_button("Save Mapping", use_container_width=True):
+                ete_id = ete_id_map.get(new_ete)
+                if new_sse.strip() and ete_id:
+                    connector = _get_connector()
+                    try:
+                        err = connector.save_project_mapping({
+                            "sse_key": new_sse.strip(),
+                            "ete_project_id": ete_id,
+                            "sse_title": new_title.strip() or None,
+                            "relationship": new_rel,
+                            "notes": new_notes.strip() or None,
+                        })
+                    finally:
+                        connector.close()
+                    if err:
+                        st.error(err)
+                    else:
+                        st.success(f"Mapped {new_sse.strip()} → {ete_id}")
+                        st.cache_data.clear()
+                        st.rerun()
+                else:
+                    st.error("SSE Key and ETE Project are both required.")
+
+
+# ---------------------------------------------------------------------------
 # Main Render
 # ---------------------------------------------------------------------------
 
@@ -1045,9 +1318,9 @@ def render(data: dict, utilization: dict, person_demand: list):
     finally:
         connector.close()
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "Time Entry", "Monthly Review", "Approvals",
-        "Invoices", "Approved Work",
+        "Invoices", "Approved Work", "Project Mapping",
     ])
 
     with tab1:
@@ -1064,3 +1337,6 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     with tab5:
         _render_approved_work_tab()
+
+    with tab6:
+        _render_mapping_tab(data)

@@ -60,6 +60,7 @@ def _migrate_vendor_tables():
         if count > 0:
             _unify_vendor_names(conn)
             _fix_team_classifications(conn)
+            _seed_project_mappings(conn)
             conn.close()
             return
 
@@ -119,6 +120,55 @@ def _unify_vendor_names(conn):
             changed = True
     if changed:
         conn.commit()
+
+
+def _seed_project_mappings(conn):
+    """Seed SSE → ETE project mappings for known high-confidence matches."""
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM project_mapping").fetchone()
+        if row[0] > 0:
+            return  # Already seeded
+    except Exception:
+        return  # Table doesn't exist yet
+
+    SEED_MAPPINGS = [
+        ("SSE-526", "ETE-19", "Changes to AR Aging Report", "subtask"),
+        ("SSE-339", "ETE-19", "Issues running A/R aging report", "support"),
+        ("SSE-514", "ETE-10", "Planning Fields Upload Utility", "subtask"),
+        ("SSE-545", "ETE-14", "Installed New Return Type MFDN", "subtask"),
+        ("SSE-495", "ETE-67", "Tax Issues - Credit tax on invoices", "subtask"),
+        ("SSE-566", "ETE-7", "Outsourced Unit Core Accounting Proposed Change", "subtask"),
+        ("SSE-402", "ETE-69", "Core Plan change request / issues fix", "subtask"),
+        ("SSE-559", "ETE-42", "ETE Production Oversight - Dyno Data Bug", "subtask"),
+        ("SSE-496", "ETE-32", "Cash Application SQL fix", "subtask"),
+        ("SSE-599", "ETE-59", "Bridgepay payment not applying deposit", "subtask"),
+        ("SSE-538", "ETE-58", "Including transit location in parts plan", "related"),
+        ("SSE-576", "ETE-33", "Modify EDI Profile for Customer Ship-Tos", "subtask"),
+        ("SSE-577", "ETE-33", "Allow ASN to be sent for one order", "subtask"),
+        ("SSE-600", "ETE-33", "3PL Labels Not Being Generated", "subtask"),
+        ("SSE-612", "ETE-33", "Sending ASN and Invoice", "subtask"),
+        ("SSE-544", "ETE-124", "Warehouse to Warehouse Bulk Transfer", "related"),
+        ("SSE-605", "ETE-124", "Modify WMERP Truckload Transfer serial numbers", "related"),
+        ("SSE-594", "ETE-69", "Component Pick Plan - Mfg Items", "subtask"),
+        ("SSE-595", "ETE-69", "SL Generate Parts Plan - Formula Change", "subtask"),
+        ("SSE-607", "ETE-69", "Parts Plan Formula Change Alteration", "subtask"),
+        ("SSE-516", "ETE-16", "BGTask Error sending Credit Card Receipts", "support"),
+        ("SSE-534", "ETE-33", "Create Syteline Field for new location", "related"),
+        ("SSE-606", "ETE-7", "Rules when PO Lines added for core", "subtask"),
+        ("SSE-553", "ETE-60", "Change GL Acct for WEX Payments", "related"),
+        ("SSE-611", "ETE-76", "Fuel Surcharge Notification", "related"),
+    ]
+    for sse_key, ete_id, title, rel in SEED_MAPPINGS:
+        try:
+            conn.execute(
+                """INSERT OR IGNORE INTO project_mapping
+                   (sse_key, ete_project_id, sse_title, relationship)
+                   VALUES (?, ?, ?, ?)""",
+                (sse_key, ete_id, title, rel),
+            )
+        except Exception:
+            pass
+    conn.commit()
 
 
 def _fix_team_classifications(conn):

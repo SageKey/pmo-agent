@@ -1001,7 +1001,44 @@ INSERT INTO sqlite_sequence VALUES('vendor_consultants',9);
 INSERT INTO sqlite_sequence VALUES('vendor_timesheets',274);
 INSERT INTO sqlite_sequence VALUES('approved_work',31);
 INSERT INTO sqlite_sequence VALUES('vendor_invoices',1);
+CREATE TABLE IF NOT EXISTS project_mapping (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sse_key         TEXT NOT NULL UNIQUE,
+    ete_project_id  TEXT,
+    sse_title       TEXT,
+    relationship    TEXT DEFAULT 'subtask',
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-339', 'ETE-19', 'Issues running A/R aging report', 'support');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-402', 'ETE-69', 'Core Plan change request / issues fix', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-495', 'ETE-67', 'Tax Issues - Credit tax on invoices', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-496', 'ETE-32', 'Cash Application SQL fix', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-514', 'ETE-10', 'Planning Fields Upload Utility', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-516', 'ETE-16', 'BGTask Error sending Credit Card Receipts', 'support');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-526', 'ETE-19', 'Changes to AR Aging Report', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-534', 'ETE-33', 'Create Syteline Field for new location', 'related');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-538', 'ETE-58', 'Including transit location in parts plan', 'related');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-544', 'ETE-124', 'Warehouse to Warehouse Bulk Transfer', 'related');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-545', 'ETE-14', 'Installed New Return Type MFDN', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-553', 'ETE-60', 'Change GL Acct for WEX Payments', 'related');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-559', 'ETE-42', 'ETE Production Oversight - Dyno Data Bug', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-566', 'ETE-7', 'Outsourced Unit Core Accounting Proposed Change', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-576', 'ETE-33', 'Modify EDI Profile for Customer Ship-Tos', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-577', 'ETE-33', 'Allow ASN to be sent for one order', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-594', 'ETE-69', 'Component Pick Plan - Mfg Items', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-595', 'ETE-69', 'SL Generate Parts Plan - Formula Change', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-599', 'ETE-59', 'Bridgepay payment not applying deposit', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-600', 'ETE-33', '3PL Labels Not Being Generated', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-605', 'ETE-124', 'Modify WMERP Truckload Transfer serial numbers', 'related');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-606', 'ETE-7', 'Rules when PO Lines added for core', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-607', 'ETE-69', 'Parts Plan Formula Change Alteration', 'subtask');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-611', 'ETE-76', 'Fuel Surcharge Notification', 'related');
+INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-612', 'ETE-33', 'Sending ASN and Invoice', 'subtask');
 CREATE INDEX idx_vt_consultant ON vendor_timesheets(consultant_id);
 CREATE INDEX idx_vt_date ON vendor_timesheets(entry_date);
 CREATE INDEX idx_vt_project ON vendor_timesheets(project_key);
+CREATE INDEX IF NOT EXISTS idx_pm_sse ON project_mapping(sse_key);
+CREATE INDEX IF NOT EXISTS idx_pm_ete ON project_mapping(ete_project_id);
 COMMIT;

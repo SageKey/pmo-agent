@@ -165,6 +165,22 @@ CREATE TABLE IF NOT EXISTS vendor_invoices (
     paid            INTEGER NOT NULL DEFAULT 0,
     notes           TEXT
 );
+
+-- SSE → ETE Project Mapping -------------------------------------------
+
+CREATE TABLE IF NOT EXISTS project_mapping (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sse_key         TEXT NOT NULL UNIQUE,           -- SSE-xxx Jira key
+    ete_project_id  TEXT,                           -- ETE-xx portfolio project ID
+    sse_title       TEXT,                           -- Human-readable SSE title
+    relationship    TEXT DEFAULT 'subtask',         -- subtask, support, related
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pm_sse ON project_mapping(sse_key);
+CREATE INDEX IF NOT EXISTS idx_pm_ete ON project_mapping(ete_project_id);
 """
 
 
@@ -824,3 +840,95 @@ class SQLiteConnector:
             return None
         except Exception as e:
             return f"Error saving invoice: {e}"
+
+    # ------------------------------------------------------------------
+    # SSE → ETE Project Mapping
+    # ------------------------------------------------------------------
+    def read_project_mappings(self) -> list[dict]:
+        """Read all SSE → ETE project mappings."""
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT pm.*, p.name as ete_project_name
+               FROM project_mapping pm
+               LEFT JOIN projects p ON p.id = pm.ete_project_id
+               ORDER BY pm.sse_key"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_mapping_lookup(self) -> dict:
+        """Return dict: sse_key → {ete_project_id, ete_project_name, relationship}."""
+        mappings = self.read_project_mappings()
+        return {
+            m["sse_key"]: {
+                "ete_project_id": m["ete_project_id"],
+                "ete_project_name": m.get("ete_project_name") or "",
+                "relationship": m.get("relationship") or "subtask",
+                "sse_title": m.get("sse_title") or "",
+            }
+            for m in mappings
+        }
+
+    def save_project_mapping(self, fields: dict) -> Optional[str]:
+        """Insert or update a project mapping."""
+        try:
+            conn = self._open()
+            sse_key = fields.get("sse_key", "").strip()
+            if not sse_key:
+                return "SSE key is required."
+
+            if fields.get("id"):
+                conn.execute(
+                    """UPDATE project_mapping SET
+                       sse_key=?, ete_project_id=?, sse_title=?,
+                       relationship=?, notes=?, updated_at=datetime('now')
+                       WHERE id=?""",
+                    (sse_key, fields.get("ete_project_id"),
+                     fields.get("sse_title"), fields.get("relationship", "subtask"),
+                     fields.get("notes"), fields["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO project_mapping
+                       (sse_key, ete_project_id, sse_title, relationship, notes)
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(sse_key) DO UPDATE SET
+                       ete_project_id=?, sse_title=?, relationship=?, notes=?,
+                       updated_at=datetime('now')""",
+                    (sse_key, fields.get("ete_project_id"),
+                     fields.get("sse_title"), fields.get("relationship", "subtask"),
+                     fields.get("notes"),
+                     fields.get("ete_project_id"),
+                     fields.get("sse_title"), fields.get("relationship", "subtask"),
+                     fields.get("notes")),
+                )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error saving mapping: {e}"
+
+    def delete_project_mapping(self, mapping_id: int) -> Optional[str]:
+        """Delete a project mapping."""
+        try:
+            conn = self._open()
+            conn.execute("DELETE FROM project_mapping WHERE id = ?", (mapping_id,))
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error deleting mapping: {e}"
+
+    def get_unmapped_sse_keys(self) -> list[dict]:
+        """Return SSE keys from timesheets that have no mapping yet."""
+        conn = self._open()
+        rows = conn.execute("""
+            SELECT DISTINCT vt.project_key,
+                   MAX(vt.project_name) as project_name,
+                   COUNT(*) as entry_count,
+                   SUM(vt.hours) as total_hours
+            FROM vendor_timesheets vt
+            WHERE vt.project_key IS NOT NULL
+              AND vt.project_key != ''
+              AND vt.project_key NOT IN (SELECT sse_key FROM project_mapping)
+            GROUP BY vt.project_key
+            ORDER BY total_hours DESC
+        """).fetchall()
+        return [dict(r) for r in rows]
