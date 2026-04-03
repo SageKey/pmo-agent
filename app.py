@@ -135,6 +135,16 @@ with st.sidebar:
             st.session_state.chat_history = []
             st.rerun()
 
+    # User display name for comments/collaboration
+    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+    if "user_display_name" not in st.session_state:
+        st.session_state["user_display_name"] = "Brett Anderson"
+    st.text_input("Display Name", value=st.session_state["user_display_name"],
+                  key="_user_name_input",
+                  on_change=lambda: st.session_state.update(
+                      {"user_display_name": st.session_state["_user_name_input"]}
+                  ))
+
     # Jira Sync — auto-sync every 15 min, manual button available
     JIRA_SYNC_COOLDOWN = 15 * 60  # seconds
 

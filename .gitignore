@@ -5,4 +5,5 @@ __pycache__/
 *.db-shm
 *.db-wal
 .claude/
+attachments/
 ETE PMO Resource Planner.xlsx

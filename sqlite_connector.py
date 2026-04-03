@@ -17,7 +17,7 @@ from models import (
 DEFAULT_DB = "pmo_data.db"
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
@@ -181,6 +181,44 @@ CREATE TABLE IF NOT EXISTS project_mapping (
 
 CREATE INDEX IF NOT EXISTS idx_pm_sse ON project_mapping(sse_key);
 CREATE INDEX IF NOT EXISTS idx_pm_ete ON project_mapping(ete_project_id);
+
+-- Project Activity & Collaboration ------------------------------------
+
+CREATE TABLE IF NOT EXISTS project_comments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    author          TEXT NOT NULL,
+    body            TEXT NOT NULL,
+    comment_type    TEXT NOT NULL DEFAULT 'comment',  -- 'comment', 'status_update', 'system'
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pc_project ON project_comments(project_id);
+
+CREATE TABLE IF NOT EXISTS project_attachments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    filename        TEXT NOT NULL,
+    file_size       INTEGER DEFAULT 0,
+    mime_type       TEXT,
+    stored_path     TEXT NOT NULL,
+    uploaded_by     TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pa_project ON project_attachments(project_id);
+
+CREATE TABLE IF NOT EXISTS project_audit_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    action          TEXT NOT NULL,
+    actor           TEXT NOT NULL,
+    field_changed   TEXT,
+    old_value       TEXT,
+    new_value       TEXT,
+    details         TEXT,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pal_project ON project_audit_log(project_id);
 """
 
 
@@ -995,4 +1033,117 @@ class SQLiteConnector:
             GROUP BY vt.project_key
             ORDER BY total_hours DESC
         """).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Project Comments & Activity
+    # ------------------------------------------------------------------
+    def add_comment(self, project_id: str, author: str, body: str,
+                    comment_type: str = "comment") -> int:
+        """Add a comment to a project. Returns the comment ID."""
+        conn = self._open()
+        cur = conn.execute(
+            """INSERT INTO project_comments (project_id, author, body, comment_type)
+               VALUES (?, ?, ?, ?)""",
+            (project_id, author, body, comment_type),
+        )
+        comment_id = cur.lastrowid
+        self._log_audit(project_id, "comment_added", author,
+                        details=body[:100])
+        conn.commit()
+        return comment_id
+
+    def get_comments(self, project_id: str, limit: int = 50) -> list[dict]:
+        """Get comments for a project, newest first."""
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT * FROM project_comments
+               WHERE project_id = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (project_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_comment(self, comment_id: int) -> Optional[str]:
+        try:
+            conn = self._open()
+            conn.execute("DELETE FROM project_comments WHERE id = ?", (comment_id,))
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error deleting comment: {e}"
+
+    def add_status_update(self, project_id: str, author: str,
+                          field_changed: str, old_value: str,
+                          new_value: str, reason: str = None) -> int:
+        """Record a structured status update as a system comment."""
+        reason_text = f" — {reason}" if reason else ""
+        body = f"Changed **{field_changed}** from {old_value} to {new_value}{reason_text}"
+        comment_id = self.add_comment(project_id, author, body, "status_update")
+        self._log_audit(project_id, "status_change", author,
+                        field_changed=field_changed,
+                        old_value=old_value, new_value=new_value,
+                        details=reason)
+        return comment_id
+
+    # ------------------------------------------------------------------
+    # Project Attachments
+    # ------------------------------------------------------------------
+    def add_attachment(self, project_id: str, filename: str, file_size: int,
+                       mime_type: str, stored_path: str,
+                       uploaded_by: str) -> int:
+        conn = self._open()
+        cur = conn.execute(
+            """INSERT INTO project_attachments
+               (project_id, filename, file_size, mime_type, stored_path, uploaded_by)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (project_id, filename, file_size, mime_type, stored_path, uploaded_by),
+        )
+        att_id = cur.lastrowid
+        self._log_audit(project_id, "file_uploaded", uploaded_by,
+                        details=filename)
+        conn.commit()
+        return att_id
+
+    def get_attachments(self, project_id: str) -> list[dict]:
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT * FROM project_attachments
+               WHERE project_id = ? ORDER BY created_at DESC""",
+            (project_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_attachment(self, attachment_id: int) -> Optional[str]:
+        try:
+            conn = self._open()
+            conn.execute("DELETE FROM project_attachments WHERE id = ?",
+                         (attachment_id,))
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error deleting attachment: {e}"
+
+    # ------------------------------------------------------------------
+    # Audit Log
+    # ------------------------------------------------------------------
+    def _log_audit(self, project_id: str, action: str, actor: str,
+                   field_changed: str = None, old_value: str = None,
+                   new_value: str = None, details: str = None):
+        """Internal: record an audit log entry."""
+        conn = self._open()
+        conn.execute(
+            """INSERT INTO project_audit_log
+               (project_id, action, actor, field_changed, old_value, new_value, details)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (project_id, action, actor, field_changed, old_value, new_value, details),
+        )
+
+    def get_audit_log(self, project_id: str, limit: int = 100) -> list[dict]:
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT * FROM project_audit_log
+               WHERE project_id = ? ORDER BY created_at DESC LIMIT ?""",
+            (project_id, limit),
+        ).fetchall()
         return [dict(r) for r in rows]

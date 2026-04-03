@@ -740,6 +740,251 @@ def _render_view_mode(project, data, utilization, person_demand):
                     use_container_width=True,
                 )
 
+def _render_project_panel(project_id: str, project_name: str):
+    """Render the right-hand collaboration panel for a project."""
+    import uuid
+    from pathlib import Path
+
+    ATTACH_DIR = Path(__file__).parent / "attachments"
+
+    # Panel header
+    st.markdown(f"""<div style="border-bottom:2px solid #E8ECF1; padding-bottom:0.5rem; margin-bottom:0.75rem;">
+        <div style="font-size:1.1rem; font-weight:700; color:{NAVY};">{project_id}</div>
+        <div style="font-size:0.83rem; color:#5A6A7E;">{project_name}</div>
+    </div>""", unsafe_allow_html=True)
+
+    # Close button
+    if st.button("Close Panel", key="_panel_close", use_container_width=True):
+        st.session_state.pop("panel_project_id", None)
+        st.rerun()
+
+    ptab1, ptab2, ptab3, ptab4 = st.tabs(["Activity", "Updates", "Files", "History"])
+
+    connector = SQLiteConnector(DB_PATH)
+    try:
+        comments = connector.get_comments(project_id)
+        attachments = connector.get_attachments(project_id)
+        audit_log = connector.get_audit_log(project_id)
+    finally:
+        connector.close()
+
+    # Get current user
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+
+    # === Activity Tab ===
+    with ptab1:
+        # Comment input
+        with st.form(f"comment_form_{project_id}", clear_on_submit=True):
+            comment_text = st.text_area("Add a comment", height=80,
+                                        placeholder="Type an update, question, or note...",
+                                        key=f"_panel_comment_{project_id}")
+            if st.form_submit_button("Post", use_container_width=True, type="primary"):
+                if comment_text and comment_text.strip():
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.add_comment(project_id, user, comment_text.strip())
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        # Comment feed
+        if comments:
+            for c in comments:
+                author = c["author"]
+                initial = author[0].upper() if author else "?"
+                body = c["body"]
+                ctype = c.get("comment_type", "comment")
+                created = c["created_at"][:16].replace("T", " ") if c.get("created_at") else ""
+
+                # Time display
+                try:
+                    dt = datetime.fromisoformat(c["created_at"])
+                    now = datetime.now()
+                    delta = now - dt
+                    if delta.days > 0:
+                        time_str = f"{delta.days}d ago"
+                    elif delta.seconds > 3600:
+                        time_str = f"{delta.seconds // 3600}h ago"
+                    elif delta.seconds > 60:
+                        time_str = f"{delta.seconds // 60}m ago"
+                    else:
+                        time_str = "just now"
+                except Exception:
+                    time_str = created
+
+                if ctype == "status_update":
+                    bg = "#FFF8E1"
+                    border_color = "#F39C12"
+                    icon = "&#9679;"
+                elif ctype == "system":
+                    bg = "#F0F4F8"
+                    border_color = "#8BA4C4"
+                    icon = "&#9881;"
+                else:
+                    bg = "#FFFFFF"
+                    border_color = "#E8ECF1"
+                    icon = ""
+
+                st.markdown(f"""<div style="background:{bg}; border:1px solid {border_color};
+                    border-radius:8px; padding:0.6rem 0.75rem; margin-bottom:0.5rem;">
+                    <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+                        <div style="width:28px; height:28px; border-radius:50%; background:{NAVY};
+                            color:white; display:flex; align-items:center; justify-content:center;
+                            font-size:0.75rem; font-weight:700;">{initial}</div>
+                        <span style="font-size:0.83rem; font-weight:600;">{author}</span>
+                        <span style="font-size:0.73rem; color:#8BA4C4; margin-left:auto;">{time_str}</span>
+                    </div>
+                    <div style="font-size:0.83rem; color:#333; line-height:1.4; padding-left:2.2rem;">
+                        {body}
+                    </div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.caption("No comments yet. Be the first to post an update.")
+
+    # === Status Updates Tab ===
+    with ptab2:
+        st.markdown("""<div style="font-size:0.83rem; color:#5A6A7E; margin-bottom:0.75rem;">
+            Post a structured status change with context for the team.
+        </div>""", unsafe_allow_html=True)
+
+        with st.form(f"status_form_{project_id}", clear_on_submit=True):
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                field = st.selectbox("Field", ["Health", "% Complete", "Priority"],
+                                     key=f"_panel_field_{project_id}")
+            with sc2:
+                new_val = st.text_input("New Value",
+                                        placeholder="e.g., At Risk, 50%, High",
+                                        key=f"_panel_newval_{project_id}")
+            reason = st.text_area("Reason / Context", height=60,
+                                  placeholder="Why is this changing?",
+                                  key=f"_panel_reason_{project_id}")
+
+            if st.form_submit_button("Post Status Update", use_container_width=True):
+                if new_val and new_val.strip():
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.add_status_update(
+                            project_id, user, field,
+                            "previous", new_val.strip(), reason.strip() or None,
+                        )
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        # Recent status updates
+        status_comments = [c for c in comments if c.get("comment_type") == "status_update"]
+        if status_comments:
+            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+            section_header("Recent Status Changes")
+            for c in status_comments[:10]:
+                created = c["created_at"][:10] if c.get("created_at") else ""
+                st.markdown(f"""<div style="font-size:0.83rem; padding:0.4rem 0;
+                    border-bottom:1px solid #F0F2F5;">
+                    <strong>{c['author']}</strong> · {created}<br/>
+                    <span style="color:#5A6A7E;">{c['body']}</span>
+                </div>""", unsafe_allow_html=True)
+
+    # === Files Tab ===
+    with ptab3:
+        uploaded = st.file_uploader("Upload a file", key=f"_panel_upload_{project_id}",
+                                     type=["pdf", "xlsx", "xls", "csv", "docx", "doc",
+                                           "png", "jpg", "jpeg", "txt", "pptx"])
+        if uploaded is not None:
+            # Save file
+            proj_dir = ATTACH_DIR / project_id
+            proj_dir.mkdir(parents=True, exist_ok=True)
+            safe_name = f"{uuid.uuid4().hex[:8]}_{uploaded.name}"
+            file_path = proj_dir / safe_name
+            file_path.write_bytes(uploaded.getvalue())
+
+            connector = SQLiteConnector(DB_PATH)
+            try:
+                connector.add_attachment(
+                    project_id, uploaded.name, uploaded.size,
+                    uploaded.type or "application/octet-stream",
+                    str(file_path.relative_to(Path(__file__).parent)),
+                    user,
+                )
+            finally:
+                connector.close()
+            st.success(f"Uploaded {uploaded.name}")
+            st.cache_data.clear()
+            st.rerun()
+
+        if attachments:
+            for att in attachments:
+                fname = att["filename"]
+                fsize = att["file_size"]
+                size_str = f"{fsize / 1024:.0f} KB" if fsize < 1048576 else f"{fsize / 1048576:.1f} MB"
+                uploaded_by = att["uploaded_by"]
+                created = att["created_at"][:10] if att.get("created_at") else ""
+                stored = Path(__file__).parent / att["stored_path"]
+
+                fc1, fc2 = st.columns([4, 1])
+                with fc1:
+                    ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+                    icon = {"pdf": "📄", "xlsx": "📊", "xls": "📊", "csv": "📊",
+                            "docx": "📝", "doc": "📝", "png": "🖼️", "jpg": "🖼️",
+                            "jpeg": "🖼️", "pptx": "📽️", "txt": "📄"}.get(ext, "📎")
+                    st.markdown(f"""<div style="font-size:0.85rem; padding:0.3rem 0;">
+                        {icon} <strong>{fname}</strong>
+                        <span style="color:#8BA4C4; font-size:0.75rem;">
+                            {size_str} · {uploaded_by} · {created}
+                        </span>
+                    </div>""", unsafe_allow_html=True)
+                with fc2:
+                    if stored.exists():
+                        st.download_button("Download", stored.read_bytes(),
+                                           file_name=fname,
+                                           key=f"_dl_{att['id']}",
+                                           use_container_width=True)
+        else:
+            st.caption("No files attached yet.")
+
+    # === History Tab ===
+    with ptab4:
+        if audit_log:
+            for entry in audit_log:
+                action = entry["action"]
+                actor = entry["actor"]
+                created = entry["created_at"][:16].replace("T", " ") if entry.get("created_at") else ""
+                field = entry.get("field_changed") or ""
+                old_v = entry.get("old_value") or ""
+                new_v = entry.get("new_value") or ""
+                details = entry.get("details") or ""
+
+                action_icons = {
+                    "comment_added": "💬",
+                    "status_change": "🔄",
+                    "file_uploaded": "📎",
+                    "updated": "✏️",
+                    "created": "🆕",
+                }
+                icon = action_icons.get(action, "•")
+
+                desc = action.replace("_", " ").title()
+                if field:
+                    desc += f": {field}"
+                if old_v and new_v:
+                    desc += f" ({old_v} → {new_v})"
+                if details and action not in ("comment_added",):
+                    desc += f" — {details[:60]}"
+
+                st.markdown(f"""<div style="font-size:0.8rem; padding:0.35rem 0;
+                    border-bottom:1px solid #F0F2F5; display:flex; gap:0.5rem;">
+                    <span>{icon}</span>
+                    <div>
+                        <strong>{actor}</strong> · {desc}
+                        <div style="color:#8BA4C4; font-size:0.73rem;">{created}</div>
+                    </div>
+                </div>""", unsafe_allow_html=True)
+        else:
+            st.caption("No activity recorded yet.")
+
+
 def render_project_detail(project, data: dict, utilization: dict, person_demand: list):
     """Render the full project detail — header, view/edit, analysis sections.
 
@@ -747,21 +992,49 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
     """
     st.session_state["selected_project_id"] = project.id
 
-    # --- Header ---
-    st.markdown(f"""
-    <div style="margin-bottom: 0.5rem;">
-        <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
-            {project.id}: {project.name}
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
+    # Check if panel should be open
+    panel_open = st.session_state.get("panel_project_id") == project.id
 
-    # --- Edit vs View Mode ---
-    if st.session_state.get("edit_mode", False):
-        _render_edit_form(project, data)
-        return
+    # --- Header with panel toggle ---
+    hdr_col, btn_col = st.columns([6, 1])
+    with hdr_col:
+        st.markdown(f"""
+        <div style="margin-bottom: 0.5rem;">
+            <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
+                {project.id}: {project.name}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+    with btn_col:
+        panel_label = "Close Panel" if panel_open else "💬 Activity"
+        if st.button(panel_label, key="_toggle_panel", use_container_width=True):
+            if panel_open:
+                st.session_state.pop("panel_project_id", None)
+            else:
+                st.session_state["panel_project_id"] = project.id
+            st.rerun()
 
-    _render_view_mode(project, data, utilization, person_demand)
+    # --- Layout: main content + optional panel ---
+    if panel_open:
+        main_col, panel_col = st.columns([65, 35])
+    else:
+        main_col = st.container()
+        panel_col = None
+
+    with main_col:
+        # --- Edit vs View Mode ---
+        if st.session_state.get("edit_mode", False):
+            _render_edit_form(project, data)
+            if panel_col:
+                with panel_col:
+                    _render_project_panel(project.id, project.name)
+            return
+
+        _render_view_mode(project, data, utilization, person_demand)
+
+    if panel_col:
+        with panel_col:
+            _render_project_panel(project.id, project.name)
 
     # --- Demand Analysis ---
     mtime = get_file_mtime()
