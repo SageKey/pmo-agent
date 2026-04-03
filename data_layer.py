@@ -5,6 +5,7 @@ keyed on the database file modification time.
 """
 
 import os
+import sqlite3
 from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
@@ -21,6 +22,21 @@ DB_PATH = os.environ.get(
     "PMO_DB_PATH",
     str(Path(__file__).parent / DEFAULT_DB),
 )
+
+SEED_SQL = Path(__file__).parent / "seed_data.sql"
+
+
+def _seed_database_if_missing():
+    """Create the database from seed_data.sql if it doesn't exist."""
+    if os.path.exists(DB_PATH):
+        return
+    if not SEED_SQL.exists():
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.executescript(SEED_SQL.read_text())
+    finally:
+        conn.close()
 
 
 def _clean_health(health: str) -> str:
@@ -204,6 +220,7 @@ def load_weekly_heatmap(_mtime: float, weeks: int = 26) -> pd.DataFrame:
 def safe_load():
     """Top-level safe loader.
     Returns (all_data, utilization, person_demand) or shows error."""
+    _seed_database_if_missing()
     mtime = get_file_mtime()
 
     if mtime == 0.0:
