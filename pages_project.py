@@ -668,52 +668,47 @@ def _render_view_mode(project, data, utilization, person_demand):
     jira_url = f"https://etedevops.atlassian.net/browse/{project.id}"
 
     # --- Project Summary Card ---
-    st.markdown(f"""
-    <div style="background:#FFFFFF; border-radius:12px; padding:1.25rem 1.5rem;
-                box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">
-        <!-- Badges row -->
-        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem; margin-bottom:1rem;">
-            <span style="{priority_style} display:inline-block; padding:0.3rem 0.75rem;
-                         border-radius:20px; font-size:0.8rem; font-weight:600;">
-                {project.priority or 'N/A'}</span>
-            <span style="{health_style} display:inline-block; padding:0.3rem 0.75rem;
-                         border-radius:20px; font-size:0.8rem; font-weight:600;">
-                {health_icon} {h_label}</span>
-            <a href="{jira_url}" target="_blank"
-               style="color:#1565C0; text-decoration:none; font-size:0.8rem;
-                      font-weight:500; margin-left:auto;">
-                🔗 {project.id} in Jira</a>
-        </div>
-
-        <!-- Progress -->
-        <div style="margin-bottom:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:baseline;
-                        margin-bottom:0.35rem;">
-                <span style="font-size:0.75rem; font-weight:600; color:#6C757D;
-                             text-transform:uppercase; letter-spacing:0.05em;">Progress</span>
-                <span style="font-size:1.1rem; font-weight:700; color:{NAVY};">{pct_display}</span>
-            </div>
-            <div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">
-                <div style="width:{pct*100:.0f}%; height:100%; background:{bar_color};
-                            border-radius:4px; transition:width 0.3s;"></div>
-            </div>
-        </div>
-
-        <!-- Metrics row -->
-        <div style="display:flex; flex-wrap:wrap; gap:1.5rem;">
-            <div>
-                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
-                            text-transform:uppercase; letter-spacing:0.05em;">Est Hours</div>
-                <div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{hours_str}</div>
-            </div>
-            <div>
-                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
-                            text-transform:uppercase; letter-spacing:0.05em;">Duration</div>
-                <div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{duration_str}</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Badges row
+    st.markdown(
+        f'<div style="background:#FFFFFF; border-radius:12px; padding:1.25rem 1.5rem;'
+        f' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
+        f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem; margin-bottom:1rem;">'
+        f'<span style="{priority_style} display:inline-block; padding:0.3rem 0.75rem;'
+        f' border-radius:20px; font-size:0.8rem; font-weight:600;">'
+        f'{project.priority or "N/A"}</span>'
+        f'<span style="{health_style} display:inline-block; padding:0.3rem 0.75rem;'
+        f' border-radius:20px; font-size:0.8rem; font-weight:600;">'
+        f'{health_icon} {h_label}</span>'
+        f'<a href="{jira_url}" target="_blank"'
+        f' style="color:#1565C0; text-decoration:none; font-size:0.8rem;'
+        f' font-weight:500; margin-left:auto;">'
+        f'🔗 {project.id} in Jira</a>'
+        f'</div>'
+        f'<div style="margin-bottom:1rem;">'
+        f'<div style="display:flex; justify-content:space-between; align-items:baseline;'
+        f' margin-bottom:0.35rem;">'
+        f'<span style="font-size:0.75rem; font-weight:600; color:#6C757D;'
+        f' text-transform:uppercase; letter-spacing:0.05em;">Progress</span>'
+        f'<span style="font-size:1.1rem; font-weight:700; color:{NAVY};">{pct_display}</span>'
+        f'</div>'
+        f'<div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">'
+        f'<div style="width:{pct*100:.0f}%; height:100%; background:{bar_color};'
+        f' border-radius:4px; transition:width 0.3s;"></div>'
+        f'</div></div>'
+        f'<div style="display:flex; flex-wrap:wrap; gap:1.5rem;">'
+        f'<div>'
+        f'<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
+        f' text-transform:uppercase; letter-spacing:0.05em;">Est Hours</div>'
+        f'<div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{hours_str}</div>'
+        f'</div>'
+        f'<div>'
+        f'<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
+        f' text-transform:uppercase; letter-spacing:0.05em;">Duration</div>'
+        f'<div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{duration_str}</div>'
+        f'</div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
 
     # --- Financial KPIs (finance-gated) ---
     if is_finance_user() and (project.budget > 0 or project.actual_cost > 0 or project.forecast_cost > 0):
@@ -721,38 +716,25 @@ def _render_view_mode(project, data, utilization, person_demand):
         var_color = GREEN if variance and variance >= 0 else RED
         var_str = f"${variance:,.0f}" if variance is not None else "N/A"
 
-        st.markdown(f"""
-        <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
-            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
-                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
-                        border-left:4px solid {NAVY};">
-                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
-                            text-transform:uppercase; letter-spacing:0.05em;">Budget</div>
-                <div style="font-size:1.5rem; font-weight:700; color:{NAVY};">${project.budget:,.0f}</div>
-            </div>
-            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
-                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
-                        border-left:4px solid {NAVY};">
-                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
-                            text-transform:uppercase; letter-spacing:0.05em;">Actual Cost</div>
-                <div style="font-size:1.5rem; font-weight:700; color:{NAVY};">${project.actual_cost:,.0f}</div>
-            </div>
-            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
-                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
-                        border-left:4px solid {NAVY};">
-                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
-                            text-transform:uppercase; letter-spacing:0.05em;">Forecast</div>
-                <div style="font-size:1.5rem; font-weight:700; color:{NAVY};">${project.forecast_cost:,.0f}</div>
-            </div>
-            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
-                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
-                        border-left:4px solid {var_color};">
-                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
-                            text-transform:uppercase; letter-spacing:0.05em;">Variance</div>
-                <div style="font-size:1.5rem; font-weight:700; color:{var_color};">{var_str}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        budget_str = f"${project.budget:,.0f}"
+        actual_str = f"${project.actual_cost:,.0f}"
+        forecast_str = f"${project.forecast_cost:,.0f}"
+        _fin_card = (
+            '<div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;'
+            ' padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); border-left:4px solid {border};">'
+            '<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
+            ' text-transform:uppercase; letter-spacing:0.05em;">{label}</div>'
+            '<div style="font-size:1.5rem; font-weight:700; color:{color};">{value}</div></div>'
+        )
+        st.markdown(
+            '<div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">'
+            + _fin_card.format(border=NAVY, label="Budget", color=NAVY, value=budget_str)
+            + _fin_card.format(border=NAVY, label="Actual Cost", color=NAVY, value=actual_str)
+            + _fin_card.format(border=NAVY, label="Forecast", color=NAVY, value=forecast_str)
+            + _fin_card.format(border=var_color, label="Variance", color=var_color, value=var_str)
+            + '</div>',
+            unsafe_allow_html=True,
+        )
 
     # --- Overview + Assignments ---
     left, right = st.columns(2)
