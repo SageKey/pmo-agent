@@ -7,7 +7,7 @@ import streamlit as st
 
 from components import (
     kpi_card, section_header, utilization_bar_chart, health_donut,
-    util_status, health_label, clean_health, NAVY,
+    util_status, health_label, clean_health, is_finance_user, NAVY,
 )
 
 
@@ -172,3 +172,23 @@ def render(data: dict, utilization: dict, person_demand: list):
                     "PM": p.pm or "",
                 })
             st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    # --- Portfolio Financials (finance-gated) ---
+    if is_finance_user():
+        total_budget = sum(p.budget for p in active)
+        total_actual = sum(p.actual_cost for p in active)
+        total_forecast = sum(p.forecast_cost for p in active)
+
+        if total_budget > 0 or total_actual > 0:
+            section_header("Portfolio Financials")
+            fc1, fc2, fc3, fc4 = st.columns(4)
+            with fc1:
+                kpi_card("Total Budget", f"${total_budget:,.0f}", "navy")
+            with fc2:
+                kpi_card("Actual Spend", f"${total_actual:,.0f}", "navy")
+            with fc3:
+                kpi_card("Forecast", f"${total_forecast:,.0f}", "navy")
+            with fc4:
+                variance = total_budget - total_forecast
+                color = "green" if variance >= 0 else "red"
+                kpi_card("Variance", f"${variance:,.0f}", color)

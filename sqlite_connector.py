@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS projects (
     tshirt_size     TEXT,
     est_hours       REAL DEFAULT 0.0,
     notes           TEXT,
+    budget          REAL DEFAULT 0.0,
+    actual_cost     REAL DEFAULT 0.0,
+    forecast_cost   REAL DEFAULT 0.0,
     sort_order      INTEGER,
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now'))
@@ -140,6 +143,12 @@ class SQLiteConnector:
             "INSERT OR IGNORE INTO schema_info (key, value) VALUES (?, ?)",
             ("version", str(SCHEMA_VERSION)),
         )
+        # Add financial columns if missing (migration for existing databases)
+        for col, col_type in [("budget", "REAL DEFAULT 0.0"), ("actual_cost", "REAL DEFAULT 0.0"), ("forecast_cost", "REAL DEFAULT 0.0")]:
+            try:
+                self._conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass  # Column already exists
         self._conn.commit()
 
     def close(self):
@@ -194,6 +203,9 @@ class SQLiteConnector:
                 tshirt_size=row["tshirt_size"],
                 est_hours=row["est_hours"] or 0.0,
                 est_cost=_compute_est_cost(row["est_hours"] or 0.0),
+                budget=row["budget"] or 0.0,
+                actual_cost=row["actual_cost"] or 0.0,
+                forecast_cost=row["forecast_cost"] or 0.0,
                 role_allocations=role_allocs,
                 notes=row["notes"],
                 sort_order=row["sort_order"],

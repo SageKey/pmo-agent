@@ -10,6 +10,7 @@ import streamlit as st
 
 from components import (
     kpi_card, section_header, clean_health, health_label, util_status,
+    is_finance_user,
     ROLE_DISPLAY, ROLE_ORDER, NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
     HEALTH_COLOR_MAP,
 )
@@ -211,6 +212,27 @@ def _render_new_project_form(data):
                                                            value=0, step=5,
                                                            key=f"new_alloc_{role_key}")
 
+        # Financials (finance-gated)
+        if is_finance_user():
+            section_header("Financials")
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                proj_budget = st.number_input("Budget ($)", min_value=0.0, max_value=50000000.0,
+                                               value=0.0, step=1000.0, format="%.2f",
+                                               key="new_proj_budget")
+            with fc2:
+                proj_actual = st.number_input("Actual Cost ($)", min_value=0.0, max_value=50000000.0,
+                                               value=0.0, step=1000.0, format="%.2f",
+                                               key="new_proj_actual")
+            with fc3:
+                proj_forecast = st.number_input("Forecast Cost ($)", min_value=0.0, max_value=50000000.0,
+                                                 value=0.0, step=1000.0, format="%.2f",
+                                                 key="new_proj_forecast")
+        else:
+            proj_budget = 0.0
+            proj_actual = 0.0
+            proj_forecast = 0.0
+
         section_header("Additional Details")
         o1, o2 = st.columns(2)
         with o1:
@@ -281,6 +303,9 @@ def _render_new_project_form(data):
             "team": proj_team,
             "tshirt_size": proj_tshirt,
             "est_hours": proj_hours,
+            "budget": proj_budget,
+            "actual_cost": proj_actual,
+            "forecast_cost": proj_forecast,
             "notes": proj_notes.strip() if proj_notes else None,
         }
 
@@ -457,7 +482,25 @@ def _render_edit_form(project, data):
                                                            value=current_alloc, step=5,
                                                            key=f"alloc_{role_key}")
 
-        # Group 4: Other
+        # Group 4: Financials (finance-gated)
+        if is_finance_user():
+            section_header("Financials")
+            fc1, fc2, fc3 = st.columns(3)
+            with fc1:
+                proj_budget = st.number_input("Budget ($)", min_value=0.0, max_value=50000000.0,
+                                               value=float(project.budget), step=1000.0, format="%.2f")
+            with fc2:
+                proj_actual = st.number_input("Actual Cost ($)", min_value=0.0, max_value=50000000.0,
+                                               value=float(project.actual_cost), step=1000.0, format="%.2f")
+            with fc3:
+                proj_forecast = st.number_input("Forecast Cost ($)", min_value=0.0, max_value=50000000.0,
+                                                 value=float(project.forecast_cost), step=1000.0, format="%.2f")
+        else:
+            proj_budget = project.budget
+            proj_actual = project.actual_cost
+            proj_forecast = project.forecast_cost
+
+        # Group 5: Other
         section_header("Additional Details")
         o1, o2 = st.columns(2)
         with o1:
@@ -542,6 +585,9 @@ def _render_edit_form(project, data):
             "team": proj_team,
             "tshirt_size": proj_tshirt,
             "est_hours": proj_hours,
+            "budget": proj_budget,
+            "actual_cost": proj_actual,
+            "forecast_cost": proj_forecast,
             "notes": proj_notes.strip() if proj_notes else None,
         }
 
@@ -608,6 +654,23 @@ def _render_view_mode(project, data, utilization, person_demand):
         f'🔗 View in Jira: {project.id}</a></div>',
         unsafe_allow_html=True,
     )
+
+    # --- Financial KPIs (finance-gated) ---
+    if is_finance_user() and (project.budget > 0 or project.actual_cost > 0 or project.forecast_cost > 0):
+        fc1, fc2, fc3, fc4 = st.columns(4)
+        with fc1:
+            kpi_card("Budget", f"${project.budget:,.0f}", "navy")
+        with fc2:
+            kpi_card("Actual Cost", f"${project.actual_cost:,.0f}", "navy")
+        with fc3:
+            kpi_card("Forecast", f"${project.forecast_cost:,.0f}", "navy")
+        with fc4:
+            if project.budget > 0:
+                variance = project.budget - project.forecast_cost
+                color = "green" if variance >= 0 else "red"
+                kpi_card("Variance", f"${variance:,.0f}", color)
+            else:
+                kpi_card("Variance", "N/A", "navy")
 
     # --- Overview + Assignments ---
     left, right = st.columns(2)

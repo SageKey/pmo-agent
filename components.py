@@ -511,3 +511,32 @@ def capacity_heatmap(heatmap_df: pd.DataFrame) -> alt.Chart:
     ).properties(height=280)
 
     return chart.configure_view(strokeWidth=0)
+
+
+# ---------------------------------------------------------------------------
+# Finance Gate
+# ---------------------------------------------------------------------------
+def is_finance_user() -> bool:
+    """Check if the current user has finance access.
+    On Streamlit Cloud, checks email against FINANCE_USERS secret.
+    Locally (no auth), defaults to True for development.
+    """
+    try:
+        finance_users = st.secrets.get("FINANCE_USERS", [])
+    except Exception:
+        # No secrets configured (local dev) — grant access
+        return True
+
+    if not finance_users:
+        return True  # No restriction configured
+
+    # Get logged-in user email from Streamlit Cloud
+    try:
+        user_email = st.context.headers.get("X-Forwarded-User", "")
+    except Exception:
+        user_email = ""
+
+    if not user_email:
+        return True  # Local development, no auth
+
+    return user_email.lower() in [e.lower() for e in finance_users]

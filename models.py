@@ -92,9 +92,12 @@ class Project:
     tshirt_size: Optional[str]
     est_hours: float
     est_cost: Optional[float]
-    role_allocations: dict  # canonical_role_key → float (0.0-1.0)
-    notes: Optional[str]
-    sort_order: Optional[int]
+    budget: float = 0.0
+    actual_cost: float = 0.0
+    forecast_cost: float = 0.0
+    role_allocations: dict = field(default_factory=dict)  # canonical_role_key → float (0.0-1.0)
+    notes: Optional[str] = None
+    sort_order: Optional[int] = None
 
     @property
     def is_active(self) -> bool:
