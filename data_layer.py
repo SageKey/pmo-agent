@@ -124,10 +124,14 @@ def _unify_vendor_names(conn):
 def _fix_team_classifications(conn):
     """Fix billing classification mismatches in team_members and add missing Akhilesh."""
     fixes = {
+        "Ajay Kumar": "MSA",
+        "Ravindra Reddy": "MSA",
+        "Sarath Yeturu": "MSA",
+        "Vinod Bollepally": "MSA",
+        "Sangamesh Koti": "T&M",
         "Bhavya Reddy": "T&M",
+        "Akhilesh Mishra": "T&M",
         "Deepak Gudwani": "T&M",
-        "Sangamesh Koti": "MSA",
-        "Sarath Yeturu": "T&M",
         "Vishnu Premen": "T&M",
     }
     for name, cls in fixes.items():
