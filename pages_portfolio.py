@@ -1,12 +1,25 @@
-"""Portfolio View page for the ETE PMO Dashboard."""
+"""Portfolio page for the ETE PMO Dashboard.
+
+Shows the project portfolio grouped by health status. Clicking a project (or
+using the dropdown) opens its detail view with Edit/View toggle — same UX
+pattern as Team Roster.
+"""
+
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
 
-from components import section_header, clean_health, health_label
+from components import section_header, clean_health, health_label, NAVY, GRAY
+from pages_project import (
+    _render_new_project_form,
+    render_project_detail,
+)
 
 
-# Map normalized health labels to portfolio sections
+# ---------------------------------------------------------------------------
+# Portfolio table helpers
+# ---------------------------------------------------------------------------
 def _section_for_health(h: str) -> str:
     """Classify a health label into a portfolio section."""
     label = health_label(h)
@@ -22,7 +35,7 @@ def _section_for_health(h: str) -> str:
         return "Complete"
     elif label == "Postponed":
         return "Postponed"
-    return "On Track"  # default fallback
+    return "On Track"
 
 
 SECTION_ORDER = [
@@ -34,7 +47,6 @@ SECTION_ORDER = [
     "Postponed",
 ]
 
-# Which sections are expanded by default
 SECTION_EXPANDED = {
     "Needs Attention": True,
     "At Risk": True,
@@ -53,32 +65,18 @@ SECTION_ICONS = {
     "Postponed": "⏸️",
 }
 
-TABLE_CONFIG = {
-    "% Complete": st.column_config.ProgressColumn(
-        "% Complete", min_value=0, max_value=100, format="%d%%"),
-    "Start Date": st.column_config.DateColumn("Start", format="MMM DD, YYYY"),
-    "End Date": st.column_config.DateColumn("End", format="MMM DD, YYYY"),
-    "Est Hours": st.column_config.NumberColumn("Est Hrs", format="%d"),
-}
 
-DISPLAY_COLS = ["ID", "Name", "Priority", "Health", "% Complete",
-                "Start Date", "End Date", "Est Hours", "PM", "Team"]
-
-
-def render(data: dict, utilization: dict, person_demand: list):
-    """Render the Portfolio View page."""
+def _render_portfolio_tables(data: dict):
+    """Render the portfolio overview — filter pills + grouped project tables."""
     portfolio_df = data["portfolio_df"]
     df = portfolio_df.copy()
-
-    # Classify each project into a section
     df["Section"] = df["Health"].apply(_section_for_health)
 
-    # --- Portfolio filter + New Project ---
+    # --- Portfolio filter pills ---
     portfolios = sorted([p for p in df["Portfolio"].unique().tolist() if p])
     filter_options = ["All"] + portfolios
     active_filter = st.session_state.get("portfolio_filter", "All")
 
-    # Build pill-style filter bar as HTML links
     pills_html = '<div style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap; margin-bottom:1rem;">'
     for label in filter_options:
         count = len(df) if label == "All" else len(df[df["Portfolio"] == label])
@@ -91,19 +89,9 @@ def render(data: dict, utilization: dict, person_demand: list):
             style = ("background:#F0F2F6; color:#333; padding:0.3rem 0.85rem; "
                      "border-radius:20px; font-size:0.8rem; font-weight:500; "
                      "text-decoration:none; display:inline-block;")
-        pills_html += f'<a href="?portfolio={label}" target="_self" style="{style}">{label} ({count})</a>'
+        pills_html += f'<a href="?portfolio={quote(label)}" target="_self" style="{style}">{label} ({count})</a>'
     pills_html += '</div>'
-
-    top_left, top_right = st.columns([5, 1])
-    with top_left:
-        st.markdown(pills_html, unsafe_allow_html=True)
-    with top_right:
-        if st.button("+ New Project", use_container_width=True, type="primary"):
-            st.session_state["edit_mode"] = True
-            st.session_state["new_project"] = True
-            st.session_state["selected_project_id"] = None
-            st.session_state["_pending_nav"] = "Project Detail"
-            st.rerun()
+    st.markdown(pills_html, unsafe_allow_html=True)
 
     # Apply portfolio filter
     if active_filter != "All":
@@ -113,12 +101,11 @@ def render(data: dict, utilization: dict, person_demand: list):
     status_preset = st.session_state.pop("portfolio_status_filter", None)
     health_preset = st.session_state.pop("portfolio_health_filter", None)
 
-    # Map donut health label to section name
     force_expand = None
     if health_preset:
         force_expand = _section_for_health(health_preset)
     elif status_preset == "active":
-        force_expand = "__active__"  # expand all active sections
+        force_expand = "__active__"
     elif status_preset == "complete":
         force_expand = "Complete"
     elif status_preset == "postponed":
@@ -133,7 +120,6 @@ def render(data: dict, utilization: dict, person_demand: list):
         icon = SECTION_ICONS.get(section_name, "")
         count = len(section_df)
 
-        # Determine expanded state
         if force_expand:
             if force_expand == "__active__":
                 expanded = section_name in ("Needs Attention", "At Risk", "On Track", "Not Started")
@@ -143,7 +129,6 @@ def render(data: dict, utilization: dict, person_demand: list):
             expanded = SECTION_EXPANDED.get(section_name, False)
 
         with st.expander(f"{icon} **{section_name}** ({count})", expanded=expanded):
-            # Build HTML table with linked project names
             html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
             <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.03em;">
                 <th style="text-align:left; padding:0.4rem 0.5rem;">Project</th>
@@ -186,3 +171,80 @@ def render(data: dict, utilization: dict, person_demand: list):
 
             html += "</tbody></table>"
             st.markdown(html, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Main Render
+# ---------------------------------------------------------------------------
+def render(data: dict, utilization: dict, person_demand: list):
+    """Render the Portfolio page."""
+    all_projects = data["portfolio"]
+
+    if not all_projects:
+        st.info("No projects found.")
+        return
+
+    # --- New Project Mode ---
+    if st.session_state.get("new_project", False):
+        st.markdown(f"""
+        <div style="margin-bottom: 0.5rem;">
+            <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
+                New Project
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+        _render_new_project_form(data)
+        return
+
+    # --- Project Selector + Edit/New Buttons ---
+    project_options = {f"{p.id}: {p.name}": p.id for p in all_projects}
+    option_labels = list(project_options.keys())
+
+    preselected_id = st.session_state.get("selected_project_id")
+    default_index = None
+    if preselected_id:
+        for i, label in enumerate(option_labels):
+            if project_options[label] == preselected_id:
+                default_index = i
+                break
+
+    sel_col, btn_col, new_col = st.columns([5, 1, 1])
+    with sel_col:
+        selected_label = st.selectbox(
+            "Select a project",
+            option_labels,
+            index=default_index,
+            label_visibility="collapsed",
+            placeholder="Search or select a project...",
+        )
+    with btn_col:
+        if selected_label is not None:
+            edit_mode = st.session_state.get("edit_mode", False)
+            if edit_mode:
+                if st.button("View", use_container_width=True):
+                    st.session_state["edit_mode"] = False
+                    st.rerun()
+            else:
+                if st.button("Edit", use_container_width=True, type="primary"):
+                    st.session_state["edit_mode"] = True
+                    st.rerun()
+    with new_col:
+        if st.button("+ New", use_container_width=True, type="primary"):
+            st.session_state["new_project"] = True
+            st.session_state["edit_mode"] = True
+            st.session_state["selected_project_id"] = None
+            st.rerun()
+
+    # --- Landing State: No project selected → show portfolio tables ---
+    if selected_label is None:
+        _render_portfolio_tables(data)
+        return
+
+    # --- Project Selected → Detail View ---
+    selected_id = project_options[selected_label]
+    project = next((p for p in all_projects if p.id == selected_id), None)
+    if not project:
+        st.error("Project not found.")
+        return
+
+    render_project_detail(project, data, utilization, person_demand)

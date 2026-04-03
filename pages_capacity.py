@@ -70,9 +70,9 @@ def render(data: dict, utilization: dict, person_demand: list):
         rows = []
         for p in person_demand:
             pct_str = p["utilization_pct"]
-            # Parse percentage string
+            # Parse percentage string — keep on 0-100+ scale for display
             try:
-                pct_val = float(pct_str.replace("%", "")) / 100
+                pct_val = float(pct_str.replace("%", ""))
             except (ValueError, AttributeError):
                 pct_val = 0.0
 
@@ -93,7 +93,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             df,
             column_config={
                 "Utilization": st.column_config.ProgressColumn(
-                    "Utilization", min_value=0, max_value=1.5, format="%.0f%%"),
+                    "Utilization", min_value=0, max_value=100, format="%.0f%%"),
                 "Capacity (hrs/wk)": st.column_config.NumberColumn(format="%.1f"),
                 "Demand (hrs/wk)": st.column_config.NumberColumn(format="%.1f"),
             },

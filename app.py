@@ -21,9 +21,9 @@ import pages_exec
 import pages_portfolio
 import pages_capacity
 import pages_timeline
-import pages_project
 import pages_assistant
 import pages_editor
+import pages_roster
 
 
 # ---------------------------------------------------------------------------
@@ -62,17 +62,22 @@ with st.sidebar:
     # Handle query param navigation (e.g. linked project names, portfolio filter)
     qp = st.query_params
     if "project" in qp:
-        st.session_state["nav_radio"] = "Project Detail"
+        st.session_state["nav_radio"] = "Portfolio"
         st.session_state["selected_project_id"] = qp["project"]
         st.query_params.clear()
     elif "portfolio" in qp:
         st.session_state["nav_radio"] = "Portfolio"
         st.session_state["portfolio_filter"] = qp["portfolio"]
+        st.session_state["selected_project_id"] = None
+        st.query_params.clear()
+    elif "member" in qp:
+        st.session_state["nav_radio"] = "Team Roster"
+        st.session_state["selected_member"] = qp["member"]
         st.query_params.clear()
 
     page = st.radio(
         "Navigation",
-        ["Executive Summary", "Portfolio", "Project Detail", "Capacity", "Timeline", "AI Assistant"],
+        ["Executive Summary", "Portfolio", "Capacity", "Timeline", "Team Roster", "AI Assistant"],
         label_visibility="collapsed",
         key="nav_radio",
     )
@@ -239,11 +244,11 @@ if page == "Executive Summary":
     pages_exec.render(data, utilization, person_demand)
 elif page == "Portfolio":
     pages_portfolio.render(data, utilization, person_demand)
-elif page == "Project Detail":
-    pages_project.render(data, utilization, person_demand)
 elif page == "Capacity":
     pages_capacity.render(data, utilization, person_demand)
 elif page == "Timeline":
     pages_timeline.render(data, utilization, person_demand)
+elif page == "Team Roster":
+    pages_roster.render(data, utilization, person_demand)
 elif page == "AI Assistant":
     pages_assistant.render(data, utilization, person_demand)

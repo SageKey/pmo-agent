@@ -677,81 +677,12 @@ def _render_view_mode(project, data, utilization, person_demand):
                     use_container_width=True,
                 )
 
-def render(data: dict, utilization: dict, person_demand: list):
-    """Render the Project Detail page."""
-    all_projects = data["portfolio"]
-    active = data["active_portfolio"]
+def render_project_detail(project, data: dict, utilization: dict, person_demand: list):
+    """Render the full project detail — header, view/edit, analysis sections.
 
-    if not all_projects:
-        st.info("No projects found.")
-        return
-
-    # --- New Project Mode ---
-    if st.session_state.get("new_project", False):
-        st.markdown(f"""
-        <div style="margin-bottom: 0.5rem;">
-            <span style="font-size: 1.5rem; font-weight: 700; color: {NAVY};">
-                New Project
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-        _render_new_project_form(data)
-        return
-
-    # --- Project Selector + Edit Button ---
-    project_options = {f"{p.id}: {p.name}": p.id for p in all_projects}
-    option_labels = list(project_options.keys())
-
-    preselected_id = st.session_state.get("selected_project_id")
-    default_index = None
-    if preselected_id:
-        for i, label in enumerate(option_labels):
-            if project_options[label] == preselected_id:
-                default_index = i
-                break
-
-    sel_col, btn_col = st.columns([5, 1])
-    with sel_col:
-        selected_label = st.selectbox(
-            "Select a project",
-            option_labels,
-            index=default_index,
-            label_visibility="collapsed",
-            placeholder="Search or select a project...",
-        )
-    with btn_col:
-        if selected_label is not None:
-            edit_mode = st.session_state.get("edit_mode", False)
-            if edit_mode:
-                if st.button("View", use_container_width=True):
-                    st.session_state["edit_mode"] = False
-                    st.rerun()
-            else:
-                if st.button("Edit", use_container_width=True, type="primary"):
-                    st.session_state["edit_mode"] = True
-                    st.rerun()
-
-    # --- Landing State ---
-    if selected_label is None:
-        st.markdown("<div style='height: 3rem'></div>", unsafe_allow_html=True)
-        st.markdown(f"""
-        <div style="text-align: center; padding: 3rem 2rem;">
-            <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.3;">📋</div>
-            <div style="font-size: 1.3rem; font-weight: 600; color: {NAVY}; margin-bottom: 0.5rem;">
-                Select a Project</div>
-            <div style="font-size: 0.95rem; color: {GRAY}; max-width: 400px; margin: 0 auto;">
-                Choose a project from the dropdown above.</div>
-        </div>
-        """, unsafe_allow_html=True)
-        return
-
-    selected_id = project_options[selected_label]
-    project = next((p for p in all_projects if p.id == selected_id), None)
-    if not project:
-        st.error("Project not found.")
-        return
-
-    st.session_state.selected_project_id = selected_id
+    Extracted so it can be called from Portfolio page when a project is selected.
+    """
+    st.session_state["selected_project_id"] = project.id
 
     # --- Header ---
     st.markdown(f"""

@@ -441,6 +441,17 @@ class SQLiteConnector:
         except Exception as e:
             return f"Error saving roster member: {e}"
 
+    def delete_roster_member(self, name: str) -> Optional[str]:
+        """Delete a roster member and their project assignments."""
+        try:
+            conn = self._open()
+            conn.execute("DELETE FROM project_assignments WHERE person_name = ?", (name,))
+            conn.execute("DELETE FROM team_members WHERE name = ?", (name,))
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error deleting roster member: {e}"
+
     def save_assignment(self, project_id: str, person_name: str,
                         role_key: str, allocation_pct: float = 1.0) -> Optional[str]:
         """Insert or update a project assignment."""

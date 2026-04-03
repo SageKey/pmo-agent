@@ -63,6 +63,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             if points and "Health" in points[0]:
                 clicked_health = points[0]["Health"]
                 st.session_state["portfolio_health_filter"] = clicked_health
+                st.session_state["selected_project_id"] = None
                 st.session_state["_pending_nav"] = "Portfolio"
                 st.rerun()
         else:
@@ -80,18 +81,21 @@ def render(data: dict, utilization: dict, person_demand: list):
         if st.button(f"**{n_active}** Active", use_container_width=True,
                      key="status_active"):
             st.session_state["portfolio_status_filter"] = "active"
+            st.session_state["selected_project_id"] = None
             st.session_state["_pending_nav"] = "Portfolio"
             st.rerun()
         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
         if st.button(f"**{n_complete}** Complete", use_container_width=True,
                      key="status_complete"):
             st.session_state["portfolio_status_filter"] = "complete"
+            st.session_state["selected_project_id"] = None
             st.session_state["_pending_nav"] = "Portfolio"
             st.rerun()
         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
         if st.button(f"**{n_postponed}** Postponed", use_container_width=True,
                      key="status_postponed"):
             st.session_state["portfolio_status_filter"] = "postponed"
+            st.session_state["selected_project_id"] = None
             st.session_state["_pending_nav"] = "Portfolio"
             st.rerun()
 
