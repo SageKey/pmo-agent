@@ -173,22 +173,58 @@ def render(data: dict, utilization: dict, person_demand: list):
                 })
             st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
-    # --- Portfolio Financials (finance-gated) ---
+    # --- Annual Budget Burn-Down (finance-gated) ---
     if is_finance_user():
-        total_budget = sum(p.budget for p in active)
-        total_actual = sum(p.actual_cost for p in active)
-        total_forecast = sum(p.forecast_cost for p in active)
+        assumptions = data["assumptions"]
+        annual_budget = assumptions.annual_budget
+        all_projects = data["portfolio"]
+        total_spent = sum(p.actual_cost for p in all_projects)
+        total_forecast = sum(p.forecast_cost for p in all_projects)
+        # For projects with no forecast, use actual as forecast
+        effective_forecast = sum(
+            p.forecast_cost if p.forecast_cost > 0 else p.actual_cost
+            for p in all_projects
+        )
 
-        if total_budget > 0 or total_actual > 0:
-            section_header("Portfolio Financials")
+        if annual_budget > 0:
+            remaining = annual_budget - total_spent
+            projected_remaining = annual_budget - effective_forecast
+            burn_pct = (total_spent / annual_budget * 100) if annual_budget > 0 else 0
+
+            section_header("Annual IT Budget")
             fc1, fc2, fc3, fc4 = st.columns(4)
             with fc1:
-                kpi_card("Total Budget", f"${total_budget:,.0f}", "navy")
+                kpi_card("Annual Budget", f"${annual_budget:,.0f}", "navy")
             with fc2:
-                kpi_card("Actual Spend", f"${total_actual:,.0f}", "navy")
+                kpi_card("Spent to Date", f"${total_spent:,.0f}", "navy")
             with fc3:
-                kpi_card("Forecast", f"${total_forecast:,.0f}", "navy")
+                color = "green" if remaining >= 0 else "red"
+                kpi_card("Remaining", f"${remaining:,.0f}", color)
             with fc4:
-                variance = total_budget - total_forecast
-                color = "green" if variance >= 0 else "red"
-                kpi_card("Variance", f"${variance:,.0f}", color)
+                color = "green" if burn_pct <= 75 else ("yellow" if burn_pct <= 90 else "red")
+                kpi_card("Burned", f"{burn_pct:.0f}%", color)
+
+            # Burn-down bar
+            burn_frac = min(total_spent / annual_budget, 1.0) if annual_budget > 0 else 0
+            forecast_frac = min(effective_forecast / annual_budget, 1.0) if annual_budget > 0 else 0
+            bar_color = "#27AE60" if burn_frac <= 0.75 else ("#F39C12" if burn_frac <= 0.90 else "#E74C3C")
+            forecast_color = "#BDC3C7"
+
+            st.markdown(f"""
+            <div style="margin: 0.5rem 0 0.25rem 0; font-size: 0.8rem; color: #5A6A7E;">
+                Budget Utilization
+            </div>
+            <div style="position: relative; background: #E8ECF1; border-radius: 8px; height: 28px; overflow: hidden;">
+                <div style="position: absolute; top: 0; left: 0; height: 100%;
+                            width: {forecast_frac*100:.1f}%; background: {forecast_color};
+                            border-radius: 8px; opacity: 0.5;"></div>
+                <div style="position: absolute; top: 0; left: 0; height: 100%;
+                            width: {burn_frac*100:.1f}%; background: {bar_color};
+                            border-radius: 8px;"></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #5A6A7E; margin-top: 0.25rem;">
+                <span>■ Spent: ${total_spent:,.0f}</span>
+                <span style="opacity: 0.6;">■ Forecast: ${effective_forecast:,.0f}</span>
+                <span>Budget: ${annual_budget:,.0f}</span>
+            </div>
+            """, unsafe_allow_html=True)

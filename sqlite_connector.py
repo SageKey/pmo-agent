@@ -305,6 +305,7 @@ class SQLiteConnector:
             role_phase_efforts=role_phase_efforts,
             role_avg_efforts=role_avg_efforts,
             supply_by_role=supply_by_role,
+            annual_budget=kv.get("annual_budget", 0.0),
         )
 
     # ------------------------------------------------------------------

@@ -143,6 +143,7 @@ class RMAssumptions:
     role_phase_efforts: dict  # canonical_role_key → {phase_name → effort %}
     role_avg_efforts: dict    # canonical_role_key → avg effort
     supply_by_role: dict      # canonical_role_key → {headcount, gross_hrs, project_hrs}
+    annual_budget: float      # annual IT budget for burn-down tracking
 
 
 # ---------------------------------------------------------------------------
