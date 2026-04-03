@@ -9,8 +9,8 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    kpi_card, kpi_row, section_header, clean_health, health_label, util_status,
-    is_finance_user,
+    kpi_card, kpi_row, kpi_bar_row, summary_banner, section_header,
+    clean_health, health_label, util_status, is_finance_user,
     ROLE_DISPLAY, ROLE_ORDER, NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
     HEALTH_COLOR_MAP,
 )
@@ -1144,12 +1144,18 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
 
         reconciled = est.get("reconciled", False)
         gap = est.get("gap_hours", 0)
-        kpi_row([
-            {"label": "Estimated Duration", "value": f"{est['total_duration_days']:.0f} days"},
-            {"label": "Allocated Hours", "value": f"{est['allocated_hours']:,.0f}"},
+        alloc_pct = est["allocated_hours"] / project.est_hours if project.est_hours > 0 else 0
+        kpi_bar_row([
+            {"label": "Estimated Duration", "value": f"{est['total_duration_days']:.0f} days",
+             "pct": 1.0, "bar_color": NAVY},
+            {"label": "Allocated Hours", "value": f"{est['allocated_hours']:,.0f}",
+             "pct": min(alloc_pct, 1.0), "bar_color": GREEN if reconciled else YELLOW,
+             "subtitle": f"of {project.est_hours:,.0f} estimated"},
             {"label": "Reconciliation" if reconciled else "Unallocated Hours",
              "value": "Balanced" if reconciled else f"{gap:,.0f}",
-             "color": "green" if reconciled else "yellow"},
+             "color": "green" if reconciled else "yellow",
+             "pct": 1.0 if reconciled else min(gap / max(project.est_hours, 1), 1.0),
+             "bar_color": GREEN if reconciled else YELLOW},
         ])
 
         # Phase breakdown table
@@ -1230,13 +1236,18 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
             # Compare with current dates
             has_current_dates = project.start_date and project.end_date
 
-            kpi_row([
+            kpi_bar_row([
                 {"label": "Earliest Start",
                  "value": "Immediately" if offset_weeks == 0 else f"In {offset_weeks} wks",
-                 "color": "green" if offset_weeks == 0 else ("yellow" if offset_weeks <= 4 else "red")},
-                {"label": "Suggested Start", "value": sug_start.strftime("%b %d, %Y")},
-                {"label": "Projected End", "value": sug_end.strftime("%b %d, %Y")},
-                {"label": "Duration", "value": f"{duration_days:.0f} biz days"},
+                 "color": "green" if offset_weeks == 0 else ("yellow" if offset_weeks <= 4 else "red"),
+                 "pct": max(0, 1 - offset_weeks / 12),
+                 "bar_color": GREEN if offset_weeks == 0 else (YELLOW if offset_weeks <= 4 else RED)},
+                {"label": "Suggested Start", "value": sug_start.strftime("%b %d, %Y"),
+                 "pct": 0.5, "bar_color": NAVY},
+                {"label": "Projected End", "value": sug_end.strftime("%b %d, %Y"),
+                 "pct": 1.0, "bar_color": NAVY},
+                {"label": "Duration", "value": f"{duration_days:.0f} biz days",
+                 "pct": min(duration_days / 180, 1.0), "bar_color": NAVY},
             ])
 
             # If project has current dates, show comparison

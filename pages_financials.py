@@ -7,7 +7,10 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from components import kpi_card, kpi_row, section_header, is_finance_user, NAVY
+from components import (
+    kpi_card, kpi_row, kpi_bar_row, summary_banner, section_header,
+    is_finance_user, NAVY, GREEN, YELLOW, RED,
+)
 from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
 
@@ -255,39 +258,23 @@ def render(data: dict, utilization: dict, person_demand: list):
         remaining = annual_budget - total_spent
         burn_pct = total_spent / annual_budget * 100
 
-        kpi_row([
-            {"label": "Annual Budget", "value": f"${annual_budget:,.0f}"},
-            {"label": f"FY{fiscal_year} Spent", "value": f"${total_spent:,.0f}"},
-            {"label": "Remaining", "value": f"${remaining:,.0f}",
-             "color": "green" if remaining >= 0 else "red"},
-            {"label": "Burned", "value": f"{burn_pct:.0f}%",
-             "color": "green" if burn_pct <= 75 else ("yellow" if burn_pct <= 90 else "red")},
-        ])
-
-        # Burn-down bar
         burn_frac = min(total_spent / annual_budget, 1.0)
         forecast_frac = min(effective_forecast / annual_budget, 1.0)
-        bar_color = "#27AE60" if burn_frac <= 0.75 else ("#F39C12" if burn_frac <= 0.90 else "#E74C3C")
-        forecast_color = "#BDC3C7"
+        bar_color = GREEN if burn_frac <= 0.75 else (YELLOW if burn_frac <= 0.90 else RED)
 
-        st.markdown(f"""
-        <div style="margin: 0.5rem 0 0.25rem 0; font-size: 0.8rem; color: #5A6A7E;">
-            FY{fiscal_year} Budget Utilization
-        </div>
-        <div style="position: relative; background: #E8ECF1; border-radius: 8px; height: 28px; overflow: hidden;">
-            <div style="position: absolute; top: 0; left: 0; height: 100%;
-                        width: {forecast_frac*100:.1f}%; background: {forecast_color};
-                        border-radius: 8px; opacity: 0.5;"></div>
-            <div style="position: absolute; top: 0; left: 0; height: 100%;
-                        width: {burn_frac*100:.1f}%; background: {bar_color};
-                        border-radius: 8px;"></div>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #5A6A7E; margin-top: 0.25rem;">
-            <span>■ Spent: ${total_spent:,.0f}</span>
-            <span style="opacity: 0.6;">■ Forecast: ${effective_forecast:,.0f}</span>
-            <span>Budget: ${annual_budget:,.0f}</span>
-        </div>
-        """, unsafe_allow_html=True)
+        kpi_bar_row([
+            {"label": "Annual Budget", "value": f"${annual_budget:,.0f}",
+             "pct": 1.0, "bar_color": NAVY},
+            {"label": f"FY{fiscal_year} Spent", "value": f"${total_spent:,.0f}",
+             "pct": burn_frac, "bar_color": bar_color,
+             "subtitle": f"{burn_pct:.0f}% of budget"},
+            {"label": "Remaining", "value": f"${remaining:,.0f}",
+             "color": "green" if remaining >= 0 else "red",
+             "pct": max(0, 1 - burn_frac), "bar_color": GREEN},
+            {"label": "Forecast", "value": f"${effective_forecast:,.0f}",
+             "pct": forecast_frac, "bar_color": "#BDC3C7",
+             "subtitle": f"{forecast_frac*100:.0f}% of budget"},
+        ])
     elif not st.session_state.get("_editing_budget", False):
         st.info("No annual budget set. Click **Edit** to configure.")
 
@@ -322,13 +309,24 @@ def render(data: dict, utilization: dict, person_demand: list):
         section_header(f"FY{fiscal_year} Synnergie Vendor Billing")
 
         roi_pct = (ts_msa_work_value / ts_msa_cost * 100) if ts_msa_cost > 0 else 0
-        kpi_row([
-            {"label": "MSA Fees", "value": f"${ts_msa_cost:,.0f}"},
-            {"label": "T&M Cost", "value": f"${ts_tm_cost:,.0f}"},
-            {"label": "Total Vendor", "value": f"${ts_total_vendor_cost:,.0f}"},
-            {"label": "Total Hours", "value": f"{ts_total_hrs:,.0f}"},
+        msa_share = ts_msa_cost / ts_total_vendor_cost if ts_total_vendor_cost > 0 else 0
+        tm_share = ts_tm_cost / ts_total_vendor_cost if ts_total_vendor_cost > 0 else 0
+        roi_color = GREEN if roi_pct >= 100 else (YELLOW if roi_pct >= 80 else RED)
+
+        kpi_bar_row([
+            {"label": "MSA Fees", "value": f"${ts_msa_cost:,.0f}",
+             "pct": msa_share, "bar_color": NAVY,
+             "subtitle": f"{ts_msa_hrs:,.0f} MSA hours"},
+            {"label": "T&M Cost", "value": f"${ts_tm_cost:,.0f}",
+             "pct": tm_share, "bar_color": "#E67E22",
+             "subtitle": f"{ts_tm_hrs:,.0f} T&M hours"},
+            {"label": "Total Vendor", "value": f"${ts_total_vendor_cost:,.0f}",
+             "pct": 1.0, "bar_color": NAVY,
+             "subtitle": f"{ts_total_hrs:,.0f} total hours"},
             {"label": "MSA ROI", "value": f"{roi_pct:.0f}%",
-             "color": "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")},
+             "pct": min(roi_pct / 100, 1.0), "bar_color": roi_color,
+             "color": "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red"),
+             "subtitle": f"${ts_msa_work_value:,.0f} work value"},
         ])
 
         # MSA + T&M cost bar per month

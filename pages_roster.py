@@ -13,7 +13,8 @@ from typing import Optional
 import streamlit as st
 
 from components import (
-    section_header, kpi_card, kpi_row, util_status,
+    section_header, kpi_card, kpi_row, kpi_bar_row, summary_banner,
+    util_status,
     ROLE_DISPLAY, ROLE_ORDER, NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
 )
 from data_layer import DB_PATH
@@ -89,15 +90,23 @@ def _render_roster_table(roster: list):
 def _render_view_mode(member, person_demand: list):
     """Render the read-only detail view for a team member."""
 
-    # --- KPI Cards ---
+    # --- Member Summary ---
     reserve_pct = round(member.support_reserve_pct * 100)
-    kpi_row([
-        {"label": "Role", "value": member.role},
-        {"label": "Weekly Hours", "value": f"{member.weekly_hrs_available:.0f}"},
-        {"label": "Project Capacity", "value": f"{member.project_capacity_hrs:.1f} hrs/wk", "color": "green"},
-        {"label": "Support Reserve", "value": f"{reserve_pct}%",
-         "color": "green" if reserve_pct < 60 else ("yellow" if reserve_pct < 80 else "red")},
-    ])
+    proj_frac = member.project_capacity_hrs / member.weekly_hrs_available if member.weekly_hrs_available > 0 else 0
+
+    summary_banner(
+        pills=[
+            {"label": member.role, "style": "background:#D6EAF8; color:#1B4F72;", "icon": "👤"},
+            {"label": member.team or "No Team", "style": "background:#E9ECEF; color:#495057;"},
+            {"label": member.vendor or "Internal", "style": "background:#E8DAEF; color:#4A235A;"},
+        ],
+        items=[
+            {"label": "Weekly Hours", "value": f"{member.weekly_hrs_available:.0f}"},
+            {"label": "Project Capacity", "value": f"{member.project_capacity_hrs:.1f} hrs/wk"},
+            {"label": "Support Reserve", "value": f"{reserve_pct}%"},
+            {"label": "Rate", "value": f"${member.rate_per_hour:.0f}/hr"},
+        ],
+    )
 
     # --- Overview & Details side by side ---
     left, right = st.columns(2)
@@ -404,12 +413,20 @@ def render(data: dict, utilization: dict, person_demand: list):
         teams = set(m.team for m in roster if m.team)
         roles_active = set(m.role_key for m in roster)
 
-        kpi_row([
-            {"label": "Team Members", "value": total_members},
-            {"label": "Weekly Capacity", "value": f"{total_capacity:.0f} hrs", "color": "green"},
-            {"label": "Teams", "value": len(teams)},
-            {"label": "Active Roles", "value": len(roles_active)},
-        ])
+        summary_banner(
+            pills=[
+                {"label": f"{total_members} Members", "icon": "👥",
+                 "style": "background:#D6EAF8; color:#1B4F72;"},
+                {"label": f"{len(teams)} Teams", "icon": "🏢",
+                 "style": "background:#E9ECEF; color:#495057;"},
+                {"label": f"{len(roles_active)} Roles", "icon": "🎯",
+                 "style": "background:#E8DAEF; color:#4A235A;"},
+            ],
+            items=[
+                {"label": "Weekly Capacity", "value": f"{total_capacity:.0f} hrs"},
+                {"label": "Avg per Person", "value": f"{total_capacity/total_members:.0f} hrs" if total_members > 0 else "—"},
+            ],
+        )
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
         _render_roster_table(roster)

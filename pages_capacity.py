@@ -4,22 +4,16 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    section_header, supply_demand_chart, kpi_card, kpi_row,
+    section_header, supply_demand_chart, kpi_bar_row,
     util_status, util_color, ROLE_DISPLAY, ROLE_ORDER,
-    GREEN, YELLOW, RED, GRAY,
+    GREEN, YELLOW, RED, GRAY, NAVY,
 )
 
 
 def render(data: dict, utilization: dict, person_demand: list):
     """Render the Capacity Dashboard page."""
 
-    # --- Supply vs Demand Chart ---
-    section_header("Supply vs Demand by Role")
-    chart = supply_demand_chart(utilization)
-    if chart:
-        st.altair_chart(chart, use_container_width=True)
-
-    # --- Role Utilization Metrics ---
+    # --- Role Utilization with progress bars ---
     section_header("Role Utilization")
 
     roles_with_data = [r for r in ROLE_ORDER if r in utilization]
@@ -28,16 +22,34 @@ def render(data: dict, utilization: dict, person_demand: list):
     for role_key in roles_with_data:
         u = utilization[role_key]
         pct = u["utilization_pct"]
-        surplus = u["supply_hrs_week"] - u["demand_hrs_week"]
+        supply = u["supply_hrs_week"]
+        demand = u["demand_hrs_week"]
+        surplus = supply - demand
+        if pct >= 1.0:
+            bar_color = RED
+        elif pct >= 0.80:
+            bar_color = YELLOW
+        else:
+            bar_color = GREEN
         items.append({
             "label": ROLE_DISPLAY.get(role_key, role_key),
             "value": f"{pct:.0%}" if pct != float("inf") else "OVER",
+            "pct": min(pct, 1.0),
             "color": util_status(pct).lower(),
-            "delta": f"{surplus:+.1f} hrs {'surplus' if surplus >= 0 else 'deficit'}",
+            "bar_color": bar_color,
+            "subtitle": f"{demand:.0f} / {supply:.0f} hrs",
         })
 
     if items:
-        kpi_row(items)
+        kpi_bar_row(items)
+
+    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+
+    # --- Supply vs Demand Chart ---
+    section_header("Supply vs Demand by Role")
+    chart = supply_demand_chart(utilization)
+    if chart:
+        st.altair_chart(chart, use_container_width=True)
 
     # --- Person-Level Utilization ---
     section_header("Person-Level Utilization")
@@ -46,7 +58,6 @@ def render(data: dict, utilization: dict, person_demand: list):
         rows = []
         for p in person_demand:
             pct_str = p["utilization_pct"]
-            # Parse percentage string — keep on 0-100+ scale for display
             try:
                 pct_val = float(pct_str.replace("%", ""))
             except (ValueError, AttributeError):

@@ -279,6 +279,126 @@ def kpi_row(items: list):
     )
 
 
+def kpi_bar_row(items: list):
+    """Render a flex row of KPI cards each with an integrated progress bar.
+
+    items: list of dicts with keys:
+        label, value, pct (0-1 float), color (optional), bar_color (optional),
+        subtitle (optional)
+    """
+    cards = []
+    for item in items:
+        label = item["label"]
+        value = item["value"]
+        pct = item.get("pct", 0)
+        color = item.get("color", "navy")
+        bar_color = item.get("bar_color")
+        subtitle = item.get("subtitle", "")
+
+        _BORDER_MAP = {
+            "green": "#28A745", "yellow": "#FFC107", "red": "#DC3545", "navy": "#1B3A5C",
+        }
+        border = _BORDER_MAP.get(color, "#1B3A5C")
+        if not bar_color:
+            bar_color = border
+
+        sub_html = ""
+        if subtitle:
+            sub_html = (
+                f'<div style="font-size:0.7rem; color:#6C757D; margin-top:0.15rem;">'
+                f'{subtitle}</div>'
+            )
+
+        pct_clamped = max(0, min(pct, 1.0))
+        cards.append(
+            f'<div class="kpi-card {color}">'
+            f'<div class="kpi-label">{label}</div>'
+            f'<div class="kpi-value">{value}</div>'
+            f'{sub_html}'
+            f'<div style="height:6px; background:#E9ECEF; border-radius:3px;'
+            f' overflow:hidden; margin-top:0.4rem;">'
+            f'<div style="width:{pct_clamped*100:.0f}%; height:100%;'
+            f' background:{bar_color}; border-radius:3px;"></div>'
+            f'</div></div>'
+        )
+    st.markdown(
+        '<div class="kpi-flex-row">' + ''.join(cards) + '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def summary_banner(items: list, pills: list = None):
+    """Render a full-width summary card with pills and inline metrics.
+
+    pills: list of dicts with keys: label, style (CSS), icon (optional)
+    items: list of dicts with keys: label, value
+    """
+    pill_html = ""
+    if pills:
+        pill_parts = []
+        for p in pills:
+            icon = p.get("icon", "")
+            icon_html = f"{icon} " if icon else ""
+            pill_parts.append(
+                f'<span style="{p["style"]} display:inline-block; padding:0.3rem 0.75rem;'
+                f' border-radius:20px; font-size:0.8rem; font-weight:600;">'
+                f'{icon_html}{p["label"]}</span>'
+            )
+        pill_html = (
+            '<div style="display:flex; flex-wrap:wrap; align-items:center;'
+            ' gap:0.6rem; margin-bottom:1rem;">'
+            + ''.join(pill_parts) + '</div>'
+        )
+
+    metric_parts = []
+    for item in items:
+        metric_parts.append(
+            f'<div style="min-width:100px;">'
+            f'<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
+            f' text-transform:uppercase; letter-spacing:0.05em;">{item["label"]}</div>'
+            f'<div style="font-size:1.35rem; font-weight:700; color:#1B3A5C;">'
+            f'{item["value"]}</div></div>'
+        )
+
+    metrics_html = (
+        '<div style="display:flex; flex-wrap:wrap; gap:1.5rem;">'
+        + ''.join(metric_parts) + '</div>'
+    )
+
+    st.markdown(
+        '<div style="background:#FFFFFF; border-radius:12px; padding:1.25rem 1.5rem;'
+        ' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
+        + pill_html + metrics_html + '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def progress_card(label: str, value: str, pct: float, bar_color: str = None,
+                  subtitle: str = ""):
+    """Single progress-bar KPI card (for use inside st.columns)."""
+    if not bar_color:
+        bar_color = "#1B3A5C"
+    pct_clamped = max(0, min(pct, 1.0))
+    sub_html = ""
+    if subtitle:
+        sub_html = (
+            f'<div style="font-size:0.7rem; color:#6C757D; margin-top:0.15rem;">'
+            f'{subtitle}</div>'
+        )
+    st.markdown(
+        f'<div class="kpi-card navy">'
+        f'<div class="kpi-label">{label}</div>'
+        f'<div class="kpi-value">{value}</div>'
+        f'{sub_html}'
+        f'<div style="height:6px; background:#E9ECEF; border-radius:3px;'
+        f' overflow:hidden; margin-top:0.4rem;">'
+        f'<div style="width:{pct_clamped*100:.0f}%; height:100%;'
+        f' background:{bar_color}; border-radius:3px;"></div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def section_header(text: str):
     """Render a styled section header."""
     st.markdown(f'<div class="section-header">{text}</div>', unsafe_allow_html=True)

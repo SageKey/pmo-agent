@@ -18,7 +18,10 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from components import kpi_card, kpi_row, section_header, is_finance_user, NAVY
+from components import (
+    kpi_card, kpi_row, kpi_bar_row, summary_banner, section_header,
+    is_finance_user, NAVY, GREEN, YELLOW, RED,
+)
 from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
 
@@ -126,10 +129,17 @@ def _render_entry_tab(consultants: list[dict]):
         support_hrs = sum(e["hours"] for e in week_entries if e.get("work_type") == "Support")
 
         # Week summary KPIs
-        kpi_row([
-            {"label": "Week Total", "value": f"{total_hrs:.0f}h"},
-            {"label": "Project", "value": f"{project_hrs:.0f}h"},
-            {"label": "Support", "value": f"{support_hrs:.0f}h"},
+        proj_pct = project_hrs / total_hrs if total_hrs > 0 else 0
+        supp_pct = support_hrs / total_hrs if total_hrs > 0 else 0
+        kpi_bar_row([
+            {"label": "Week Total", "value": f"{total_hrs:.0f}h",
+             "pct": 1.0, "bar_color": NAVY},
+            {"label": "Project", "value": f"{project_hrs:.0f}h",
+             "pct": proj_pct, "bar_color": GREEN,
+             "subtitle": f"{proj_pct*100:.0f}%"},
+            {"label": "Support", "value": f"{support_hrs:.0f}h",
+             "pct": supp_pct, "bar_color": "#E67E22",
+             "subtitle": f"{supp_pct*100:.0f}%"},
         ])
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
@@ -354,12 +364,23 @@ def _render_review_tab(consultants: list[dict]):
     msa_effective_rate = MSA_MONTHLY_FEE / msa_hrs if msa_hrs > 0 else 0
 
     # --- Top-level KPIs ---
-    kpi_row([
-        {"label": "Total Hours", "value": f"{total_hrs:,.0f}"},
-        {"label": "MSA Hours", "value": f"{msa_hrs:,.0f}"},
-        {"label": "T&M Hours", "value": f"{tm_hrs:,.0f}"},
-        {"label": "T&M Cost", "value": f"${tm_cost:,.0f}"},
-        {"label": "Total Cost", "value": f"${total_cost:,.0f}"},
+    msa_frac = msa_hrs / total_hrs if total_hrs > 0 else 0
+    tm_frac = tm_hrs / total_hrs if total_hrs > 0 else 0
+
+    kpi_bar_row([
+        {"label": "Total Hours", "value": f"{total_hrs:,.0f}",
+         "pct": 1.0, "bar_color": NAVY,
+         "subtitle": f"{project_hrs:.0f} project / {support_hrs:.0f} support"},
+        {"label": "MSA Hours", "value": f"{msa_hrs:,.0f}",
+         "pct": msa_frac, "bar_color": NAVY,
+         "subtitle": f"{msa_frac*100:.0f}% of total"},
+        {"label": "T&M Hours", "value": f"{tm_hrs:,.0f}",
+         "pct": tm_frac, "bar_color": "#E67E22",
+         "subtitle": f"{tm_frac*100:.0f}% of total"},
+        {"label": "T&M Cost", "value": f"${tm_cost:,.0f}",
+         "pct": tm_frac, "bar_color": "#E67E22"},
+        {"label": "Total Cost", "value": f"${total_cost:,.0f}",
+         "pct": 1.0, "bar_color": NAVY},
     ])
 
     st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
@@ -373,14 +394,26 @@ def _render_review_tab(consultants: list[dict]):
     msa_work_value = msa_hrs * BLENDED_RATE
 
     roi_pct = (msa_work_value / MSA_MONTHLY_FEE * 100) if MSA_MONTHLY_FEE > 0 else 0
-    kpi_row([
-        {"label": "MSA Fee", "value": f"${MSA_MONTHLY_FEE:,.0f}"},
+    roi_color = GREEN if roi_pct >= 100 else (YELLOW if roi_pct >= 80 else RED)
+    rate_color = GREEN if msa_effective_rate <= BLENDED_RATE else (YELLOW if msa_effective_rate <= 80 else RED)
+
+    kpi_bar_row([
+        {"label": "MSA Fee", "value": f"${MSA_MONTHLY_FEE:,.0f}",
+         "pct": 1.0, "bar_color": NAVY},
         {"label": "Work Value", "value": f"${msa_work_value:,.0f}",
-         "color": "green" if msa_work_value >= MSA_MONTHLY_FEE else "red"},
+         "color": "green" if msa_work_value >= MSA_MONTHLY_FEE else "red",
+         "pct": min(msa_work_value / MSA_MONTHLY_FEE, 1.0) if MSA_MONTHLY_FEE > 0 else 0,
+         "bar_color": GREEN if msa_work_value >= MSA_MONTHLY_FEE else RED,
+         "subtitle": f"vs ${MSA_MONTHLY_FEE:,.0f} fee"},
         {"label": "MSA ROI", "value": f"{roi_pct:.0f}%",
-         "color": "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")},
+         "color": "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red"),
+         "pct": min(roi_pct / 100, 1.0), "bar_color": roi_color,
+         "subtitle": "target: 100%"},
         {"label": "Effective Rate", "value": f"${msa_effective_rate:.0f}/hr",
-         "color": "green" if msa_effective_rate <= BLENDED_RATE else ("yellow" if msa_effective_rate <= 80 else "red")},
+         "color": "green" if msa_effective_rate <= BLENDED_RATE else "red",
+         "pct": min(BLENDED_RATE / max(msa_effective_rate, 1), 1.0),
+         "bar_color": rate_color,
+         "subtitle": f"vs ${BLENDED_RATE:.0f}/hr blended"},
     ])
 
     # MSA insight text
@@ -625,17 +658,24 @@ def _render_approvals_tab(consultants: list[dict]):
     n_approved = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "approved")
     n_rejected = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "rejected")
 
-    kpi_row([
-        {"label": "Total Hours", "value": f"{total_hrs:,.0f}"},
-        {"label": "Draft", "value": n_draft,
-         "color": "yellow" if n_draft > 0 else "green"},
-        {"label": "Submitted", "value": n_submitted,
-         "color": "yellow" if n_submitted > 0 else "green"},
-        {"label": "Approved", "value": n_approved,
-         "color": "green" if n_approved == n_consultants else "navy"},
-        {"label": "Rejected", "value": n_rejected,
-         "color": "red" if n_rejected > 0 else "green"},
-    ])
+    approval_pct = n_approved / n_consultants if n_consultants > 0 else 0
+    summary_banner(
+        pills=[
+            {"label": f"{n_draft} Draft", "icon": "📝",
+             "style": "background:#FFF3CD; color:#856404;" if n_draft > 0 else "background:#D4EDDA; color:#155724;"},
+            {"label": f"{n_submitted} Submitted", "icon": "📤",
+             "style": "background:#D6EAF8; color:#1B4F72;" if n_submitted > 0 else "background:#D4EDDA; color:#155724;"},
+            {"label": f"{n_approved} Approved", "icon": "✅",
+             "style": "background:#D4EDDA; color:#155724;"},
+            {"label": f"{n_rejected} Rejected", "icon": "❌",
+             "style": "background:#F8D7DA; color:#721C24;" if n_rejected > 0 else "background:#E9ECEF; color:#495057;"},
+        ],
+        items=[
+            {"label": "Total Hours", "value": f"{total_hrs:,.0f}"},
+            {"label": "Consultants", "value": n_consultants},
+            {"label": "Approval Rate", "value": f"{approval_pct:.0%}"},
+        ],
+    )
 
     st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
 
@@ -911,12 +951,22 @@ def _render_invoices_tab():
     total_paid = sum(i["total_amount"] for i in invoices if i["paid"])
     outstanding = total_invoiced - total_paid
 
-    kpi_row([
-        {"label": f"FY{today.year} Invoiced", "value": f"${total_invoiced:,.0f}"},
-        {"label": "MSA Fees", "value": f"${total_msa:,.0f}"},
-        {"label": "T&M Invoiced", "value": f"${total_tm_invoiced:,.0f}"},
+    paid_pct = total_paid / total_invoiced if total_invoiced > 0 else 0
+    kpi_bar_row([
+        {"label": f"FY{today.year} Invoiced", "value": f"${total_invoiced:,.0f}",
+         "pct": 1.0, "bar_color": NAVY,
+         "subtitle": f"{len(invoices)} invoices"},
+        {"label": "MSA Fees", "value": f"${total_msa:,.0f}",
+         "pct": total_msa / total_invoiced if total_invoiced > 0 else 0,
+         "bar_color": NAVY},
+        {"label": "T&M Invoiced", "value": f"${total_tm_invoiced:,.0f}",
+         "pct": total_tm_invoiced / total_invoiced if total_invoiced > 0 else 0,
+         "bar_color": "#E67E22"},
         {"label": "Outstanding", "value": f"${outstanding:,.0f}",
-         "color": "red" if outstanding > 0 else "green"},
+         "color": "red" if outstanding > 0 else "green",
+         "pct": 1 - paid_pct,
+         "bar_color": RED if outstanding > 0 else GREEN,
+         "subtitle": f"{paid_pct*100:.0f}% paid"},
     ])
 
     st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
@@ -1141,13 +1191,21 @@ def _render_approved_work_tab():
         n_support = sum(1 for w in work_items if w.get("work_classification") == "Support")
         n_pending = sum(1 for w in work_items if not w.get("approved_date"))
 
-        kpi_row([
-            {"label": "Total Items", "value": len(work_items)},
-            {"label": "CapEx", "value": n_capex},
-            {"label": "Support", "value": n_support},
-            {"label": "Pending Approval", "value": n_pending,
-             "color": "yellow" if n_pending > 0 else "green"},
-        ])
+        capex_pct = n_capex / len(work_items) if work_items else 0
+        summary_banner(
+            pills=[
+                {"label": f"{n_capex} CapEx", "icon": "📈",
+                 "style": "background:#D6EAF8; color:#1B4F72;"},
+                {"label": f"{n_support} Support", "icon": "🔧",
+                 "style": "background:#E9ECEF; color:#495057;"},
+                {"label": f"{n_pending} Pending", "icon": "⏳",
+                 "style": "background:#FFF3CD; color:#856404;" if n_pending > 0 else "background:#D4EDDA; color:#155724;"},
+            ],
+            items=[
+                {"label": "Total Items", "value": len(work_items)},
+                {"label": "CapEx Rate", "value": f"{capex_pct:.0%}"},
+            ],
+        )
 
         st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
 
@@ -1270,13 +1328,21 @@ def _render_mapping_tab(data: dict):
     unmapped_hrs = sum(u["total_hours"] for u in unmapped)
     coverage_pct = (n_mapped / total_sse * 100) if total_sse > 0 else 0
 
-    kpi_row([
-        {"label": "SSE Tasks", "value": total_sse},
+    map_color = GREEN if coverage_pct >= 80 else (YELLOW if coverage_pct >= 50 else RED)
+    kpi_bar_row([
+        {"label": "SSE Tasks", "value": total_sse,
+         "pct": 1.0, "bar_color": NAVY},
         {"label": "Mapped", "value": f"{n_mapped} ({coverage_pct:.0f}%)",
-         "color": "green" if coverage_pct >= 80 else ("yellow" if coverage_pct >= 50 else "red")},
+         "color": "green" if coverage_pct >= 80 else ("yellow" if coverage_pct >= 50 else "red"),
+         "pct": coverage_pct / 100, "bar_color": map_color,
+         "subtitle": "coverage"},
         {"label": "Unmapped", "value": n_unmapped,
-         "color": "green" if n_unmapped == 0 else ("yellow" if n_unmapped <= 5 else "red")},
-        {"label": "Unmapped Hours", "value": f"{unmapped_hrs:,.0f}h"},
+         "color": "green" if n_unmapped == 0 else ("yellow" if n_unmapped <= 5 else "red"),
+         "pct": n_unmapped / total_sse if total_sse > 0 else 0,
+         "bar_color": RED if n_unmapped > 5 else YELLOW},
+        {"label": "Unmapped Hours", "value": f"{unmapped_hrs:,.0f}h",
+         "pct": unmapped_hrs / (unmapped_hrs + 1) if unmapped_hrs > 0 else 0,
+         "bar_color": "#E67E22"},
     ])
 
     st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
