@@ -660,8 +660,9 @@ def _render_approvals_tab(consultants: list[dict]):
 # ---------------------------------------------------------------------------
 
 def _render_invoices_tab():
-    """Invoice tracking and reconciliation."""
+    """Invoice tracking with reconciliation against timesheets."""
 
+    MSA_MONTHLY_FEE = 50000.0
     today = date.today()
 
     connector = _get_connector()
@@ -671,11 +672,12 @@ def _render_invoices_tab():
     finally:
         connector.close()
 
-    # --- KPIs ---
+    # --- YTD KPIs ---
     total_invoiced = sum(i["total_amount"] for i in invoices)
     total_msa = sum(i["msa_amount"] for i in invoices)
-    total_tm = sum(i["tm_amount"] for i in invoices)
+    total_tm_invoiced = sum(i["tm_amount"] for i in invoices)
     total_paid = sum(i["total_amount"] for i in invoices if i["paid"])
+    outstanding = total_invoiced - total_paid
 
     kc1, kc2, kc3, kc4 = st.columns(4)
     with kc1:
@@ -683,57 +685,173 @@ def _render_invoices_tab():
     with kc2:
         kpi_card("MSA Fees", f"${total_msa:,.0f}", "navy")
     with kc3:
-        kpi_card("T&M Charges", f"${total_tm:,.0f}", "navy")
+        kpi_card("T&M Invoiced", f"${total_tm_invoiced:,.0f}", "navy")
     with kc4:
-        outstanding = total_invoiced - total_paid
         color = "red" if outstanding > 0 else "green"
         kpi_card("Outstanding", f"${outstanding:,.0f}", color)
 
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 
-    # --- Invoice List ---
-    section_header(f"FY{today.year} Invoices")
+    # ==================================================================
+    # Invoice Reconciliation
+    # ==================================================================
+    section_header(f"FY{today.year} Invoice Reconciliation")
 
     if invoices:
+        # Build per-month timesheet T&M totals for comparison
+        month_ts_tm = {}
+        for inv in invoices:
+            m = inv["month"]
+            connector = _get_connector()
+            try:
+                m_summary = connector.get_timesheet_summary(month=m)
+            finally:
+                connector.close()
+            calc_tm = sum(s["total_hours"] * s["hourly_rate"]
+                          for s in m_summary if s["billing_type"] == "T&M")
+            calc_hrs = sum(s["total_hours"] for s in m_summary if s["billing_type"] == "T&M")
+            month_ts_tm[m] = {"calc_tm": calc_tm, "calc_hrs": calc_hrs, "detail": m_summary}
+
+        # Reconciliation table
         html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
         <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem;">
             <th style="text-align:left; padding:0.4rem 0.5rem;">Month</th>
             <th style="text-align:left; padding:0.4rem 0.5rem;">Invoice #</th>
             <th style="text-align:right; padding:0.4rem 0.5rem;">MSA</th>
-            <th style="text-align:right; padding:0.4rem 0.5rem;">T&M</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">T&M Invoiced</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">T&M Calculated</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Variance</th>
             <th style="text-align:right; padding:0.4rem 0.5rem;">Total</th>
             <th style="text-align:left; padding:0.4rem 0.5rem;">Status</th>
-            <th style="text-align:left; padding:0.4rem 0.5rem;">Notes</th>
         </tr></thead><tbody>"""
 
+        total_calc_tm = 0
+        total_variance = 0
+
         for inv in invoices:
-            month_label = inv["month"]
+            m = inv["month"]
             try:
-                m_date = date.fromisoformat(inv["month"] + "-01")
+                m_date = date.fromisoformat(m + "-01")
                 month_label = m_date.strftime("%B %Y")
             except Exception:
-                pass
+                month_label = m
+
+            ts_data = month_ts_tm.get(m, {"calc_tm": 0, "calc_hrs": 0})
+            calc_tm = ts_data["calc_tm"]
+            variance = inv["tm_amount"] - calc_tm
+            total_calc_tm += calc_tm
+            total_variance += variance
+
+            # Variance coloring
+            if abs(variance) < 1:
+                var_color = "#27AE60"
+                var_icon = "&#10003;"
+            elif abs(variance) <= 500:
+                var_color = "#F39C12"
+                var_icon = "&#9888;"
+            else:
+                var_color = "#E74C3C"
+                var_icon = "&#9888;"
 
             paid_badge = '<span style="color:#27AE60; font-weight:600;">PAID</span>' if inv["paid"] else '<span style="color:#E74C3C; font-weight:600;">UNPAID</span>'
-            notes = (inv.get("notes") or "")[:60]
+
+            var_str = f"${variance:+,.0f}" if variance != 0 else "$0"
 
             html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
                 <td style="padding:0.45rem 0.5rem; font-weight:500;">{month_label}</td>
                 <td style="padding:0.45rem 0.5rem;">{inv.get('invoice_number') or '—'}</td>
                 <td style="padding:0.45rem 0.5rem; text-align:right;">${inv['msa_amount']:,.0f}</td>
                 <td style="padding:0.45rem 0.5rem; text-align:right;">${inv['tm_amount']:,.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${calc_tm:,.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; color:{var_color}; font-weight:600;">{var_icon} {var_str}</td>
                 <td style="padding:0.45rem 0.5rem; text-align:right; font-weight:600;">${inv['total_amount']:,.0f}</td>
                 <td style="padding:0.45rem 0.5rem;">{paid_badge}</td>
-                <td style="padding:0.45rem 0.5rem; font-size:0.78rem; color:#5A6A7E;">{notes}</td>
             </tr>"""
+
+        # Totals row
+        total_var_color = "#27AE60" if abs(total_variance) < 1 else ("#F39C12" if abs(total_variance) <= 500 else "#E74C3C")
+        total_var_str = f"${total_variance:+,.0f}" if total_variance != 0 else "$0"
+        html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
+            <td style="padding:0.45rem 0.5rem;" colspan="2">YTD TOTAL</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${total_msa:,.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${total_tm_invoiced:,.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${total_calc_tm:,.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right; color:{total_var_color};">{total_var_str}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${total_invoiced:,.0f}</td>
+            <td></td>
+        </tr>"""
 
         html += "</tbody></table>"
         st.markdown(html, unsafe_allow_html=True)
+
+        # --- Per-consultant drill-down for the most recent invoice ---
+        st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
+        latest = invoices[0]
+        latest_m = latest["month"]
+        try:
+            latest_label = date.fromisoformat(latest_m + "-01").strftime("%B %Y")
+        except Exception:
+            latest_label = latest_m
+
+        ts_detail = month_ts_tm.get(latest_m, {}).get("detail", [])
+        tm_detail = [s for s in ts_detail if s["billing_type"] == "T&M"]
+
+        if tm_detail:
+            section_header(f"T&M Detail — {latest_label}")
+
+            html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem;">
+                <th style="text-align:left; padding:0.4rem 0.5rem;">Consultant</th>
+                <th style="text-align:right; padding:0.4rem 0.5rem;">Rate</th>
+                <th style="text-align:right; padding:0.4rem 0.5rem;">Hours</th>
+                <th style="text-align:right; padding:0.4rem 0.5rem;">Calculated Cost</th>
+            </tr></thead><tbody>"""
+
+            detail_total_hrs = 0
+            detail_total_cost = 0
+            for s in tm_detail:
+                cost = s["total_hours"] * s["hourly_rate"]
+                detail_total_hrs += s["total_hours"]
+                detail_total_cost += cost
+                html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
+                    <td style="padding:0.45rem 0.5rem; font-weight:500;">{s['name']}</td>
+                    <td style="padding:0.45rem 0.5rem; text-align:right;">${s['hourly_rate']:.0f}/hr</td>
+                    <td style="padding:0.45rem 0.5rem; text-align:right;">{s['total_hours']:.0f}</td>
+                    <td style="padding:0.45rem 0.5rem; text-align:right; font-weight:600;">${cost:,.0f}</td>
+                </tr>"""
+
+            variance = latest["tm_amount"] - detail_total_cost
+            var_color = "#27AE60" if abs(variance) < 1 else "#E74C3C"
+            var_str = f"${variance:+,.0f}" if variance != 0 else "$0"
+
+            html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
+                <td style="padding:0.45rem 0.5rem;" colspan="2">T&M TOTAL</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{detail_total_hrs:.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${detail_total_cost:,.0f}</td>
+            </tr>
+            <tr style="font-weight:700;">
+                <td style="padding:0.45rem 0.5rem;" colspan="3">Invoice T&M Amount</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${latest['tm_amount']:,.0f}</td>
+            </tr>
+            <tr style="font-weight:700;">
+                <td style="padding:0.45rem 0.5rem; color:{var_color};" colspan="3">Variance</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; color:{var_color};">{var_str}</td>
+            </tr>"""
+
+            html += "</tbody></table>"
+            st.markdown(html, unsafe_allow_html=True)
+
+            if abs(variance) > 0:
+                st.markdown(f"""<div style="font-size:0.83rem; color:#5A6A7E; margin-top:0.5rem; padding:0.5rem 0.75rem; background:#FFF8E1; border-left:3px solid #F39C12; border-radius:4px;">
+                    Variance of <strong>{var_str}</strong> between invoice and timesheets.
+                    Verify consultant hours and rates match the invoice line items.
+                </div>""", unsafe_allow_html=True)
+
     else:
-        st.info("No invoices recorded yet.")
+        st.info("No invoices recorded yet. Add an invoice to begin reconciliation.")
 
     # --- Add Invoice ---
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
     with st.expander("Record New Invoice"):
         with st.form("invoice_form", clear_on_submit=True):
             ic1, ic2 = st.columns(2)
