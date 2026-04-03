@@ -61,6 +61,7 @@ def _migrate_vendor_tables():
             _unify_vendor_names(conn)
             _fix_vendor_consultants(conn)
             _fix_team_classifications(conn)
+            _normalize_health_emojis(conn)
             _seed_project_mappings(conn)
             conn.close()
             return
@@ -118,6 +119,25 @@ def _unify_vendor_names(conn):
             conn.execute(
                 "UPDATE vendor_consultants SET name = ? WHERE name = ?", (full, short)
             )
+            changed = True
+    if changed:
+        conn.commit()
+
+
+def _normalize_health_emojis(conn):
+    """Ensure all health values in projects have emoji prefixes."""
+    FIXES = {
+        "NOT STARTED":           "⚪ NOT STARTED",
+        "NEEDS FUNCTIONAL SPEC": "🔵 NEEDS FUNCTIONAL SPEC",
+        "NEEDS TECHNICAL SPEC":  "🔵 NEEDS TECHNICAL SPEC",
+        "COMPLETE":              "✅ COMPLETE",
+        "POSTPONED":             "⏸️ POSTPONED",
+    }
+    changed = False
+    for old, new in FIXES.items():
+        cur = conn.execute("SELECT COUNT(*) FROM projects WHERE health = ?", (old,)).fetchone()
+        if cur[0] > 0:
+            conn.execute("UPDATE projects SET health = ? WHERE health = ?", (new, old))
             changed = True
     if changed:
         conn.commit()
@@ -230,12 +250,32 @@ def _fix_team_classifications(conn):
     conn.commit()
 
 
+HEALTH_EMOJI_MAP = {
+    "NOT STARTED":           "⚪ NOT STARTED",
+    "NEEDS FUNCTIONAL SPEC": "🔵 NEEDS FUNCTIONAL SPEC",
+    "NEEDS TECHNICAL SPEC":  "🔵 NEEDS TECHNICAL SPEC",
+    "ON TRACK":              "🟢 ON TRACK",
+    "AT RISK":               "🟡 AT RISK",
+    "NEEDS HELP":            "🔴 NEEDS HELP",
+    "COMPLETE":              "✅ COMPLETE",
+    "POSTPONED":             "⏸️ POSTPONED",
+}
+
+
 def _clean_health(health: str) -> str:
-    """Strip emoji prefixes from health values."""
+    """Ensure health values have emoji prefixes for visual display."""
     if not health:
         return ""
-    cleaned = health.encode('ascii', 'ignore').decode('ascii').strip()
-    return cleaned if cleaned else health.strip()
+    h = health.strip()
+    # Already has emoji — return as-is
+    if h and not h[0].isascii():
+        return h
+    # Try to add emoji based on the text
+    h_upper = h.upper()
+    for key, val in HEALTH_EMOJI_MAP.items():
+        if key in h_upper:
+            return val
+    return h
 
 
 def get_file_mtime() -> float:

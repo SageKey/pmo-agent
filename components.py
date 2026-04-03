@@ -290,12 +290,32 @@ def utilization_bar_chart(utilization: dict) -> alt.Chart:
     return (chart + rules).configure_view(strokeWidth=0)
 
 
+_HEALTH_EMOJI = {
+    "NOT STARTED":           "⚪ NOT STARTED",
+    "NEEDS FUNCTIONAL SPEC": "🔵 NEEDS FUNCTIONAL SPEC",
+    "NEEDS TECHNICAL SPEC":  "🔵 NEEDS TECHNICAL SPEC",
+    "ON TRACK":              "🟢 ON TRACK",
+    "AT RISK":               "🟡 AT RISK",
+    "NEEDS HELP":            "🔴 NEEDS HELP",
+    "COMPLETE":              "✅ COMPLETE",
+    "POSTPONED":             "⏸️ POSTPONED",
+}
+
+
 def clean_health(health: str) -> str:
-    """Strip emoji prefixes from health values for clean table display."""
+    """Ensure health values have emoji prefixes for visual display."""
     if not health:
         return ""
-    cleaned = health.encode('ascii', 'ignore').decode('ascii').strip()
-    return cleaned if cleaned else health.strip()
+    h = health.strip()
+    # Already has emoji — return as-is
+    if h and not h[0].isascii():
+        return h
+    # Try to add emoji based on the text
+    h_upper = h.upper()
+    for key, val in _HEALTH_EMOJI.items():
+        if key in h_upper:
+            return val
+    return h
 
 
 def health_label(health: str) -> str:

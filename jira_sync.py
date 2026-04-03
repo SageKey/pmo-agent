@@ -44,12 +44,12 @@ DB_PATH = Path(__file__).parent / "pmo_data.db"
 # Jira has granular workflow statuses; PMO has broader categories.
 # Strip emojis and normalize before lookup.
 JIRA_HEALTH_MAP = {
-    "NOT STARTED":              "NOT STARTED",
-    "NEEDS FUNCTIONAL SPEC":    "NEEDS FUNCTIONAL SPEC",
-    "NEEDS TECHNICAL SPEC":     "NEEDS TECHNICAL SPEC",
+    "NOT STARTED":              "⚪ NOT STARTED",
+    "NEEDS FUNCTIONAL SPEC":    "🔵 NEEDS FUNCTIONAL SPEC",
+    "NEEDS TECHNICAL SPEC":     "🔵 NEEDS TECHNICAL SPEC",
     "NEEDS SPEC":               None,  # Ignore generic — use granular versions
-    "NEEDS KICKSTART BRIEF":    "NOT STARTED",
-    "KICKSTART RECEIVED":       "NOT STARTED",
+    "NEEDS KICKSTART BRIEF":    "⚪ NOT STARTED",
+    "KICKSTART RECEIVED":       "⚪ NOT STARTED",
     "SPEC REVIEW IN PROGRESS":  "🟢 ON TRACK",
     "PROJECT APPROVED":         "🟢 ON TRACK",
     "ESTIMATE RECEIVED":        "🟢 ON TRACK",
@@ -60,8 +60,8 @@ JIRA_HEALTH_MAP = {
     "ON TRACK":                 "🟢 ON TRACK",
     "AT RISK":                  "🟡 AT RISK",
     "NEEDS HELP":               "🔴 NEEDS HELP",
-    "COMPLETE":                 "COMPLETE",
-    "POSTPONED":                "POSTPONED",
+    "COMPLETE":                 "✅ COMPLETE",
+    "POSTPONED":                "⏸️ POSTPONED",
 }
 
 
