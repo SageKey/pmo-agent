@@ -635,12 +635,12 @@ CREATE TABLE vendor_consultants (
 );
 INSERT INTO vendor_consultants VALUES(1,'Ajay Kumar','MSA',0.0,'functional',1);
 INSERT INTO vendor_consultants VALUES(2,'Bhavya Reddy','T&M',60.0,'technical',1);
-INSERT INTO vendor_consultants VALUES(3,'Deepak Gudwani','T&M',0.0,'functional',1);
+INSERT INTO vendor_consultants VALUES(3,'Deepak Gudwani','T&M',65.0,'functional',1);
 INSERT INTO vendor_consultants VALUES(4,'Ravindra Reddy','MSA',0.0,'technical',1);
 INSERT INTO vendor_consultants VALUES(5,'Sangamesh Koti','MSA',0.0,'technical',1);
 INSERT INTO vendor_consultants VALUES(6,'Sarath Yeturu','T&M',200.0,'technical',1);
 INSERT INTO vendor_consultants VALUES(7,'Vinod Bollepally','MSA',0.0,'dba',1);
-INSERT INTO vendor_consultants VALUES(8,'Vishnu Premen','T&M',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(8,'Vishnu Premen','T&M',65.0,'technical',1);
 INSERT INTO vendor_consultants VALUES(9,'Akhilesh Mishra','T&M',65.0,'technical',1);
 CREATE TABLE vendor_timesheets (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
