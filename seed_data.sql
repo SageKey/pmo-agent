@@ -634,7 +634,7 @@ CREATE TABLE vendor_consultants (
     active          INTEGER NOT NULL DEFAULT 1
 );
 INSERT INTO vendor_consultants VALUES(1,'Ajay Kumar','MSA',65.0,'functional',1);
-INSERT INTO vendor_consultants VALUES(2,'Bhavya Reddy','T&M',60.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(2,'Bhavya Reddy','T&M',65.0,'technical',1);
 INSERT INTO vendor_consultants VALUES(3,'Deepak Gudwani','T&M',65.0,'functional',1);
 INSERT INTO vendor_consultants VALUES(4,'Ravindra Reddy','MSA',65.0,'technical',1);
 INSERT INTO vendor_consultants VALUES(5,'Sangamesh Koti','T&M',65.0,'technical',1);
