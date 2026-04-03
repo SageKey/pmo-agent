@@ -56,9 +56,10 @@ def _migrate_vendor_tables():
             conn.close()
             return  # Table doesn't exist yet — _ensure_schema will create it
 
-        # If populated, check if names need unification (short → full)
+        # If populated, fix classifications and names
         if count > 0:
             _unify_vendor_names(conn)
+            _fix_vendor_consultants(conn)
             _fix_team_classifications(conn)
             _seed_project_mappings(conn)
             conn.close()
@@ -116,6 +117,36 @@ def _unify_vendor_names(conn):
         if cur[0] > 0:
             conn.execute(
                 "UPDATE vendor_consultants SET name = ? WHERE name = ?", (full, short)
+            )
+            changed = True
+    if changed:
+        conn.commit()
+
+
+def _fix_vendor_consultants(conn):
+    """Fix billing_type and hourly_rate in vendor_consultants to match canonical values.
+    This runs on every startup to ensure cloud DB stays in sync."""
+    CANONICAL = {
+        "Ajay Kumar":       ("MSA", 65.0),
+        "Ravindra Reddy":   ("MSA", 65.0),
+        "Sarath Yeturu":    ("MSA", 200.0),
+        "Vinod Bollepally":  ("MSA", 65.0),
+        "Sangamesh Koti":   ("T&M", 65.0),
+        "Bhavya Reddy":     ("T&M", 65.0),
+        "Akhilesh Mishra":  ("T&M", 65.0),
+        "Deepak Gudwani":   ("T&M", 65.0),
+        "Vishnu Premen":    ("T&M", 65.0),
+    }
+    changed = False
+    for name, (billing, rate) in CANONICAL.items():
+        cur = conn.execute(
+            "SELECT billing_type, hourly_rate FROM vendor_consultants WHERE name = ?",
+            (name,),
+        ).fetchone()
+        if cur and (cur[0] != billing or abs(cur[1] - rate) > 0.01):
+            conn.execute(
+                "UPDATE vendor_consultants SET billing_type = ?, hourly_rate = ? WHERE name = ?",
+                (billing, rate, name),
             )
             changed = True
     if changed:
