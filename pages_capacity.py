@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    section_header, supply_demand_chart, kpi_card,
+    section_header, supply_demand_chart, kpi_card, kpi_row,
     util_status, util_color, ROLE_DISPLAY, ROLE_ORDER,
     GREEN, YELLOW, RED, GRAY,
 )
@@ -22,46 +22,22 @@ def render(data: dict, utilization: dict, person_demand: list):
     # --- Role Utilization Metrics ---
     section_header("Role Utilization")
 
-    # First row of 4
     roles_with_data = [r for r in ROLE_ORDER if r in utilization]
-    row1 = roles_with_data[:4]
-    row2 = roles_with_data[4:]
 
-    if row1:
-        cols = st.columns(len(row1))
-        for i, role_key in enumerate(row1):
-            u = utilization[role_key]
-            pct = u["utilization_pct"]
-            supply = u["supply_hrs_week"]
-            demand = u["demand_hrs_week"]
-            surplus = supply - demand
-            delta_str = f"{surplus:+.1f} hrs {'surplus' if surplus >= 0 else 'deficit'}"
-            color = util_status(pct).lower()
-            with cols[i]:
-                kpi_card(
-                    ROLE_DISPLAY.get(role_key, role_key),
-                    f"{pct:.0%}" if pct != float("inf") else "OVER",
-                    color,
-                    delta_str,
-                )
+    items = []
+    for role_key in roles_with_data:
+        u = utilization[role_key]
+        pct = u["utilization_pct"]
+        surplus = u["supply_hrs_week"] - u["demand_hrs_week"]
+        items.append({
+            "label": ROLE_DISPLAY.get(role_key, role_key),
+            "value": f"{pct:.0%}" if pct != float("inf") else "OVER",
+            "color": util_status(pct).lower(),
+            "delta": f"{surplus:+.1f} hrs {'surplus' if surplus >= 0 else 'deficit'}",
+        })
 
-    if row2:
-        cols = st.columns(len(row2))
-        for i, role_key in enumerate(row2):
-            u = utilization[role_key]
-            pct = u["utilization_pct"]
-            supply = u["supply_hrs_week"]
-            demand = u["demand_hrs_week"]
-            surplus = supply - demand
-            delta_str = f"{surplus:+.1f} hrs {'surplus' if surplus >= 0 else 'deficit'}"
-            color = util_status(pct).lower()
-            with cols[i]:
-                kpi_card(
-                    ROLE_DISPLAY.get(role_key, role_key),
-                    f"{pct:.0%}" if pct != float("inf") else "OVER",
-                    color,
-                    delta_str,
-                )
+    if items:
+        kpi_row(items)
 
     # --- Person-Level Utilization ---
     section_header("Person-Level Utilization")

@@ -18,7 +18,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from components import kpi_card, section_header, is_finance_user, NAVY
+from components import kpi_card, kpi_row, section_header, is_finance_user, NAVY
 from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
 
@@ -126,13 +126,11 @@ def _render_entry_tab(consultants: list[dict]):
         support_hrs = sum(e["hours"] for e in week_entries if e.get("work_type") == "Support")
 
         # Week summary KPIs
-        kc1, kc2, kc3 = st.columns(3)
-        with kc1:
-            kpi_card("Week Total", f"{total_hrs:.0f}h", "navy")
-        with kc2:
-            kpi_card("Project", f"{project_hrs:.0f}h", "navy")
-        with kc3:
-            kpi_card("Support", f"{support_hrs:.0f}h", "navy")
+        kpi_row([
+            {"label": "Week Total", "value": f"{total_hrs:.0f}h"},
+            {"label": "Project", "value": f"{project_hrs:.0f}h"},
+            {"label": "Support", "value": f"{support_hrs:.0f}h"},
+        ])
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
 
@@ -356,17 +354,13 @@ def _render_review_tab(consultants: list[dict]):
     msa_effective_rate = MSA_MONTHLY_FEE / msa_hrs if msa_hrs > 0 else 0
 
     # --- Top-level KPIs ---
-    kc1, kc2, kc3, kc4, kc5 = st.columns(5)
-    with kc1:
-        kpi_card("Total Hours", f"{total_hrs:,.0f}", "navy")
-    with kc2:
-        kpi_card("MSA Hours", f"{msa_hrs:,.0f}", "navy")
-    with kc3:
-        kpi_card("T&M Hours", f"{tm_hrs:,.0f}", "navy")
-    with kc4:
-        kpi_card("T&M Cost", f"${tm_cost:,.0f}", "navy")
-    with kc5:
-        kpi_card("Total Cost", f"${total_cost:,.0f}", "navy")
+    kpi_row([
+        {"label": "Total Hours", "value": f"{total_hrs:,.0f}"},
+        {"label": "MSA Hours", "value": f"{msa_hrs:,.0f}"},
+        {"label": "T&M Hours", "value": f"{tm_hrs:,.0f}"},
+        {"label": "T&M Cost", "value": f"${tm_cost:,.0f}"},
+        {"label": "Total Cost", "value": f"${total_cost:,.0f}"},
+    ])
 
     st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 
@@ -378,19 +372,16 @@ def _render_review_tab(consultants: list[dict]):
     msa_members = [s for s in summary if s["billing_type"] == "MSA"]
     msa_work_value = msa_hrs * BLENDED_RATE
 
-    mu1, mu2, mu3, mu4 = st.columns(4)
-    with mu1:
-        kpi_card("MSA Fee", f"${MSA_MONTHLY_FEE:,.0f}", "navy")
-    with mu2:
-        kpi_card("Work Value", f"${msa_work_value:,.0f}",
-                 "green" if msa_work_value >= MSA_MONTHLY_FEE else "red")
-    with mu3:
-        roi_pct = (msa_work_value / MSA_MONTHLY_FEE * 100) if MSA_MONTHLY_FEE > 0 else 0
-        color = "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")
-        kpi_card("MSA ROI", f"{roi_pct:.0f}%", color)
-    with mu4:
-        color = "green" if msa_effective_rate <= BLENDED_RATE else ("yellow" if msa_effective_rate <= 80 else "red")
-        kpi_card("Effective Rate", f"${msa_effective_rate:.0f}/hr", color)
+    roi_pct = (msa_work_value / MSA_MONTHLY_FEE * 100) if MSA_MONTHLY_FEE > 0 else 0
+    kpi_row([
+        {"label": "MSA Fee", "value": f"${MSA_MONTHLY_FEE:,.0f}"},
+        {"label": "Work Value", "value": f"${msa_work_value:,.0f}",
+         "color": "green" if msa_work_value >= MSA_MONTHLY_FEE else "red"},
+        {"label": "MSA ROI", "value": f"{roi_pct:.0f}%",
+         "color": "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")},
+        {"label": "Effective Rate", "value": f"${msa_effective_rate:.0f}/hr",
+         "color": "green" if msa_effective_rate <= BLENDED_RATE else ("yellow" if msa_effective_rate <= 80 else "red")},
+    ])
 
     # MSA insight text
     if msa_work_value >= MSA_MONTHLY_FEE:
@@ -634,21 +625,17 @@ def _render_approvals_tab(consultants: list[dict]):
     n_approved = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "approved")
     n_rejected = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "rejected")
 
-    kc1, kc2, kc3, kc4, kc5 = st.columns(5)
-    with kc1:
-        kpi_card("Total Hours", f"{total_hrs:,.0f}", "navy")
-    with kc2:
-        color = "yellow" if n_draft > 0 else "green"
-        kpi_card("Draft", n_draft, color)
-    with kc3:
-        color = "yellow" if n_submitted > 0 else "green"
-        kpi_card("Submitted", n_submitted, color)
-    with kc4:
-        color = "green" if n_approved == n_consultants else "navy"
-        kpi_card("Approved", n_approved, color)
-    with kc5:
-        color = "red" if n_rejected > 0 else "green"
-        kpi_card("Rejected", n_rejected, color)
+    kpi_row([
+        {"label": "Total Hours", "value": f"{total_hrs:,.0f}"},
+        {"label": "Draft", "value": n_draft,
+         "color": "yellow" if n_draft > 0 else "green"},
+        {"label": "Submitted", "value": n_submitted,
+         "color": "yellow" if n_submitted > 0 else "green"},
+        {"label": "Approved", "value": n_approved,
+         "color": "green" if n_approved == n_consultants else "navy"},
+        {"label": "Rejected", "value": n_rejected,
+         "color": "red" if n_rejected > 0 else "green"},
+    ])
 
     st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
 
@@ -924,16 +911,13 @@ def _render_invoices_tab():
     total_paid = sum(i["total_amount"] for i in invoices if i["paid"])
     outstanding = total_invoiced - total_paid
 
-    kc1, kc2, kc3, kc4 = st.columns(4)
-    with kc1:
-        kpi_card(f"FY{today.year} Invoiced", f"${total_invoiced:,.0f}", "navy")
-    with kc2:
-        kpi_card("MSA Fees", f"${total_msa:,.0f}", "navy")
-    with kc3:
-        kpi_card("T&M Invoiced", f"${total_tm_invoiced:,.0f}", "navy")
-    with kc4:
-        color = "red" if outstanding > 0 else "green"
-        kpi_card("Outstanding", f"${outstanding:,.0f}", color)
+    kpi_row([
+        {"label": f"FY{today.year} Invoiced", "value": f"${total_invoiced:,.0f}"},
+        {"label": "MSA Fees", "value": f"${total_msa:,.0f}"},
+        {"label": "T&M Invoiced", "value": f"${total_tm_invoiced:,.0f}"},
+        {"label": "Outstanding", "value": f"${outstanding:,.0f}",
+         "color": "red" if outstanding > 0 else "green"},
+    ])
 
     st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 
@@ -1157,16 +1141,13 @@ def _render_approved_work_tab():
         n_support = sum(1 for w in work_items if w.get("work_classification") == "Support")
         n_pending = sum(1 for w in work_items if not w.get("approved_date"))
 
-        kc1, kc2, kc3, kc4 = st.columns(4)
-        with kc1:
-            kpi_card("Total Items", len(work_items), "navy")
-        with kc2:
-            kpi_card("CapEx", n_capex, "navy")
-        with kc3:
-            kpi_card("Support", n_support, "navy")
-        with kc4:
-            color = "yellow" if n_pending > 0 else "green"
-            kpi_card("Pending Approval", n_pending, color)
+        kpi_row([
+            {"label": "Total Items", "value": len(work_items)},
+            {"label": "CapEx", "value": n_capex},
+            {"label": "Support", "value": n_support},
+            {"label": "Pending Approval", "value": n_pending,
+             "color": "yellow" if n_pending > 0 else "green"},
+        ])
 
         st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
 
@@ -1289,17 +1270,14 @@ def _render_mapping_tab(data: dict):
     unmapped_hrs = sum(u["total_hours"] for u in unmapped)
     coverage_pct = (n_mapped / total_sse * 100) if total_sse > 0 else 0
 
-    kc1, kc2, kc3, kc4 = st.columns(4)
-    with kc1:
-        kpi_card("SSE Tasks", total_sse, "navy")
-    with kc2:
-        color = "green" if coverage_pct >= 80 else ("yellow" if coverage_pct >= 50 else "red")
-        kpi_card("Mapped", f"{n_mapped} ({coverage_pct:.0f}%)", color)
-    with kc3:
-        color = "green" if n_unmapped == 0 else ("yellow" if n_unmapped <= 5 else "red")
-        kpi_card("Unmapped", n_unmapped, color)
-    with kc4:
-        kpi_card("Unmapped Hours", f"{unmapped_hrs:,.0f}h", "navy")
+    kpi_row([
+        {"label": "SSE Tasks", "value": total_sse},
+        {"label": "Mapped", "value": f"{n_mapped} ({coverage_pct:.0f}%)",
+         "color": "green" if coverage_pct >= 80 else ("yellow" if coverage_pct >= 50 else "red")},
+        {"label": "Unmapped", "value": n_unmapped,
+         "color": "green" if n_unmapped == 0 else ("yellow" if n_unmapped <= 5 else "red")},
+        {"label": "Unmapped Hours", "value": f"{unmapped_hrs:,.0f}h"},
+    ])
 
     st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
 

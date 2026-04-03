@@ -7,7 +7,7 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from components import kpi_card, section_header, is_finance_user, NAVY
+from components import kpi_card, kpi_row, section_header, is_finance_user, NAVY
 from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
 
@@ -255,17 +255,14 @@ def render(data: dict, utilization: dict, person_demand: list):
         remaining = annual_budget - total_spent
         burn_pct = total_spent / annual_budget * 100
 
-        fc1, fc2, fc3, fc4 = st.columns(4)
-        with fc1:
-            kpi_card("Annual Budget", f"${annual_budget:,.0f}", "navy")
-        with fc2:
-            kpi_card(f"FY{fiscal_year} Spent", f"${total_spent:,.0f}", "navy")
-        with fc3:
-            color = "green" if remaining >= 0 else "red"
-            kpi_card("Remaining", f"${remaining:,.0f}", color)
-        with fc4:
-            color = "green" if burn_pct <= 75 else ("yellow" if burn_pct <= 90 else "red")
-            kpi_card("Burned", f"{burn_pct:.0f}%", color)
+        kpi_row([
+            {"label": "Annual Budget", "value": f"${annual_budget:,.0f}"},
+            {"label": f"FY{fiscal_year} Spent", "value": f"${total_spent:,.0f}"},
+            {"label": "Remaining", "value": f"${remaining:,.0f}",
+             "color": "green" if remaining >= 0 else "red"},
+            {"label": "Burned", "value": f"{burn_pct:.0f}%",
+             "color": "green" if burn_pct <= 75 else ("yellow" if burn_pct <= 90 else "red")},
+        ])
 
         # Burn-down bar
         burn_frac = min(total_spent / annual_budget, 1.0)
@@ -324,19 +321,15 @@ def render(data: dict, utilization: dict, person_demand: list):
     if ts_total_hrs > 0:
         section_header(f"FY{fiscal_year} Synnergie Vendor Billing")
 
-        vc1, vc2, vc3, vc4, vc5 = st.columns(5)
-        with vc1:
-            kpi_card("MSA Fees", f"${ts_msa_cost:,.0f}", "navy")
-        with vc2:
-            kpi_card("T&M Cost", f"${ts_tm_cost:,.0f}", "navy")
-        with vc3:
-            kpi_card("Total Vendor", f"${ts_total_vendor_cost:,.0f}", "navy")
-        with vc4:
-            kpi_card("Total Hours", f"{ts_total_hrs:,.0f}", "navy")
-        with vc5:
-            roi_pct = (ts_msa_work_value / ts_msa_cost * 100) if ts_msa_cost > 0 else 0
-            color = "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")
-            kpi_card("MSA ROI", f"{roi_pct:.0f}%", color)
+        roi_pct = (ts_msa_work_value / ts_msa_cost * 100) if ts_msa_cost > 0 else 0
+        kpi_row([
+            {"label": "MSA Fees", "value": f"${ts_msa_cost:,.0f}"},
+            {"label": "T&M Cost", "value": f"${ts_tm_cost:,.0f}"},
+            {"label": "Total Vendor", "value": f"${ts_total_vendor_cost:,.0f}"},
+            {"label": "Total Hours", "value": f"{ts_total_hrs:,.0f}"},
+            {"label": "MSA ROI", "value": f"{roi_pct:.0f}%",
+             "color": "green" if roi_pct >= 100 else ("yellow" if roi_pct >= 80 else "red")},
+        ])
 
         # MSA + T&M cost bar per month
         vendor_month_rows = []
@@ -482,16 +475,17 @@ def render(data: dict, utilization: dict, person_demand: list):
             vendor_df = pd.concat([vendor_df, new_row], ignore_index=True)
 
     if not vendor_df.empty:
-        v_cols = st.columns(len(vendor_df))
-        for col, (_, row) in zip(v_cols, vendor_df.iterrows()):
-            with col:
-                kpi_card(
-                    f"{row['Vendor']} ({row['Headcount']})",
-                    f"${row['Actual Spend']:,.0f}",
-                    "navy",
-                )
-                if row["Forecast Spend"] > row["Actual Spend"]:
-                    st.caption(f"Forecast: ${row['Forecast Spend']:,.0f}")
+        vendor_items = []
+        for _, row in vendor_df.iterrows():
+            delta = None
+            if row["Forecast Spend"] > row["Actual Spend"]:
+                delta = f"Forecast: ${row['Forecast Spend']:,.0f}"
+            vendor_items.append({
+                "label": f"{row['Vendor']} ({row['Headcount']})",
+                "value": f"${row['Actual Spend']:,.0f}",
+                "delta": delta,
+            })
+        kpi_row(vendor_items)
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
 

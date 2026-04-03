@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    kpi_card, section_header, clean_health, health_label, util_status,
+    kpi_card, kpi_row, section_header, clean_health, health_label, util_status,
     is_finance_user,
     ROLE_DISPLAY, ROLE_ORDER, NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
     HEALTH_COLOR_MAP,
@@ -1142,18 +1142,15 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
         est = analysis["duration_est"]
         section_header("Bottom-Up Duration Estimate")
 
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            kpi_card("Estimated Duration", f"{est['total_duration_days']:.0f} days", "navy")
-        with col_b:
-            kpi_card("Allocated Hours", f"{est['allocated_hours']:,.0f}", "navy")
-        with col_c:
-            reconciled = est.get("reconciled", False)
-            gap = est.get("gap_hours", 0)
-            if reconciled:
-                kpi_card("Reconciliation", "Balanced", "green")
-            else:
-                kpi_card("Unallocated Hours", f"{gap:,.0f}", "yellow")
+        reconciled = est.get("reconciled", False)
+        gap = est.get("gap_hours", 0)
+        kpi_row([
+            {"label": "Estimated Duration", "value": f"{est['total_duration_days']:.0f} days"},
+            {"label": "Allocated Hours", "value": f"{est['allocated_hours']:,.0f}"},
+            {"label": "Reconciliation" if reconciled else "Unallocated Hours",
+             "value": "Balanced" if reconciled else f"{gap:,.0f}",
+             "color": "green" if reconciled else "yellow"},
+        ])
 
         # Phase breakdown table
         phase_data = []
@@ -1233,19 +1230,14 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
             # Compare with current dates
             has_current_dates = project.start_date and project.end_date
 
-            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-            with col_s1:
-                if offset_weeks == 0:
-                    kpi_card("Earliest Start", "Immediately", "green")
-                else:
-                    kpi_card("Earliest Start", f"In {offset_weeks} wks", "yellow"
-                             if offset_weeks <= 4 else "red")
-            with col_s2:
-                kpi_card("Suggested Start", sug_start.strftime("%b %d, %Y"), "navy")
-            with col_s3:
-                kpi_card("Projected End", sug_end.strftime("%b %d, %Y"), "navy")
-            with col_s4:
-                kpi_card("Duration", f"{duration_days:.0f} business days", "navy")
+            kpi_row([
+                {"label": "Earliest Start",
+                 "value": "Immediately" if offset_weeks == 0 else f"In {offset_weeks} wks",
+                 "color": "green" if offset_weeks == 0 else ("yellow" if offset_weeks <= 4 else "red")},
+                {"label": "Suggested Start", "value": sug_start.strftime("%b %d, %Y")},
+                {"label": "Projected End", "value": sug_end.strftime("%b %d, %Y")},
+                {"label": "Duration", "value": f"{duration_days:.0f} biz days"},
+            ])
 
             # If project has current dates, show comparison
             if has_current_dates:

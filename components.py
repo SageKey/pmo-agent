@@ -87,35 +87,58 @@ def inject_css():
         .kpi-card {
             background: #FFFFFF;
             border-radius: 12px;
-            padding: 1.25rem 1.5rem;
+            padding: 1rem 1.25rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             border-left: 4px solid #4A90D9;
             margin-bottom: 0.5rem;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
         .kpi-card.green { border-left-color: #28A745; }
         .kpi-card.yellow { border-left-color: #FFC107; }
         .kpi-card.red { border-left-color: #DC3545; }
         .kpi-card.navy { border-left-color: #1B3A5C; }
         .kpi-label {
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
             color: #6C757D;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .kpi-value {
-            font-size: 2rem;
+            font-size: 1.5rem;
             font-weight: 700;
             color: #1B3A5C;
             line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .kpi-delta {
-            font-size: 0.8rem;
-            margin-top: 0.25rem;
+            font-size: 0.75rem;
+            margin-top: 0.2rem;
         }
         .kpi-delta.positive { color: #28A745; }
         .kpi-delta.negative { color: #DC3545; }
+
+        /* Flex KPI row — responsive card container */
+        .kpi-flex-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+        .kpi-flex-row .kpi-card {
+            flex: 1;
+            min-width: 140px;
+            margin-bottom: 0;
+        }
 
         /* Section headers */
         .section-header {
@@ -171,35 +194,16 @@ def inject_css():
         }
 
         /* Responsive KPI cards for smaller screens */
-        @media (max-width: 1400px) {
+        @media (max-width: 1200px) {
             .kpi-card {
-                padding: 0.9rem 1rem;
-            }
-            .kpi-value {
-                font-size: 1.6rem;
-            }
-            .kpi-label {
-                font-size: 0.72rem;
-            }
-        }
-        @media (max-width: 1100px) {
-            .kpi-card {
-                padding: 0.65rem 0.75rem;
+                padding: 0.75rem 1rem;
+                min-height: 70px;
             }
             .kpi-value {
                 font-size: 1.3rem;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
             }
-            .kpi-label {
-                font-size: 0.68rem;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .kpi-delta {
-                font-size: 0.72rem;
+            .kpi-flex-row .kpi-card {
+                min-width: 120px;
             }
             [data-testid="stMetricValue"] {
                 font-size: 1.4rem !important;
@@ -210,13 +214,17 @@ def inject_css():
         }
         @media (max-width: 900px) {
             .kpi-card {
-                padding: 0.5rem 0.6rem;
+                padding: 0.6rem 0.75rem;
+                min-height: 60px;
             }
             .kpi-value {
                 font-size: 1.1rem;
             }
             .kpi-label {
                 font-size: 0.65rem;
+            }
+            .kpi-flex-row .kpi-card {
+                min-width: 100px;
             }
             [data-testid="stMetricValue"] {
                 font-size: 1.2rem !important;
@@ -230,18 +238,45 @@ def inject_css():
 # KPI Cards
 # ---------------------------------------------------------------------------
 def kpi_card(label: str, value, color: str = "navy", delta: str = None):
-    """Render a styled KPI card."""
+    """Render a styled KPI card (use inside st.columns or on its own)."""
     delta_html = ""
     if delta:
         css_class = "positive" if not delta.startswith("-") else "negative"
         delta_html = f'<div class="kpi-delta {css_class}">{delta}</div>'
-    st.markdown(f"""
-    <div class="kpi-card {color}">
-        <div class="kpi-label">{label}</div>
-        <div class="kpi-value">{value}</div>
-        {delta_html}
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="kpi-card {color}">'
+        f'<div class="kpi-label">{label}</div>'
+        f'<div class="kpi-value">{value}</div>'
+        f'{delta_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def kpi_row(items: list):
+    """Render a responsive flex row of KPI cards.
+
+    items: list of dicts with keys: label, value, color (optional), delta (optional)
+    """
+    cards = []
+    for item in items:
+        label = item["label"]
+        value = item["value"]
+        color = item.get("color", "navy")
+        delta = item.get("delta")
+        delta_html = ""
+        if delta:
+            css_class = "positive" if not str(delta).startswith("-") else "negative"
+            delta_html = f'<div class="kpi-delta {css_class}">{delta}</div>'
+        cards.append(
+            f'<div class="kpi-card {color}">'
+            f'<div class="kpi-label">{label}</div>'
+            f'<div class="kpi-value">{value}</div>'
+            f'{delta_html}</div>'
+        )
+    st.markdown(
+        '<div class="kpi-flex-row">' + ''.join(cards) + '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def section_header(text: str):

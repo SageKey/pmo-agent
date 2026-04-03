@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    kpi_card, section_header, utilization_bar_chart, health_donut,
+    kpi_card, kpi_row, section_header, utilization_bar_chart, health_donut,
     util_status, health_label, clean_health, NAVY,
 )
 
@@ -18,26 +18,19 @@ def render(data: dict, utilization: dict, person_demand: list):
     roster = data["roster"]
 
     # --- KPI Row ---
-    col1, col2, col3, col4 = st.columns(4)
+    role_utils = [u["utilization_pct"] for u in utilization.values()
+                  if u["supply_hrs_week"] > 0]
+    avg_util = sum(role_utils) / len(role_utils) if role_utils else 0
+    at_risk = sum(1 for u in utilization.values() if u["status"] == "RED")
 
-    with col1:
-        kpi_card("Active Projects", len(active), "navy")
-
-    with col2:
-        kpi_card("Team Size", len(roster), "navy")
-
-    with col3:
-        # Unweighted average of per-role utilization percentages
-        role_utils = [u["utilization_pct"] for u in utilization.values()
-                      if u["supply_hrs_week"] > 0]
-        avg_util = sum(role_utils) / len(role_utils) if role_utils else 0
-        color = util_status(avg_util).lower()
-        kpi_card("Avg Utilization", f"{avg_util:.0%}", color)
-
-    with col4:
-        at_risk = sum(1 for u in utilization.values() if u["status"] == "RED")
-        color = "red" if at_risk > 0 else "green"
-        kpi_card("Roles Over Capacity", at_risk, color)
+    kpi_row([
+        {"label": "Active Projects", "value": len(active)},
+        {"label": "Team Size", "value": len(roster)},
+        {"label": "Avg Utilization", "value": f"{avg_util:.0%}",
+         "color": util_status(avg_util).lower()},
+        {"label": "Roles Over Capacity", "value": at_risk,
+         "color": "red" if at_risk > 0 else "green"},
+    ])
 
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 

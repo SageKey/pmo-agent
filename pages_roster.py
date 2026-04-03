@@ -13,7 +13,7 @@ from typing import Optional
 import streamlit as st
 
 from components import (
-    section_header, kpi_card, util_status,
+    section_header, kpi_card, kpi_row, util_status,
     ROLE_DISPLAY, ROLE_ORDER, NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
 )
 from data_layer import DB_PATH
@@ -91,16 +91,13 @@ def _render_view_mode(member, person_demand: list):
 
     # --- KPI Cards ---
     reserve_pct = round(member.support_reserve_pct * 100)
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        kpi_card("Role", member.role, "navy")
-    with c2:
-        kpi_card("Weekly Hours", f"{member.weekly_hrs_available:.0f}", "navy")
-    with c3:
-        kpi_card("Project Capacity", f"{member.project_capacity_hrs:.1f} hrs/wk", "green")
-    with c4:
-        kpi_card("Support Reserve", f"{reserve_pct}%",
-                 "green" if reserve_pct < 60 else ("yellow" if reserve_pct < 80 else "red"))
+    kpi_row([
+        {"label": "Role", "value": member.role},
+        {"label": "Weekly Hours", "value": f"{member.weekly_hrs_available:.0f}"},
+        {"label": "Project Capacity", "value": f"{member.project_capacity_hrs:.1f} hrs/wk", "color": "green"},
+        {"label": "Support Reserve", "value": f"{reserve_pct}%",
+         "color": "green" if reserve_pct < 60 else ("yellow" if reserve_pct < 80 else "red")},
+    ])
 
     # --- Overview & Details side by side ---
     left, right = st.columns(2)
@@ -407,15 +404,12 @@ def render(data: dict, utilization: dict, person_demand: list):
         teams = set(m.team for m in roster if m.team)
         roles_active = set(m.role_key for m in roster)
 
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            kpi_card("Team Members", total_members, "navy")
-        with c2:
-            kpi_card("Weekly Capacity", f"{total_capacity:.0f} hrs", "green")
-        with c3:
-            kpi_card("Teams", len(teams), "navy")
-        with c4:
-            kpi_card("Active Roles", len(roles_active), "navy")
+        kpi_row([
+            {"label": "Team Members", "value": total_members},
+            {"label": "Weekly Capacity", "value": f"{total_capacity:.0f} hrs", "color": "green"},
+            {"label": "Teams", "value": len(teams)},
+            {"label": "Active Roles", "value": len(roles_active)},
+        ])
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
         _render_roster_table(roster)
