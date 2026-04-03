@@ -12,63 +12,85 @@ from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
 
 
-def _monthly_spend(all_projects: list) -> pd.DataFrame:
-    """Spread each project's actual cost evenly across its active months.
-    Returns a DataFrame with columns: Month, Amount."""
-    monthly = defaultdict(float)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    for p in all_projects:
+def _project_overlaps_year(p, year: int) -> bool:
+    """Return True if the project was active during any part of the fiscal year."""
+    fy_start = date(year, 1, 1)
+    fy_end = date(year, 12, 31)
+
+    start = p.start_date
+    end = p.actual_end or p.end_date
+
+    # Projects with no dates — include if they have costs (legacy/unscheduled)
+    if not start and not end:
+        return p.actual_cost > 0 or p.forecast_cost > 0
+
+    # If only one date, use it for both
+    if not start:
+        start = end
+    if not end:
+        end = start
+
+    # Overlap check: project range intersects fiscal year range
+    return start <= fy_end and end >= fy_start
+
+
+def _monthly_spend(projects: list, year: int) -> pd.DataFrame:
+    """Spread each project's actual cost across its active months,
+    filtered to only show months within the fiscal year."""
+    monthly = defaultdict(float)
+    fy_start = date(year, 1, 1)
+    fy_end = date(year, 12, 31)
+
+    for p in projects:
         if p.actual_cost <= 0:
             continue
         start = p.start_date or p.end_date
         end = p.actual_end or p.end_date or p.start_date
         if not start or not end:
             continue
-        # Clamp to reasonable range
         if end < start:
             end = start
 
-        # Build list of (year, month) tuples the project spans
-        months = []
+        # Build list of months the project spans
+        all_months = []
         cursor = date(start.year, start.month, 1)
         end_month = date(end.year, end.month, 1)
         while cursor <= end_month:
-            months.append(cursor)
+            all_months.append(cursor)
             if cursor.month == 12:
                 cursor = date(cursor.year + 1, 1, 1)
             else:
                 cursor = date(cursor.year, cursor.month + 1, 1)
 
-        if not months:
-            months = [date(start.year, start.month, 1)]
+        if not all_months:
+            all_months = [date(start.year, start.month, 1)]
 
-        per_month = p.actual_cost / len(months)
-        for m in months:
-            monthly[m] += per_month
+        per_month = p.actual_cost / len(all_months)
+
+        # Only include months within the fiscal year
+        for m in all_months:
+            if fy_start <= m <= fy_end:
+                monthly[m] += per_month
 
     if not monthly:
+        # Return empty frame with all 12 months for the year
         return pd.DataFrame(columns=["Month", "Amount"])
 
     rows = [{"Month": k, "Amount": round(v, 2)} for k, v in sorted(monthly.items())]
     return pd.DataFrame(rows)
 
 
-def _vendor_spend(roster: list, assignments: list, all_projects: list) -> pd.DataFrame:
-    """Calculate vendor spend based on assignments, rates, and project costs.
-    Allocates each project's actual cost proportionally to assigned team members,
-    then groups by vendor."""
-
-    # Build lookup: person_name → TeamMember
+def _vendor_spend(roster: list, assignments: list, projects: list) -> pd.DataFrame:
+    """Calculate vendor spend based on assignments, rates, and project costs."""
     member_map = {m.name: m for m in roster}
+    project_map = {p.id: p for p in projects}
 
-    # Build lookup: project_id → Project
-    project_map = {p.id: p for p in all_projects}
-
-    # For each project, find assigned members and their weekly hours
-    # Then allocate cost proportionally
     vendor_totals = defaultdict(lambda: {"actual": 0.0, "forecast": 0.0, "headcount": set()})
 
-    # Group assignments by project
     project_assignments = defaultdict(list)
     for a in assignments:
         project_assignments[a.project_id].append(a)
@@ -78,7 +100,6 @@ def _vendor_spend(roster: list, assignments: list, all_projects: list) -> pd.Dat
         if not project:
             continue
 
-        # Calculate each member's weighted contribution
         member_weights = []
         for a in pa_list:
             member = member_map.get(a.person_name)
@@ -92,7 +113,6 @@ def _vendor_spend(roster: list, assignments: list, all_projects: list) -> pd.Dat
         if total_weight <= 0:
             continue
 
-        # Allocate project costs proportionally
         for vendor, name, weight in member_weights:
             share = weight / total_weight
             vendor_totals[vendor]["actual"] += project.actual_cost * share
@@ -114,6 +134,10 @@ def _vendor_spend(roster: list, assignments: list, all_projects: list) -> pd.Dat
     )
 
 
+# ---------------------------------------------------------------------------
+# Main Render
+# ---------------------------------------------------------------------------
+
 def render(data: dict, utilization: dict, person_demand: list):
     """Render the Financials page — visible only to finance-authorized users."""
 
@@ -124,24 +148,62 @@ def render(data: dict, utilization: dict, person_demand: list):
     assumptions = data["assumptions"]
     annual_budget = assumptions.annual_budget
     all_projects = data["portfolio"]
-    active = data["active_portfolio"]
     roster = data["roster"]
     assignments = data["assignments"]
+
+    # ------------------------------------------------------------------
+    # Fiscal Year Selector
+    # ------------------------------------------------------------------
+    current_year = date.today().year
+
+    # Determine available years from project data
+    project_years = set()
+    for p in all_projects:
+        if p.start_date:
+            project_years.add(p.start_date.year)
+        if p.end_date:
+            project_years.add(p.end_date.year)
+    project_years.add(current_year)
+    year_options = sorted(project_years, reverse=True)
+
+    title_col, year_col = st.columns([5, 1])
+    with title_col:
+        st.markdown(f"""
+        <div style="font-size:1.6rem; font-weight:700; color:{NAVY}; margin-bottom:0.25rem;">
+            IT Financial Summary
+        </div>
+        """, unsafe_allow_html=True)
+    with year_col:
+        fiscal_year = st.selectbox(
+            "Fiscal Year",
+            year_options,
+            index=year_options.index(current_year) if current_year in year_options else 0,
+            key="_fiscal_year",
+            label_visibility="collapsed",
+        )
+
+    st.markdown(f"""<div style="font-size:0.85rem; color:#5A6A7E; margin-bottom:1rem;">
+        Fiscal Year {fiscal_year} &nbsp;·&nbsp; January 1 – December 31, {fiscal_year}
+    </div>""", unsafe_allow_html=True)
+
+    # ------------------------------------------------------------------
+    # Filter projects to fiscal year
+    # ------------------------------------------------------------------
+    fy_projects = [p for p in all_projects if _project_overlaps_year(p, fiscal_year)]
+
+    total_spent = sum(p.actual_cost for p in fy_projects)
+    total_forecast = sum(p.forecast_cost for p in fy_projects)
+    effective_forecast = sum(
+        p.forecast_cost if p.forecast_cost > 0 else p.actual_cost
+        for p in fy_projects
+    )
 
     # ==================================================================
     # 1. ANNUAL BUDGET — KPIs + Edit
     # ==================================================================
-    total_spent = sum(p.actual_cost for p in all_projects)
-    total_forecast = sum(p.forecast_cost for p in all_projects)
-    effective_forecast = sum(
-        p.forecast_cost if p.forecast_cost > 0 else p.actual_cost
-        for p in all_projects
-    )
-
-    # Header with edit toggle
     hdr_col, edit_col = st.columns([6, 1])
     with hdr_col:
-        section_header("Annual IT Budget")
+        section_header(f"FY{fiscal_year} Budget")
     with edit_col:
         st.markdown("<div style='height: 0.6rem'></div>", unsafe_allow_html=True)
         editing_budget = st.session_state.get("_editing_budget", False)
@@ -194,7 +256,7 @@ def render(data: dict, utilization: dict, person_demand: list):
         with fc1:
             kpi_card("Annual Budget", f"${annual_budget:,.0f}", "navy")
         with fc2:
-            kpi_card("Spent to Date", f"${total_spent:,.0f}", "navy")
+            kpi_card(f"FY{fiscal_year} Spent", f"${total_spent:,.0f}", "navy")
         with fc3:
             color = "green" if remaining >= 0 else "red"
             kpi_card("Remaining", f"${remaining:,.0f}", color)
@@ -210,7 +272,7 @@ def render(data: dict, utilization: dict, person_demand: list):
 
         st.markdown(f"""
         <div style="margin: 0.5rem 0 0.25rem 0; font-size: 0.8rem; color: #5A6A7E;">
-            Budget Utilization
+            FY{fiscal_year} Budget Utilization
         </div>
         <div style="position: relative; background: #E8ECF1; border-radius: 8px; height: 28px; overflow: hidden;">
             <div style="position: absolute; top: 0; left: 0; height: 100%;
@@ -234,62 +296,73 @@ def render(data: dict, utilization: dict, person_demand: list):
     # ==================================================================
     # 2. MONTHLY SPEND TREND
     # ==================================================================
-    section_header("Monthly Spend Trend")
+    section_header(f"FY{fiscal_year} Monthly Spend")
 
-    monthly_df = _monthly_spend(all_projects)
+    monthly_df = _monthly_spend(fy_projects, fiscal_year)
+
+    # Always show all 12 months for the fiscal year
+    all_months_df = pd.DataFrame({
+        "Month": [date(fiscal_year, m, 1) for m in range(1, 13)],
+    })
+    all_months_df["Label"] = all_months_df["Month"].apply(lambda d: d.strftime("%b"))
+    all_months_df["MonthSort"] = all_months_df["Month"].apply(lambda d: d.isoformat())
+
     if not monthly_df.empty:
-        monthly_df["Label"] = monthly_df["Month"].apply(lambda d: d.strftime("%b %Y"))
+        monthly_df["Label"] = monthly_df["Month"].apply(lambda d: d.strftime("%b"))
         monthly_df["MonthSort"] = monthly_df["Month"].apply(lambda d: d.isoformat())
-
-        # Monthly budget line (annual / 12)
-        monthly_budget = annual_budget / 12 if annual_budget > 0 else 0
-
-        bars = alt.Chart(monthly_df).mark_bar(
-            cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#1B3A5C"
-        ).encode(
-            x=alt.X("Label:N", sort=alt.SortField("MonthSort"), title=None,
-                     axis=alt.Axis(labelAngle=-45, labelFontSize=11)),
-            y=alt.Y("Amount:Q", title="Spend ($)",
-                     axis=alt.Axis(format="$,.0f", labelFontSize=11)),
-            tooltip=[
-                alt.Tooltip("Label:N", title="Month"),
-                alt.Tooltip("Amount:Q", title="Spend", format="$,.0f"),
-            ],
-        )
-
-        layers = [bars]
-
-        if monthly_budget > 0:
-            budget_line = alt.Chart(pd.DataFrame({
-                "y": [monthly_budget]
-            })).mark_rule(
-                color="#E74C3C", strokeDash=[6, 4], strokeWidth=2
-            ).encode(y="y:Q")
-
-            budget_label = alt.Chart(pd.DataFrame({
-                "y": [monthly_budget],
-                "text": [f"Monthly Budget: ${monthly_budget:,.0f}"]
-            })).mark_text(
-                align="right", dx=-5, dy=-8, fontSize=11, color="#E74C3C"
-            ).encode(y="y:Q", text="text:N")
-
-            layers.extend([budget_line, budget_label])
-
-        chart = alt.layer(*layers).properties(height=320)
-        st.altair_chart(chart, use_container_width=True)
+        # Merge to ensure all 12 months shown
+        merged = all_months_df.merge(
+            monthly_df[["MonthSort", "Amount"]], on="MonthSort", how="left"
+        ).fillna(0)
     else:
-        st.info("No monthly spend data available.")
+        merged = all_months_df.copy()
+        merged["Amount"] = 0
+
+    monthly_budget = annual_budget / 12 if annual_budget > 0 else 0
+
+    bars = alt.Chart(merged).mark_bar(
+        cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#1B3A5C"
+    ).encode(
+        x=alt.X("Label:N", sort=list(merged["Label"]), title=None,
+                 axis=alt.Axis(labelAngle=0, labelFontSize=12)),
+        y=alt.Y("Amount:Q", title="Spend ($)",
+                 axis=alt.Axis(format="$,.0f", labelFontSize=11)),
+        tooltip=[
+            alt.Tooltip("Label:N", title="Month"),
+            alt.Tooltip("Amount:Q", title="Spend", format="$,.0f"),
+        ],
+    )
+
+    layers = [bars]
+
+    if monthly_budget > 0:
+        budget_line = alt.Chart(pd.DataFrame({
+            "y": [monthly_budget]
+        })).mark_rule(
+            color="#E74C3C", strokeDash=[6, 4], strokeWidth=2
+        ).encode(y="y:Q")
+
+        budget_label = alt.Chart(pd.DataFrame({
+            "y": [monthly_budget],
+            "text": [f"Monthly Target: ${monthly_budget:,.0f}"]
+        })).mark_text(
+            align="right", dx=-5, dy=-8, fontSize=11, color="#E74C3C"
+        ).encode(y="y:Q", text="text:N")
+
+        layers.extend([budget_line, budget_label])
+
+    chart = alt.layer(*layers).properties(height=320)
+    st.altair_chart(chart, use_container_width=True)
 
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
     # ==================================================================
     # 3. VENDOR / TEAM SPEND
     # ==================================================================
-    section_header("Spend by Vendor / Team")
+    section_header(f"FY{fiscal_year} Spend by Vendor / Team")
 
-    vendor_df = _vendor_spend(roster, assignments, all_projects)
+    vendor_df = _vendor_spend(roster, assignments, fy_projects)
     if not vendor_df.empty:
-        # KPI cards for each vendor
         v_cols = st.columns(len(vendor_df))
         for col, (_, row) in zip(v_cols, vendor_df.iterrows()):
             with col:
@@ -303,7 +376,6 @@ def render(data: dict, utilization: dict, person_demand: list):
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
 
-        # Horizontal stacked bar — actual vs remaining forecast
         chart_rows = []
         for _, row in vendor_df.iterrows():
             chart_rows.append({
@@ -340,12 +412,12 @@ def render(data: dict, utilization: dict, person_demand: list):
 
         st.altair_chart(vendor_chart, use_container_width=True)
     else:
-        st.info("No vendor spend data available.")
+        st.info(f"No vendor spend data for FY{fiscal_year}.")
 
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
     # ==================================================================
-    # 4. STAFFING OPTIMIZATION INSIGHTS
+    # 4. STAFFING INSIGHTS
     # ==================================================================
     section_header("Staffing Insights")
 
@@ -354,7 +426,6 @@ def render(data: dict, utilization: dict, person_demand: list):
         that may be overstaffed or understaffed.
     </div>""", unsafe_allow_html=True)
 
-    # Build roster cost by role
     role_names = {
         "pm": "Project Manager", "ba": "Business Analyst",
         "functional": "Functional", "technical": "Technical",
@@ -367,20 +438,16 @@ def render(data: dict, utilization: dict, person_demand: list):
         supply = u["supply_hrs_week"]
         demand = u["demand_hrs_week"]
         util_pct = u["utilization_pct"]
-        status = u["status"]
 
         if supply <= 0:
             continue
 
-        # Count people and weekly cost for this role
         role_members = [m for m in roster if m.role_key == role_key]
         headcount = len(role_members)
         weekly_cost = sum(m.rate_per_hour * m.weekly_hrs_available for m in role_members)
         annual_cost = weekly_cost * 52
 
-        # Calculate optimal headcount based on demand
         avg_capacity = supply / headcount if headcount > 0 else 0
-        # Target 75% utilization as healthy
         optimal_demand_supply = demand / 0.75 if demand > 0 else 0
         optimal_hc = round(optimal_demand_supply / avg_capacity) if avg_capacity > 0 else 0
         delta = headcount - optimal_hc
@@ -405,7 +472,6 @@ def render(data: dict, utilization: dict, person_demand: list):
             "Role": role_names.get(role_key, role_key),
             "Headcount": headcount,
             "Utilization": util_pct,
-            "Status": status,
             "Weekly Cost": weekly_cost,
             "Annual Cost": annual_cost,
             "Optimal HC": max(optimal_hc, 0),
@@ -467,12 +533,12 @@ def render(data: dict, utilization: dict, person_demand: list):
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
     # ==================================================================
-    # 5. PROJECT COST BREAKDOWN TABLE
+    # 5. PROJECT COST DETAIL
     # ==================================================================
-    section_header("Project Cost Detail")
+    section_header(f"FY{fiscal_year} Project Cost Detail")
 
     cost_rows = []
-    for p in all_projects:
+    for p in fy_projects:
         if p.actual_cost > 0 or p.forecast_cost > 0:
             variance = p.forecast_cost - p.actual_cost if p.forecast_cost > 0 else 0
             cost_rows.append({
@@ -531,4 +597,11 @@ def render(data: dict, utilization: dict, person_demand: list):
         html += "</tbody></table>"
         st.markdown(html, unsafe_allow_html=True)
     else:
-        st.info("No project cost data recorded yet.")
+        st.info(f"No project cost data for FY{fiscal_year}.")
+
+    # Project count summary
+    n_fy = len(fy_projects)
+    n_costs = len(cost_rows) if cost_rows else 0
+    st.markdown(f"""<div style="font-size:0.78rem; color:#8BA4C4; margin-top:0.5rem;">
+        {n_fy} projects overlapping FY{fiscal_year} &nbsp;·&nbsp; {n_costs} with cost data
+    </div>""", unsafe_allow_html=True)
