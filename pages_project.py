@@ -626,51 +626,133 @@ def _render_edit_form(project, data):
 def _render_view_mode(project, data, utilization, person_demand):
     """Render the read-only project detail view."""
 
-    # --- KPI Row ---
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        kpi_card("Priority", project.priority or "N/A", "navy")
-    with col2:
-        health = clean_health(project.health)
-        h_label = health_label(health)
-        h_color = HEALTH_KPI_COLOR.get(h_label, "navy")
-        kpi_card("Health", h_label, h_color)
-    with col3:
-        kpi_card("% Complete", f"{project.pct_complete:.0%}", "navy")
-    with col4:
-        kpi_card("Est Hours", f"{project.est_hours:,.0f}" if project.est_hours else "N/A", "navy")
-    with col5:
-        if project.duration_weeks:
-            kpi_card("Duration", f"{project.duration_weeks:.0f} wks", "navy")
-        else:
-            kpi_card("Duration", "Not scheduled", "navy")
+    # --- Health badge colors ---
+    health = clean_health(project.health)
+    h_label = health_label(health)
+    _BADGE_STYLES = {
+        "On Track":         ("background:#D4EDDA; color:#155724;", "🟢"),
+        "Complete":         ("background:#D1ECF1; color:#0C5460;", "✅"),
+        "At Risk":          ("background:#FFF3CD; color:#856404;", "🟡"),
+        "Needs Func Spec":  ("background:#E8DAEF; color:#4A235A;", "🔵"),
+        "Needs Tech Spec":  ("background:#E8DAEF; color:#4A235A;", "🔵"),
+        "Needs Spec":       ("background:#E8DAEF; color:#4A235A;", "🔵"),
+        "Needs Help":       ("background:#F8D7DA; color:#721C24;", "🔴"),
+        "Not Started":      ("background:#E9ECEF; color:#495057;", "⚪"),
+        "Postponed":        ("background:#E9ECEF; color:#495057;", "⏸️"),
+    }
+    _PRIORITY_BADGE = {
+        "Highest": "background:#F8D7DA; color:#721C24;",
+        "High":    "background:#FDEBD0; color:#784212;",
+        "Medium":  "background:#D6EAF8; color:#1B4F72;",
+        "Low":     "background:#E9ECEF; color:#495057;",
+    }
+
+    health_style, health_icon = _BADGE_STYLES.get(h_label, ("background:#E9ECEF; color:#495057;", ""))
+    priority_style = _PRIORITY_BADGE.get(project.priority or "", "background:#E9ECEF; color:#495057;")
+
+    # Progress bar
+    pct = project.pct_complete
+    pct_display = f"{pct:.0%}"
+    if pct >= 0.8:
+        bar_color = GREEN
+    elif pct >= 0.4:
+        bar_color = BLUE
+    else:
+        bar_color = "#8BA4C4"
+
+    # Duration / Hours
+    duration_str = f"{project.duration_weeks:.0f} wks" if project.duration_weeks else "—"
+    hours_str = f"{project.est_hours:,.0f}" if project.est_hours else "—"
 
     # Jira link
     jira_url = f"https://etedevops.atlassian.net/browse/{project.id}"
-    st.markdown(
-        f'<div style="margin: 0.5rem 0 1rem 0;">'
-        f'<a href="{jira_url}" target="_blank" '
-        f'style="color:#1565C0; text-decoration:none; font-size:0.85rem; font-weight:500;">'
-        f'🔗 View in Jira: {project.id}</a></div>',
-        unsafe_allow_html=True,
-    )
+
+    # --- Project Summary Card ---
+    st.markdown(f"""
+    <div style="background:#FFFFFF; border-radius:12px; padding:1.25rem 1.5rem;
+                box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">
+        <!-- Badges row -->
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem; margin-bottom:1rem;">
+            <span style="{priority_style} display:inline-block; padding:0.3rem 0.75rem;
+                         border-radius:20px; font-size:0.8rem; font-weight:600;">
+                {project.priority or 'N/A'}</span>
+            <span style="{health_style} display:inline-block; padding:0.3rem 0.75rem;
+                         border-radius:20px; font-size:0.8rem; font-weight:600;">
+                {health_icon} {h_label}</span>
+            <a href="{jira_url}" target="_blank"
+               style="color:#1565C0; text-decoration:none; font-size:0.8rem;
+                      font-weight:500; margin-left:auto;">
+                🔗 {project.id} in Jira</a>
+        </div>
+
+        <!-- Progress -->
+        <div style="margin-bottom:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;
+                        margin-bottom:0.35rem;">
+                <span style="font-size:0.75rem; font-weight:600; color:#6C757D;
+                             text-transform:uppercase; letter-spacing:0.05em;">Progress</span>
+                <span style="font-size:1.1rem; font-weight:700; color:{NAVY};">{pct_display}</span>
+            </div>
+            <div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">
+                <div style="width:{pct*100:.0f}%; height:100%; background:{bar_color};
+                            border-radius:4px; transition:width 0.3s;"></div>
+            </div>
+        </div>
+
+        <!-- Metrics row -->
+        <div style="display:flex; flex-wrap:wrap; gap:1.5rem;">
+            <div>
+                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
+                            text-transform:uppercase; letter-spacing:0.05em;">Est Hours</div>
+                <div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{hours_str}</div>
+            </div>
+            <div>
+                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
+                            text-transform:uppercase; letter-spacing:0.05em;">Duration</div>
+                <div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{duration_str}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # --- Financial KPIs (finance-gated) ---
     if is_finance_user() and (project.budget > 0 or project.actual_cost > 0 or project.forecast_cost > 0):
-        fc1, fc2, fc3, fc4 = st.columns(4)
-        with fc1:
-            kpi_card("Budget", f"${project.budget:,.0f}", "navy")
-        with fc2:
-            kpi_card("Actual Cost", f"${project.actual_cost:,.0f}", "navy")
-        with fc3:
-            kpi_card("Forecast", f"${project.forecast_cost:,.0f}", "navy")
-        with fc4:
-            if project.budget > 0:
-                variance = project.budget - project.forecast_cost
-                color = "green" if variance >= 0 else "red"
-                kpi_card("Variance", f"${variance:,.0f}", color)
-            else:
-                kpi_card("Variance", "N/A", "navy")
+        variance = project.budget - project.forecast_cost if project.budget > 0 else None
+        var_color = GREEN if variance and variance >= 0 else RED
+        var_str = f"${variance:,.0f}" if variance is not None else "N/A"
+
+        st.markdown(f"""
+        <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
+                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                        border-left:4px solid {NAVY};">
+                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
+                            text-transform:uppercase; letter-spacing:0.05em;">Budget</div>
+                <div style="font-size:1.5rem; font-weight:700; color:{NAVY};">${project.budget:,.0f}</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
+                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                        border-left:4px solid {NAVY};">
+                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
+                            text-transform:uppercase; letter-spacing:0.05em;">Actual Cost</div>
+                <div style="font-size:1.5rem; font-weight:700; color:{NAVY};">${project.actual_cost:,.0f}</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
+                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                        border-left:4px solid {NAVY};">
+                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
+                            text-transform:uppercase; letter-spacing:0.05em;">Forecast</div>
+                <div style="font-size:1.5rem; font-weight:700; color:{NAVY};">${project.forecast_cost:,.0f}</div>
+            </div>
+            <div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;
+                        padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                        border-left:4px solid {var_color};">
+                <div style="font-size:0.7rem; font-weight:600; color:#6C757D;
+                            text-transform:uppercase; letter-spacing:0.05em;">Variance</div>
+                <div style="font-size:1.5rem; font-weight:700; color:{var_color};">{var_str}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     # --- Overview + Assignments ---
     left, right = st.columns(2)
