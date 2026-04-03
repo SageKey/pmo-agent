@@ -169,6 +169,59 @@ def inject_css():
             border-radius: 8px;
             overflow: hidden;
         }
+
+        /* Responsive KPI cards for smaller screens */
+        @media (max-width: 1400px) {
+            .kpi-card {
+                padding: 0.9rem 1rem;
+            }
+            .kpi-value {
+                font-size: 1.6rem;
+            }
+            .kpi-label {
+                font-size: 0.72rem;
+            }
+        }
+        @media (max-width: 1100px) {
+            .kpi-card {
+                padding: 0.65rem 0.75rem;
+            }
+            .kpi-value {
+                font-size: 1.3rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .kpi-label {
+                font-size: 0.68rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .kpi-delta {
+                font-size: 0.72rem;
+            }
+            [data-testid="stMetricValue"] {
+                font-size: 1.4rem !important;
+            }
+            [data-testid="stMetricLabel"] {
+                font-size: 0.72rem !important;
+            }
+        }
+        @media (max-width: 900px) {
+            .kpi-card {
+                padding: 0.5rem 0.6rem;
+            }
+            .kpi-value {
+                font-size: 1.1rem;
+            }
+            .kpi-label {
+                font-size: 0.65rem;
+            }
+            [data-testid="stMetricValue"] {
+                font-size: 1.2rem !important;
+            }
+        }
     </style>
     """, unsafe_allow_html=True)
 

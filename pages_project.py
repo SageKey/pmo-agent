@@ -740,8 +740,9 @@ def _render_view_mode(project, data, utilization, person_demand):
                     use_container_width=True,
                 )
 
+@st.dialog("Project Activity", width="large")
 def _render_project_panel(project_id: str, project_name: str):
-    """Render the right-hand collaboration panel for a project."""
+    """Render the collaboration panel for a project as a modal dialog."""
     import uuid
     from pathlib import Path
 
@@ -752,11 +753,6 @@ def _render_project_panel(project_id: str, project_name: str):
         <div style="font-size:1.1rem; font-weight:700; color:{NAVY};">{project_id}</div>
         <div style="font-size:0.83rem; color:#5A6A7E;">{project_name}</div>
     </div>""", unsafe_allow_html=True)
-
-    # Close button
-    if st.button("Close Panel", key="_panel_close", use_container_width=True):
-        st.session_state.pop("panel_project_id", None)
-        st.rerun()
 
     ptab1, ptab2, ptab3, ptab4 = st.tabs(["Activity", "Updates", "Files", "History"])
 
@@ -992,9 +988,6 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
     """
     st.session_state["selected_project_id"] = project.id
 
-    # Check if panel should be open
-    panel_open = st.session_state.get("panel_project_id") == project.id
-
     # --- Header with panel toggle ---
     hdr_col, btn_col = st.columns([6, 1])
     with hdr_col:
@@ -1006,35 +999,15 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
         </div>
         """, unsafe_allow_html=True)
     with btn_col:
-        panel_label = "Close Panel" if panel_open else "💬 Activity"
-        if st.button(panel_label, key="_toggle_panel", use_container_width=True):
-            if panel_open:
-                st.session_state.pop("panel_project_id", None)
-            else:
-                st.session_state["panel_project_id"] = project.id
-            st.rerun()
-
-    # --- Layout: main content + optional panel ---
-    if panel_open:
-        main_col, panel_col = st.columns([65, 35])
-    else:
-        main_col = st.container()
-        panel_col = None
-
-    with main_col:
-        # --- Edit vs View Mode ---
-        if st.session_state.get("edit_mode", False):
-            _render_edit_form(project, data)
-            if panel_col:
-                with panel_col:
-                    _render_project_panel(project.id, project.name)
-            return
-
-        _render_view_mode(project, data, utilization, person_demand)
-
-    if panel_col:
-        with panel_col:
+        if st.button("💬 Activity", key="_toggle_panel", use_container_width=True):
             _render_project_panel(project.id, project.name)
+
+    # --- Edit vs View Mode ---
+    if st.session_state.get("edit_mode", False):
+        _render_edit_form(project, data)
+        return
+
+    _render_view_mode(project, data, utilization, person_demand)
 
     # --- Demand Analysis ---
     mtime = get_file_mtime()
