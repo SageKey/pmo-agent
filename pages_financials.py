@@ -1,11 +1,117 @@
 """Financials page for the ETE PMO Dashboard (finance-gated)."""
 
+from collections import defaultdict
+from datetime import date, timedelta
+
+import altair as alt
 import pandas as pd
 import streamlit as st
 
 from components import kpi_card, section_header, is_finance_user, NAVY
 from sqlite_connector import SQLiteConnector
 from data_layer import DB_PATH
+
+
+def _monthly_spend(all_projects: list) -> pd.DataFrame:
+    """Spread each project's actual cost evenly across its active months.
+    Returns a DataFrame with columns: Month, Amount."""
+    monthly = defaultdict(float)
+
+    for p in all_projects:
+        if p.actual_cost <= 0:
+            continue
+        start = p.start_date or p.end_date
+        end = p.actual_end or p.end_date or p.start_date
+        if not start or not end:
+            continue
+        # Clamp to reasonable range
+        if end < start:
+            end = start
+
+        # Build list of (year, month) tuples the project spans
+        months = []
+        cursor = date(start.year, start.month, 1)
+        end_month = date(end.year, end.month, 1)
+        while cursor <= end_month:
+            months.append(cursor)
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+
+        if not months:
+            months = [date(start.year, start.month, 1)]
+
+        per_month = p.actual_cost / len(months)
+        for m in months:
+            monthly[m] += per_month
+
+    if not monthly:
+        return pd.DataFrame(columns=["Month", "Amount"])
+
+    rows = [{"Month": k, "Amount": round(v, 2)} for k, v in sorted(monthly.items())]
+    return pd.DataFrame(rows)
+
+
+def _vendor_spend(roster: list, assignments: list, all_projects: list) -> pd.DataFrame:
+    """Calculate vendor spend based on assignments, rates, and project costs.
+    Allocates each project's actual cost proportionally to assigned team members,
+    then groups by vendor."""
+
+    # Build lookup: person_name → TeamMember
+    member_map = {m.name: m for m in roster}
+
+    # Build lookup: project_id → Project
+    project_map = {p.id: p for p in all_projects}
+
+    # For each project, find assigned members and their weekly hours
+    # Then allocate cost proportionally
+    vendor_totals = defaultdict(lambda: {"actual": 0.0, "forecast": 0.0, "headcount": set()})
+
+    # Group assignments by project
+    project_assignments = defaultdict(list)
+    for a in assignments:
+        project_assignments[a.project_id].append(a)
+
+    for pid, pa_list in project_assignments.items():
+        project = project_map.get(pid)
+        if not project:
+            continue
+
+        # Calculate each member's weighted contribution
+        member_weights = []
+        for a in pa_list:
+            member = member_map.get(a.person_name)
+            if not member:
+                continue
+            weight = member.rate_per_hour * member.weekly_hrs_available * a.allocation_pct
+            vendor = member.vendor or "ETE"
+            member_weights.append((vendor, member.name, weight))
+
+        total_weight = sum(w for _, _, w in member_weights)
+        if total_weight <= 0:
+            continue
+
+        # Allocate project costs proportionally
+        for vendor, name, weight in member_weights:
+            share = weight / total_weight
+            vendor_totals[vendor]["actual"] += project.actual_cost * share
+            vendor_totals[vendor]["forecast"] += (
+                project.forecast_cost if project.forecast_cost > 0 else project.actual_cost
+            ) * share
+            vendor_totals[vendor]["headcount"].add(name)
+
+    rows = []
+    for vendor, vals in sorted(vendor_totals.items()):
+        rows.append({
+            "Vendor": vendor,
+            "Headcount": len(vals["headcount"]),
+            "Actual Spend": round(vals["actual"]),
+            "Forecast Spend": round(vals["forecast"]),
+        })
+    return pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["Vendor", "Headcount", "Actual Spend", "Forecast Spend"]
+    )
 
 
 def render(data: dict, utilization: dict, person_demand: list):
@@ -19,10 +125,12 @@ def render(data: dict, utilization: dict, person_demand: list):
     annual_budget = assumptions.annual_budget
     all_projects = data["portfolio"]
     active = data["active_portfolio"]
+    roster = data["roster"]
+    assignments = data["assignments"]
 
-    # ------------------------------------------------------------------
-    # Annual Budget — KPIs + Edit
-    # ------------------------------------------------------------------
+    # ==================================================================
+    # 1. ANNUAL BUDGET — KPIs + Edit
+    # ==================================================================
     total_spent = sum(p.actual_cost for p in all_projects)
     total_forecast = sum(p.forecast_cost for p in all_projects)
     effective_forecast = sum(
@@ -123,10 +231,245 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
 
-    # ------------------------------------------------------------------
-    # Project Cost Breakdown Table
-    # ------------------------------------------------------------------
-    section_header("Project Cost Breakdown")
+    # ==================================================================
+    # 2. MONTHLY SPEND TREND
+    # ==================================================================
+    section_header("Monthly Spend Trend")
+
+    monthly_df = _monthly_spend(all_projects)
+    if not monthly_df.empty:
+        monthly_df["Label"] = monthly_df["Month"].apply(lambda d: d.strftime("%b %Y"))
+        monthly_df["MonthSort"] = monthly_df["Month"].apply(lambda d: d.isoformat())
+
+        # Monthly budget line (annual / 12)
+        monthly_budget = annual_budget / 12 if annual_budget > 0 else 0
+
+        bars = alt.Chart(monthly_df).mark_bar(
+            cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#1B3A5C"
+        ).encode(
+            x=alt.X("Label:N", sort=alt.SortField("MonthSort"), title=None,
+                     axis=alt.Axis(labelAngle=-45, labelFontSize=11)),
+            y=alt.Y("Amount:Q", title="Spend ($)",
+                     axis=alt.Axis(format="$,.0f", labelFontSize=11)),
+            tooltip=[
+                alt.Tooltip("Label:N", title="Month"),
+                alt.Tooltip("Amount:Q", title="Spend", format="$,.0f"),
+            ],
+        )
+
+        layers = [bars]
+
+        if monthly_budget > 0:
+            budget_line = alt.Chart(pd.DataFrame({
+                "y": [monthly_budget]
+            })).mark_rule(
+                color="#E74C3C", strokeDash=[6, 4], strokeWidth=2
+            ).encode(y="y:Q")
+
+            budget_label = alt.Chart(pd.DataFrame({
+                "y": [monthly_budget],
+                "text": [f"Monthly Budget: ${monthly_budget:,.0f}"]
+            })).mark_text(
+                align="right", dx=-5, dy=-8, fontSize=11, color="#E74C3C"
+            ).encode(y="y:Q", text="text:N")
+
+            layers.extend([budget_line, budget_label])
+
+        chart = alt.layer(*layers).properties(height=320)
+        st.altair_chart(chart, use_container_width=True)
+    else:
+        st.info("No monthly spend data available.")
+
+    st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # 3. VENDOR / TEAM SPEND
+    # ==================================================================
+    section_header("Spend by Vendor / Team")
+
+    vendor_df = _vendor_spend(roster, assignments, all_projects)
+    if not vendor_df.empty:
+        # KPI cards for each vendor
+        v_cols = st.columns(len(vendor_df))
+        for col, (_, row) in zip(v_cols, vendor_df.iterrows()):
+            with col:
+                kpi_card(
+                    f"{row['Vendor']} ({row['Headcount']})",
+                    f"${row['Actual Spend']:,.0f}",
+                    "navy",
+                )
+                if row["Forecast Spend"] > row["Actual Spend"]:
+                    st.caption(f"Forecast: ${row['Forecast Spend']:,.0f}")
+
+        st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+
+        # Horizontal stacked bar — actual vs remaining forecast
+        chart_rows = []
+        for _, row in vendor_df.iterrows():
+            chart_rows.append({
+                "Vendor": row["Vendor"],
+                "Type": "Actual",
+                "Amount": row["Actual Spend"],
+            })
+            remaining_fc = max(row["Forecast Spend"] - row["Actual Spend"], 0)
+            if remaining_fc > 0:
+                chart_rows.append({
+                    "Vendor": row["Vendor"],
+                    "Type": "Remaining Forecast",
+                    "Amount": remaining_fc,
+                })
+
+        chart_df = pd.DataFrame(chart_rows)
+        vendor_chart = alt.Chart(chart_df).mark_bar(
+            cornerRadiusTopRight=4, cornerRadiusBottomRight=4
+        ).encode(
+            y=alt.Y("Vendor:N", title=None, sort="-x",
+                     axis=alt.Axis(labelFontSize=12)),
+            x=alt.X("Amount:Q", title="Spend ($)", stack="zero",
+                     axis=alt.Axis(format="$,.0f", labelFontSize=11)),
+            color=alt.Color("Type:N", scale=alt.Scale(
+                domain=["Actual", "Remaining Forecast"],
+                range=["#1B3A5C", "#BDC3C7"]
+            ), legend=alt.Legend(orient="top", title=None)),
+            tooltip=[
+                alt.Tooltip("Vendor:N"),
+                alt.Tooltip("Type:N"),
+                alt.Tooltip("Amount:Q", format="$,.0f"),
+            ],
+        ).properties(height=max(len(vendor_df) * 70, 180))
+
+        st.altair_chart(vendor_chart, use_container_width=True)
+    else:
+        st.info("No vendor spend data available.")
+
+    st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # 4. STAFFING OPTIMIZATION INSIGHTS
+    # ==================================================================
+    section_header("Staffing Insights")
+
+    st.markdown("""<div style="font-size:0.85rem; color:#5A6A7E; margin-bottom:0.75rem;">
+        Based on current project demand vs. available capacity — identifies roles
+        that may be overstaffed or understaffed.
+    </div>""", unsafe_allow_html=True)
+
+    # Build roster cost by role
+    role_names = {
+        "pm": "Project Manager", "ba": "Business Analyst",
+        "functional": "Functional", "technical": "Technical",
+        "developer": "Developer", "infrastructure": "Infrastructure",
+        "dba": "DBA", "wms": "WMS Consultant",
+    }
+
+    insight_rows = []
+    for role_key, u in utilization.items():
+        supply = u["supply_hrs_week"]
+        demand = u["demand_hrs_week"]
+        util_pct = u["utilization_pct"]
+        status = u["status"]
+
+        if supply <= 0:
+            continue
+
+        # Count people and weekly cost for this role
+        role_members = [m for m in roster if m.role_key == role_key]
+        headcount = len(role_members)
+        weekly_cost = sum(m.rate_per_hour * m.weekly_hrs_available for m in role_members)
+        annual_cost = weekly_cost * 52
+
+        # Calculate optimal headcount based on demand
+        avg_capacity = supply / headcount if headcount > 0 else 0
+        # Target 75% utilization as healthy
+        optimal_demand_supply = demand / 0.75 if demand > 0 else 0
+        optimal_hc = round(optimal_demand_supply / avg_capacity) if avg_capacity > 0 else 0
+        delta = headcount - optimal_hc
+
+        if util_pct < 0.40:
+            assessment = "Overstaffed"
+            assessment_color = "#E74C3C"
+        elif util_pct < 0.60:
+            assessment = "Consider reducing"
+            assessment_color = "#F39C12"
+        elif util_pct <= 0.85:
+            assessment = "Right-sized"
+            assessment_color = "#27AE60"
+        elif util_pct <= 1.0:
+            assessment = "Near capacity"
+            assessment_color = "#F39C12"
+        else:
+            assessment = "Understaffed"
+            assessment_color = "#E74C3C"
+
+        insight_rows.append({
+            "Role": role_names.get(role_key, role_key),
+            "Headcount": headcount,
+            "Utilization": util_pct,
+            "Status": status,
+            "Weekly Cost": weekly_cost,
+            "Annual Cost": annual_cost,
+            "Optimal HC": max(optimal_hc, 0),
+            "Delta": delta,
+            "Assessment": assessment,
+            "Color": assessment_color,
+        })
+
+    if insight_rows:
+        html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+        <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem; letter-spacing:0.03em;">
+            <th style="text-align:left; padding:0.4rem 0.5rem;">Role</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Headcount</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Utilization</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Weekly Cost</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Annual Cost</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Optimal HC</th>
+            <th style="text-align:right; padding:0.4rem 0.5rem;">Delta</th>
+            <th style="text-align:left; padding:0.4rem 0.5rem;">Assessment</th>
+        </tr></thead><tbody>"""
+
+        total_weekly = 0
+        total_annual = 0
+        total_hc = 0
+
+        for r in insight_rows:
+            total_weekly += r["Weekly Cost"]
+            total_annual += r["Annual Cost"]
+            total_hc += r["Headcount"]
+
+            delta_str = f"+{r['Delta']}" if r["Delta"] > 0 else str(r["Delta"])
+            delta_color = "#E74C3C" if r["Delta"] > 0 else (
+                "#27AE60" if r["Delta"] == 0 else "#1565C0"
+            )
+
+            html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
+                <td style="padding:0.45rem 0.5rem; font-weight:500;">{r['Role']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{r['Headcount']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{r['Utilization']:.0%}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${r['Weekly Cost']:,.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">${r['Annual Cost']:,.0f}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right;">{r['Optimal HC']}</td>
+                <td style="padding:0.45rem 0.5rem; text-align:right; color:{delta_color}; font-weight:600;">{delta_str}</td>
+                <td style="padding:0.45rem 0.5rem; color:{r['Color']}; font-weight:600;">{r['Assessment']}</td>
+            </tr>"""
+
+        html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
+            <td style="padding:0.45rem 0.5rem;">TOTAL</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">{total_hc}</td>
+            <td style="padding:0.45rem 0.5rem;"></td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${total_weekly:,.0f}</td>
+            <td style="padding:0.45rem 0.5rem; text-align:right;">${total_annual:,.0f}</td>
+            <td colspan="3"></td>
+        </tr>"""
+
+        html += "</tbody></table>"
+        st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # 5. PROJECT COST BREAKDOWN TABLE
+    # ==================================================================
+    section_header("Project Cost Detail")
 
     cost_rows = []
     for p in all_projects:
@@ -148,7 +491,6 @@ def render(data: dict, utilization: dict, person_demand: list):
     if cost_rows:
         df = pd.DataFrame(cost_rows).sort_values("Actual Cost", ascending=False)
 
-        # Summary row
         total_actual = df["Actual Cost"].sum()
         total_fc = df["Forecast Cost"].sum()
         total_var = df["Variance"].sum()
@@ -178,7 +520,6 @@ def render(data: dict, utilization: dict, person_demand: list):
                 <td style="padding:0.45rem 0.5rem;">{row['PM']}</td>
             </tr>"""
 
-        # Totals row
         html += f"""<tr style="border-top:2px solid #C5CDD8; font-weight:700;">
             <td style="padding:0.45rem 0.5rem;" colspan="3">TOTAL</td>
             <td style="padding:0.45rem 0.5rem; text-align:right;">${total_actual:,.0f}</td>
@@ -191,33 +532,3 @@ def render(data: dict, utilization: dict, person_demand: list):
         st.markdown(html, unsafe_allow_html=True)
     else:
         st.info("No project cost data recorded yet.")
-
-    st.markdown("<div style='height: 1.5rem'></div>", unsafe_allow_html=True)
-
-    # ------------------------------------------------------------------
-    # Cost by Status Summary
-    # ------------------------------------------------------------------
-    section_header("Spend by Project Status")
-
-    status_groups = {"Active": [], "Complete": [], "Postponed": []}
-    for p in all_projects:
-        if p.pct_complete >= 1.0:
-            status_groups["Complete"].append(p)
-        elif p.health and "POSTPONED" in p.health.upper():
-            status_groups["Postponed"].append(p)
-        else:
-            status_groups["Active"].append(p)
-
-    sc1, sc2, sc3 = st.columns(3)
-    for col, (status, projects) in zip([sc1, sc2, sc3], status_groups.items()):
-        with col:
-            spent = sum(p.actual_cost for p in projects)
-            forecast = sum(
-                p.forecast_cost if p.forecast_cost > 0 else p.actual_cost
-                for p in projects
-            )
-            count = sum(1 for p in projects if p.actual_cost > 0 or p.forecast_cost > 0)
-            color = "navy"
-            kpi_card(f"{status} ({count})", f"${spent:,.0f}", color)
-            if forecast > spent:
-                st.caption(f"Forecast: ${forecast:,.0f}")
