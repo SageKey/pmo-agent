@@ -481,6 +481,20 @@ class SQLiteConnector:
         except Exception as e:
             return f"Error saving assignment: {e}"
 
+    def update_assumption(self, key: str, value: float) -> Optional[str]:
+        """Update a single rm_assumptions key-value pair."""
+        try:
+            conn = self._open()
+            conn.execute(
+                """INSERT INTO rm_assumptions (key, value) VALUES (?, ?)
+                   ON CONFLICT(key) DO UPDATE SET value = ?""",
+                (key, value, value),
+            )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error updating assumption: {e}"
+
     def delete_project(self, project_id: str) -> Optional[str]:
         """Delete a project and its allocations/assignments (cascades)."""
         try:
