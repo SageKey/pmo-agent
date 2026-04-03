@@ -109,27 +109,12 @@ def _render_entry_tab(consultants: list[dict]):
                     if week_start <= e["entry_date"] <= week_end]
 
     if week_entries:
-        rows = []
-        total_hrs = 0
-        for e in sorted(week_entries, key=lambda x: (x["entry_date"], x.get("project_key", ""))):
-            d = date.fromisoformat(e["entry_date"])
-            rows.append({
-                "Date": d.strftime("%a %b %d"),
-                "Project Key": e.get("project_key") or "—",
-                "Project": (e.get("project_name") or "General Support")[:40],
-                "Task": (e.get("task_description") or "")[:50],
-                "Type": e.get("work_type", ""),
-                "Hours": e["hours"],
-                "_id": e["id"],
-            })
-            total_hrs += e["hours"]
-
-        df = pd.DataFrame(rows)
-
-        # Week summary KPIs
+        sorted_entries = sorted(week_entries, key=lambda x: (x["entry_date"], x.get("project_key", "")))
+        total_hrs = sum(e["hours"] for e in week_entries)
         project_hrs = sum(e["hours"] for e in week_entries if e.get("work_type") == "Project")
         support_hrs = sum(e["hours"] for e in week_entries if e.get("work_type") == "Support")
 
+        # Week summary KPIs
         kc1, kc2, kc3 = st.columns(3)
         with kc1:
             kpi_card("Week Total", f"{total_hrs:.0f}h", "navy")
@@ -140,15 +125,132 @@ def _render_entry_tab(consultants: list[dict]):
 
         st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
 
-        # Display table
-        display_df = df.drop(columns=["_id"])
-        st.dataframe(display_df, hide_index=True, use_container_width=True)
+        # Interactive entries table with edit/delete
+        editing_id = st.session_state.get("_ts_editing_id")
+
+        for e in sorted_entries:
+            d = date.fromisoformat(e["entry_date"])
+            eid = e["id"]
+            proj_label = e.get("project_key") or "—"
+            proj_name = (e.get("project_name") or "General Support")[:40]
+            task = (e.get("task_description") or "")[:45]
+            wtype = e.get("work_type", "Support")
+            hrs = e["hours"]
+
+            if editing_id == eid:
+                # --- Inline Edit Mode ---
+                with st.container():
+                    st.markdown(f"""<div style="font-size:0.78rem; color:#5A6A7E; margin-bottom:0.25rem; font-weight:600;">
+                        Editing: {d.strftime('%a %b %d')} — {proj_label}
+                    </div>""", unsafe_allow_html=True)
+                    with st.form(f"edit_{eid}", clear_on_submit=False):
+                        ec1, ec2 = st.columns(2)
+                        with ec1:
+                            edit_date = st.date_input("Date", value=d, key=f"_ed_date_{eid}")
+                            edit_type = st.selectbox("Work Type", ["Project", "Support"],
+                                                     index=0 if wtype == "Project" else 1,
+                                                     key=f"_ed_type_{eid}")
+                            edit_hours = st.number_input("Hours", min_value=0.0, max_value=24.0,
+                                                         value=float(hrs), step=0.5,
+                                                         key=f"_ed_hrs_{eid}")
+                        with ec2:
+                            edit_pkey = st.text_input("Project Key",
+                                                      value=e.get("project_key") or "",
+                                                      key=f"_ed_pkey_{eid}")
+                            edit_pname = st.text_input("Project Name",
+                                                       value=e.get("project_name") or "",
+                                                       key=f"_ed_pname_{eid}")
+                            edit_task = st.text_input("Task",
+                                                      value=e.get("task_description") or "",
+                                                      key=f"_ed_task_{eid}")
+                        edit_notes = st.text_input("Notes",
+                                                    value=e.get("notes") or "",
+                                                    key=f"_ed_notes_{eid}")
+
+                        sc1, sc2 = st.columns(2)
+                        with sc1:
+                            save = st.form_submit_button("Save Changes", use_container_width=True,
+                                                         type="primary")
+                        with sc2:
+                            cancel = st.form_submit_button("Cancel", use_container_width=True)
+
+                        if save:
+                            connector = _get_connector()
+                            try:
+                                err = connector.save_timesheet_entry({
+                                    "id": eid,
+                                    "consultant_id": selected["id"],
+                                    "entry_date": edit_date.isoformat(),
+                                    "project_key": edit_pkey.strip() or None,
+                                    "project_name": edit_pname.strip() or None,
+                                    "task_description": edit_task.strip() or None,
+                                    "work_type": edit_type,
+                                    "hours": edit_hours,
+                                    "notes": edit_notes.strip() or None,
+                                })
+                            finally:
+                                connector.close()
+                            if err:
+                                st.error(err)
+                            else:
+                                st.session_state["_ts_editing_id"] = None
+                                st.cache_data.clear()
+                                st.rerun()
+                        if cancel:
+                            st.session_state["_ts_editing_id"] = None
+                            st.rerun()
+            else:
+                # --- Display Row ---
+                rc1, rc2, rc3, rc4, rc5, rc6, rc7 = st.columns([1.3, 1, 2.2, 2.5, 0.8, 0.6, 0.6])
+                with rc1:
+                    st.markdown(f"<div style='font-size:0.85rem; padding:0.3rem 0; font-weight:500;'>{d.strftime('%a %b %d')}</div>", unsafe_allow_html=True)
+                with rc2:
+                    st.markdown(f"<div style='font-size:0.85rem; padding:0.3rem 0; color:#1565C0;'>{proj_label}</div>", unsafe_allow_html=True)
+                with rc3:
+                    st.markdown(f"<div style='font-size:0.83rem; padding:0.3rem 0; color:#5A6A7E;'>{proj_name}</div>", unsafe_allow_html=True)
+                with rc4:
+                    st.markdown(f"<div style='font-size:0.83rem; padding:0.3rem 0; color:#5A6A7E;'>{task}</div>", unsafe_allow_html=True)
+                with rc5:
+                    st.markdown(f"<div style='font-size:0.85rem; padding:0.3rem 0; font-weight:600;'>{hrs:.1f}h</div>", unsafe_allow_html=True)
+                with rc6:
+                    if st.button("Edit", key=f"_edit_{eid}", use_container_width=True):
+                        st.session_state["_ts_editing_id"] = eid
+                        st.rerun()
+                with rc7:
+                    if st.button("Del", key=f"_del_{eid}", use_container_width=True):
+                        st.session_state["_ts_confirm_delete"] = eid
+                        st.rerun()
+
+                # Delete confirmation
+                if st.session_state.get("_ts_confirm_delete") == eid:
+                    st.warning(f"Delete {d.strftime('%b %d')} — {proj_label} ({hrs}h)?")
+                    dc1, dc2, dc3 = st.columns([1, 1, 4])
+                    with dc1:
+                        if st.button("Yes, delete", key=f"_del_yes_{eid}",
+                                     use_container_width=True, type="primary"):
+                            connector = _get_connector()
+                            try:
+                                connector.delete_timesheet_entry(eid)
+                            finally:
+                                connector.close()
+                            st.session_state.pop("_ts_confirm_delete", None)
+                            st.cache_data.clear()
+                            st.rerun()
+                    with dc2:
+                        if st.button("Cancel", key=f"_del_no_{eid}",
+                                     use_container_width=True):
+                            st.session_state.pop("_ts_confirm_delete", None)
+                            st.rerun()
+
+        # Divider before add form
+        st.markdown("<hr style='border:none; border-top:1px solid #E8ECF1; margin:0.75rem 0;'>",
+                    unsafe_allow_html=True)
 
     else:
         st.caption("No entries for this week yet.")
 
     # --- Add New Entry Form ---
-    st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
     with st.expander("Add Time Entry", expanded=not bool(week_entries)):
         with st.form("ts_entry_form", clear_on_submit=True):
             fc1, fc2 = st.columns(2)
