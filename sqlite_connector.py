@@ -715,7 +715,7 @@ class SQLiteConnector:
     # ------------------------------------------------------------------
     def read_approvals(self, month: str = None) -> list[dict]:
         conn = self._open()
-        sql = """SELECT va.*, vc.name as consultant_name
+        sql = """SELECT va.*, vc.name as consultant_name, vc.billing_type
                  FROM vendor_approvals va
                  JOIN vendor_consultants vc ON vc.id = va.consultant_id"""
         params = []
@@ -725,6 +725,24 @@ class SQLiteConnector:
         sql += " ORDER BY vc.name"
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
+
+    def is_month_locked(self, consultant_id: int, month: str) -> bool:
+        """Check if a consultant's month is approved (locked for edits)."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT status FROM vendor_approvals WHERE consultant_id=? AND month=?",
+            (consultant_id, month),
+        ).fetchone()
+        return row is not None and row["status"] == "approved"
+
+    def get_lock_status_bulk(self, month: str) -> dict:
+        """Return dict: consultant_id → status for a given month."""
+        conn = self._open()
+        rows = conn.execute(
+            "SELECT consultant_id, status FROM vendor_approvals WHERE month=?",
+            (month,),
+        ).fetchall()
+        return {r["consultant_id"]: r["status"] for r in rows}
 
     def save_approval(self, fields: dict) -> Optional[str]:
         try:

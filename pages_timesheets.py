@@ -92,11 +92,22 @@ def _render_entry_tab(consultants: list[dict]):
     week_start = week[0].isoformat()
     week_end = week[-1].isoformat()
 
+    # Check if any month in this week is locked (approved)
+    week_month = entry_date.strftime("%Y-%m")
     connector = _get_connector()
     try:
         all_entries = connector.read_timesheets(consultant_id=selected["id"])
+        month_locked = connector.is_month_locked(selected["id"], week_month)
     finally:
         connector.close()
+
+    if month_locked:
+        st.markdown(f"""<div style="padding:0.6rem 1rem; background:#E8F5E9;
+            border-left:4px solid #27AE60; border-radius:0 8px 8px 0;
+            font-size:0.85rem; margin-bottom:0.75rem;">
+            <strong>{week_month}</strong> is <strong>approved and locked</strong> for {selected_name}.
+            Unlock on the Approvals tab to make changes.
+        </div>""", unsafe_allow_html=True)
 
     existing = {e["entry_date"]: e for e in all_entries
                 if week_start <= e["entry_date"] <= week_end}
@@ -213,13 +224,15 @@ def _render_entry_tab(consultants: list[dict]):
                 with rc5:
                     st.markdown(f"<div style='font-size:0.85rem; padding:0.3rem 0; font-weight:600;'>{hrs:.1f}h</div>", unsafe_allow_html=True)
                 with rc6:
-                    if st.button("Edit", key=f"_edit_{eid}", use_container_width=True):
-                        st.session_state["_ts_editing_id"] = eid
-                        st.rerun()
+                    if not month_locked:
+                        if st.button("Edit", key=f"_edit_{eid}", use_container_width=True):
+                            st.session_state["_ts_editing_id"] = eid
+                            st.rerun()
                 with rc7:
-                    if st.button("Del", key=f"_del_{eid}", use_container_width=True):
-                        st.session_state["_ts_confirm_delete"] = eid
-                        st.rerun()
+                    if not month_locked:
+                        if st.button("Del", key=f"_del_{eid}", use_container_width=True):
+                            st.session_state["_ts_confirm_delete"] = eid
+                            st.rerun()
 
                 # Delete confirmation
                 if st.session_state.get("_ts_confirm_delete") == eid:
@@ -251,6 +264,9 @@ def _render_entry_tab(consultants: list[dict]):
 
     # --- Add New Entry Form ---
     st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+    if month_locked:
+        st.caption("Time entry disabled — month is approved. Unlock on the Approvals tab to add entries.")
+        return
     with st.expander("Add Time Entry", expanded=not bool(week_entries)):
         with st.form("ts_entry_form", clear_on_submit=True):
             fc1, fc2 = st.columns(2)
@@ -584,16 +600,23 @@ def _render_review_tab(consultants: list[dict]):
 # ---------------------------------------------------------------------------
 
 def _render_approvals_tab(consultants: list[dict]):
-    """Monthly approval workflow."""
+    """Monthly approval workflow: draft → submitted → approved / rejected."""
+
+    MSA_MONTHLY_FEE = 50000.0
+    BLENDED_RATE = 65.0
 
     today = date.today()
     month_options = _month_options(today.year)
-    selected_month = st.selectbox("Month", month_options, index=0, key="_appr_month")
+
+    col1, col2 = st.columns([2, 4])
+    with col1:
+        selected_month = st.selectbox("Month", month_options, index=0, key="_appr_month")
 
     connector = _get_connector()
     try:
         summary = connector.get_timesheet_summary(month=selected_month)
         approvals = connector.read_approvals(month=selected_month)
+        entries = connector.read_timesheets(month=selected_month)
     finally:
         connector.close()
 
@@ -603,60 +626,126 @@ def _render_approvals_tab(consultants: list[dict]):
 
     approval_map = {a["consultant_id"]: a for a in approvals}
 
-    section_header(f"Approval Status — {selected_month}")
+    # --- Summary KPIs ---
+    total_hrs = sum(s["total_hours"] for s in summary)
+    n_consultants = len(summary)
+    n_draft = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status", "draft") == "draft")
+    n_submitted = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "submitted")
+    n_approved = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "approved")
+    n_rejected = sum(1 for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "rejected")
 
-    html = """<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
-    <thead><tr style="border-bottom:2px solid #C5CDD8; color:#5A6A7E; text-transform:uppercase; font-size:0.75rem;">
-        <th style="text-align:left; padding:0.4rem 0.5rem;">Consultant</th>
-        <th style="text-align:right; padding:0.4rem 0.5rem;">Hours</th>
-        <th style="text-align:left; padding:0.4rem 0.5rem;">Status</th>
-        <th style="text-align:left; padding:0.4rem 0.5rem;">Vendor Approval</th>
-        <th style="text-align:left; padding:0.4rem 0.5rem;">ETE Approval</th>
-    </tr></thead><tbody>"""
+    kc1, kc2, kc3, kc4, kc5 = st.columns(5)
+    with kc1:
+        kpi_card("Total Hours", f"{total_hrs:,.0f}", "navy")
+    with kc2:
+        color = "yellow" if n_draft > 0 else "green"
+        kpi_card("Draft", n_draft, color)
+    with kc3:
+        color = "yellow" if n_submitted > 0 else "green"
+        kpi_card("Submitted", n_submitted, color)
+    with kc4:
+        color = "green" if n_approved == n_consultants else "navy"
+        kpi_card("Approved", n_approved, color)
+    with kc5:
+        color = "red" if n_rejected > 0 else "green"
+        kpi_card("Rejected", n_rejected, color)
 
-    status_colors = {
-        "draft": "#6C757D", "submitted": "#F39C12", "approved": "#27AE60",
-    }
-
-    for s in summary:
-        appr = approval_map.get(s["consultant_id"], {})
-        status = appr.get("status", "draft")
-        color = status_colors.get(status, "#6C757D")
-
-        vendor_appr = "Approved" if appr.get("vendor_approved") else "Pending"
-        vendor_by = appr.get("vendor_approved_by", "")
-        ete_appr = "Approved" if appr.get("ete_approved") else "Pending"
-        ete_by = appr.get("ete_approved_by", "")
-
-        html += f"""<tr style="border-bottom:1px solid #E8ECF1;">
-            <td style="padding:0.45rem 0.5rem; font-weight:500;">{s['name']}</td>
-            <td style="padding:0.45rem 0.5rem; text-align:right;">{s['total_hours']:.0f}</td>
-            <td style="padding:0.45rem 0.5rem;"><span style="color:{color}; font-weight:600; text-transform:uppercase;">{status}</span></td>
-            <td style="padding:0.45rem 0.5rem;">{vendor_appr}{f' ({vendor_by})' if vendor_by else ''}</td>
-            <td style="padding:0.45rem 0.5rem;">{ete_appr}{f' ({ete_by})' if ete_by else ''}</td>
-        </tr>"""
-
-    html += "</tbody></table>"
-    st.markdown(html, unsafe_allow_html=True)
-
-    # --- Approve All Button ---
     st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
 
-    pending = [s for s in summary if not approval_map.get(s["consultant_id"], {}).get("ete_approved")]
-    if pending:
-        bc1, bc2, bc3 = st.columns([2, 2, 2])
-        with bc1:
-            approver_name = st.text_input("Your Name", value="Brett Anderson",
-                                          key="_appr_name")
-        with bc2:
-            st.markdown("<div style='height: 1.8rem'></div>", unsafe_allow_html=True)
-            if st.button(f"Approve All ({len(pending)})", key="_appr_all",
-                        use_container_width=True, type="primary"):
-                connector = _get_connector()
-                try:
-                    for s in pending:
+    # --- Workflow status legend ---
+    st.markdown("""<div style="font-size:0.78rem; color:#5A6A7E; margin-bottom:0.75rem; display:flex; gap:1.5rem;">
+        <span><span style="color:#6C757D; font-weight:700;">DRAFT</span> — not yet submitted</span>
+        <span><span style="color:#F39C12; font-weight:700;">SUBMITTED</span> — awaiting approval</span>
+        <span><span style="color:#27AE60; font-weight:700;">APPROVED</span> — locked</span>
+        <span><span style="color:#E74C3C; font-weight:700;">REJECTED</span> — needs revision</span>
+    </div>""", unsafe_allow_html=True)
+
+    # --- Per-Consultant Approval Cards ---
+    status_colors = {
+        "draft": "#6C757D", "submitted": "#F39C12",
+        "approved": "#27AE60", "rejected": "#E74C3C",
+    }
+    status_bg = {
+        "draft": "#F8F9FA", "submitted": "#FFF8E1",
+        "approved": "#E8F5E9", "rejected": "#FFEBEE",
+    }
+
+    # Build entries per consultant for detail view
+    entries_by_consultant = defaultdict(list)
+    for e in entries:
+        entries_by_consultant[e["consultant_id"]].append(e)
+
+    for s in summary:
+        cid = s["consultant_id"]
+        appr = approval_map.get(cid, {})
+        status = appr.get("status", "draft")
+        color = status_colors.get(status, "#6C757D")
+        bg = status_bg.get(status, "#F8F9FA")
+        billing = s.get("billing_type", "")
+        rate = s.get("hourly_rate", 0)
+        cost = s["total_hours"] * rate if billing == "T&M" else s["total_hours"] * BLENDED_RATE
+
+        st.markdown(f"""<div style="background:{bg}; border-left:4px solid {color};
+            border-radius:0 8px 8px 0; padding:0.75rem 1rem; margin-bottom:0.5rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:0.95rem; font-weight:600;">{s['name']}</span>
+                    <span style="font-size:0.78rem; color:#5A6A7E; margin-left:0.75rem;">
+                        {billing} {'@ $' + str(int(rate)) + '/hr' if rate > 0 else ''}
+                    </span>
+                </div>
+                <div style="display:flex; gap:1.5rem; align-items:center;">
+                    <span style="font-size:0.85rem;"><strong>{s['total_hours']:.0f}</strong> hours</span>
+                    <span style="font-size:0.85rem;">
+                        Proj: <strong>{s['project_hours']:.0f}</strong> | Supp: <strong>{s['support_hours']:.0f}</strong>
+                    </span>
+                    <span style="font-size:0.85rem; font-weight:600; color:{color};
+                        text-transform:uppercase;">{status}</span>
+                </div>
+            </div>""", unsafe_allow_html=True)
+
+        # Show approval audit trail if exists
+        if appr.get("vendor_approved"):
+            vby = appr.get("vendor_approved_by", "")
+            vat = appr.get("vendor_approved_at", "")[:10]
+            st.markdown(f"""<div style="font-size:0.75rem; color:#5A6A7E; margin-top:0.25rem;">
+                Vendor: {vby} on {vat}
+                {'&nbsp;·&nbsp; ETE: ' + (appr.get('ete_approved_by') or '') + ' on ' + (appr.get('ete_approved_at') or '')[:10] if appr.get('ete_approved') else ''}
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # --- Action Buttons ---
+        c_entries = entries_by_consultant.get(cid, [])
+
+        btn_cols = st.columns([1, 1, 1, 1, 3])
+
+        if status == "draft":
+            with btn_cols[0]:
+                if st.button("Submit", key=f"_sub_{cid}", use_container_width=True):
+                    connector = _get_connector()
+                    try:
                         connector.save_approval({
-                            "consultant_id": s["consultant_id"],
+                            "consultant_id": cid,
+                            "month": selected_month,
+                            "total_hours": s["total_hours"],
+                            "status": "submitted",
+                            "vendor_approved": 0,
+                            "ete_approved": 0,
+                        })
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        elif status == "submitted":
+            with btn_cols[0]:
+                if st.button("Approve", key=f"_apv_{cid}", use_container_width=True,
+                             type="primary"):
+                    connector = _get_connector()
+                    try:
+                        connector.save_approval({
+                            "consultant_id": cid,
                             "month": selected_month,
                             "total_hours": s["total_hours"],
                             "status": "approved",
@@ -664,15 +753,151 @@ def _render_approvals_tab(consultants: list[dict]):
                             "vendor_approved_by": "Sarath Yeturu",
                             "vendor_approved_at": datetime.now().isoformat(),
                             "ete_approved": 1,
-                            "ete_approved_by": approver_name,
+                            "ete_approved_by": "Brett Anderson",
                             "ete_approved_at": datetime.now().isoformat(),
                         })
-                finally:
-                    connector.close()
-                st.success(f"Approved {len(pending)} timesheets for {selected_month}.")
-                st.rerun()
-    else:
-        st.success(f"All timesheets approved for {selected_month}.")
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+            with btn_cols[1]:
+                if st.button("Reject", key=f"_rej_{cid}", use_container_width=True):
+                    connector = _get_connector()
+                    try:
+                        connector.save_approval({
+                            "consultant_id": cid,
+                            "month": selected_month,
+                            "total_hours": s["total_hours"],
+                            "status": "rejected",
+                            "vendor_approved": 0,
+                            "ete_approved": 0,
+                        })
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        elif status == "rejected":
+            with btn_cols[0]:
+                if st.button("Resubmit", key=f"_resub_{cid}", use_container_width=True):
+                    connector = _get_connector()
+                    try:
+                        connector.save_approval({
+                            "consultant_id": cid,
+                            "month": selected_month,
+                            "total_hours": s["total_hours"],
+                            "status": "submitted",
+                            "vendor_approved": 0,
+                            "ete_approved": 0,
+                        })
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        elif status == "approved":
+            with btn_cols[0]:
+                if st.button("Unlock", key=f"_unlock_{cid}", use_container_width=True):
+                    connector = _get_connector()
+                    try:
+                        connector.save_approval({
+                            "consultant_id": cid,
+                            "month": selected_month,
+                            "total_hours": s["total_hours"],
+                            "status": "submitted",
+                            "vendor_approved": 0,
+                            "ete_approved": 0,
+                        })
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+
+        # --- Expandable Entry Detail ---
+        with st.expander(f"View {len(c_entries)} entries", expanded=False):
+            if c_entries:
+                detail_rows = []
+                for e in sorted(c_entries, key=lambda x: x["entry_date"]):
+                    d = date.fromisoformat(e["entry_date"])
+                    detail_rows.append({
+                        "Date": d.strftime("%b %d"),
+                        "Project": e.get("project_key") or "—",
+                        "Description": (e.get("task_description") or e.get("project_name") or "")[:40],
+                        "Type": e.get("work_type", "Support"),
+                        "Hours": e["hours"],
+                    })
+                detail_df = pd.DataFrame(detail_rows)
+                st.dataframe(detail_df, hide_index=True, use_container_width=True,
+                             column_config={
+                                 "Hours": st.column_config.NumberColumn(format="%.1f"),
+                             })
+            else:
+                st.caption("No entries found.")
+
+    # --- Bulk Actions ---
+    st.markdown("<div style='height: 1.25rem'></div>", unsafe_allow_html=True)
+    section_header("Bulk Actions")
+
+    ba1, ba2, ba3, ba4 = st.columns(4)
+
+    drafts = [s for s in summary if approval_map.get(s["consultant_id"], {}).get("status", "draft") == "draft"]
+    submitted = [s for s in summary if approval_map.get(s["consultant_id"], {}).get("status") == "submitted"]
+
+    with ba1:
+        if drafts and st.button(f"Submit All Drafts ({len(drafts)})",
+                                 key="_bulk_submit", use_container_width=True):
+            connector = _get_connector()
+            try:
+                for s in drafts:
+                    connector.save_approval({
+                        "consultant_id": s["consultant_id"],
+                        "month": selected_month,
+                        "total_hours": s["total_hours"],
+                        "status": "submitted",
+                        "vendor_approved": 0,
+                        "ete_approved": 0,
+                    })
+            finally:
+                connector.close()
+            st.cache_data.clear()
+            st.rerun()
+
+    with ba2:
+        if submitted and st.button(f"Approve All Submitted ({len(submitted)})",
+                                    key="_bulk_approve", use_container_width=True,
+                                    type="primary"):
+            connector = _get_connector()
+            try:
+                for s in submitted:
+                    connector.save_approval({
+                        "consultant_id": s["consultant_id"],
+                        "month": selected_month,
+                        "total_hours": s["total_hours"],
+                        "status": "approved",
+                        "vendor_approved": 1,
+                        "vendor_approved_by": "Sarath Yeturu",
+                        "vendor_approved_at": datetime.now().isoformat(),
+                        "ete_approved": 1,
+                        "ete_approved_by": "Brett Anderson",
+                        "ete_approved_at": datetime.now().isoformat(),
+                    })
+            finally:
+                connector.close()
+            st.cache_data.clear()
+            st.rerun()
+
+    # Month complete banner
+    if n_approved == n_consultants and n_consultants > 0:
+        tm_cost = sum(s["total_hours"] * s["hourly_rate"]
+                      for s in summary if s["billing_type"] == "T&M")
+        total_cost = MSA_MONTHLY_FEE + tm_cost
+        st.markdown(f"""<div style="margin-top:1rem; padding:0.75rem 1rem; background:#E8F5E9;
+            border-left:4px solid #27AE60; border-radius:0 8px 8px 0; font-size:0.85rem;">
+            <strong>Month Complete</strong> — All {n_consultants} consultants approved for {selected_month}.
+            Total: <strong>{total_hrs:,.0f} hours</strong> | MSA: <strong>${MSA_MONTHLY_FEE:,.0f}</strong> |
+            T&M: <strong>${tm_cost:,.0f}</strong> | Grand Total: <strong>${total_cost:,.0f}</strong>
+        </div>""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
