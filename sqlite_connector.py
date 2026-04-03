@@ -17,7 +17,7 @@ from models import (
 DEFAULT_DB = "pmo_data.db"
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
@@ -97,6 +97,73 @@ CREATE TABLE IF NOT EXISTS role_phase_efforts (
     phase       TEXT NOT NULL,
     effort      REAL NOT NULL,
     PRIMARY KEY (role_key, phase)
+);
+
+-- Vendor Billing & Timesheets -------------------------------------------
+
+CREATE TABLE IF NOT EXISTS vendor_consultants (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT UNIQUE NOT NULL,
+    billing_type    TEXT NOT NULL DEFAULT 'MSA',   -- 'MSA' or 'T&M'
+    hourly_rate     REAL NOT NULL DEFAULT 0.0,     -- 0 for MSA-covered
+    role_key        TEXT,
+    active          INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS vendor_timesheets (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    consultant_id   INTEGER NOT NULL REFERENCES vendor_consultants(id),
+    entry_date      TEXT NOT NULL,                 -- ISO date
+    project_key     TEXT,                          -- Jira key (SSE-xxx) or NULL for general support
+    project_name    TEXT,
+    task_description TEXT,
+    work_type       TEXT NOT NULL DEFAULT 'Support', -- 'Project' or 'Support'
+    hours           REAL NOT NULL DEFAULT 0.0,
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_vt_consultant ON vendor_timesheets(consultant_id);
+CREATE INDEX IF NOT EXISTS idx_vt_date ON vendor_timesheets(entry_date);
+CREATE INDEX IF NOT EXISTS idx_vt_project ON vendor_timesheets(project_key);
+
+CREATE TABLE IF NOT EXISTS vendor_approvals (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    consultant_id       INTEGER NOT NULL REFERENCES vendor_consultants(id),
+    month               TEXT NOT NULL,             -- 'YYYY-MM'
+    total_hours         REAL NOT NULL DEFAULT 0.0,
+    status              TEXT NOT NULL DEFAULT 'draft', -- draft, submitted, approved
+    vendor_approved     INTEGER NOT NULL DEFAULT 0,
+    vendor_approved_by  TEXT,
+    vendor_approved_at  TEXT,
+    ete_approved        INTEGER NOT NULL DEFAULT 0,
+    ete_approved_by     TEXT,
+    ete_approved_at     TEXT,
+    UNIQUE(consultant_id, month)
+);
+
+CREATE TABLE IF NOT EXISTS approved_work (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    jira_key            TEXT,
+    title               TEXT NOT NULL,
+    work_type           TEXT,                      -- Project, Enhancement, Break/Fix, Bug
+    work_classification TEXT,                      -- CapEx or Support
+    approved_date       TEXT,
+    approver            TEXT,
+    notes               TEXT
+);
+
+CREATE TABLE IF NOT EXISTS vendor_invoices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    month           TEXT NOT NULL,                 -- 'YYYY-MM'
+    msa_amount      REAL NOT NULL DEFAULT 0.0,
+    tm_amount       REAL NOT NULL DEFAULT 0.0,
+    total_amount    REAL NOT NULL DEFAULT 0.0,
+    invoice_number  TEXT,
+    received_date   TEXT,
+    paid            INTEGER NOT NULL DEFAULT 0,
+    notes           TEXT
 );
 """
 
@@ -504,3 +571,256 @@ class SQLiteConnector:
             return None
         except Exception as e:
             return f"Error deleting project: {e}"
+
+    # ------------------------------------------------------------------
+    # Vendor Consultants
+    # ------------------------------------------------------------------
+    def read_vendor_consultants(self, active_only: bool = True) -> list[dict]:
+        conn = self._open()
+        sql = "SELECT * FROM vendor_consultants"
+        if active_only:
+            sql += " WHERE active = 1"
+        sql += " ORDER BY name"
+        rows = conn.execute(sql).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_vendor_consultant(self, fields: dict) -> Optional[str]:
+        try:
+            conn = self._open()
+            conn.execute(
+                """INSERT INTO vendor_consultants (name, billing_type, hourly_rate, role_key, active)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(name) DO UPDATE SET
+                   billing_type=?, hourly_rate=?, role_key=?, active=?""",
+                (fields["name"], fields.get("billing_type", "MSA"),
+                 fields.get("hourly_rate", 0.0), fields.get("role_key"),
+                 fields.get("active", 1),
+                 fields.get("billing_type", "MSA"),
+                 fields.get("hourly_rate", 0.0), fields.get("role_key"),
+                 fields.get("active", 1)),
+            )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error saving consultant: {e}"
+
+    # ------------------------------------------------------------------
+    # Vendor Timesheets
+    # ------------------------------------------------------------------
+    def read_timesheets(self, consultant_id: int = None, month: str = None,
+                        year: int = None) -> list[dict]:
+        conn = self._open()
+        sql = """SELECT vt.*, vc.name as consultant_name, vc.billing_type, vc.hourly_rate
+                 FROM vendor_timesheets vt
+                 JOIN vendor_consultants vc ON vc.id = vt.consultant_id
+                 WHERE 1=1"""
+        params = []
+        if consultant_id:
+            sql += " AND vt.consultant_id = ?"
+            params.append(consultant_id)
+        if month:
+            sql += " AND strftime('%Y-%m', vt.entry_date) = ?"
+            params.append(month)
+        if year:
+            sql += " AND strftime('%Y', vt.entry_date) = ?"
+            params.append(str(year))
+        sql += " ORDER BY vt.entry_date, vc.name"
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_timesheet_entry(self, fields: dict) -> Optional[str]:
+        try:
+            conn = self._open()
+            if fields.get("id"):
+                conn.execute(
+                    """UPDATE vendor_timesheets SET
+                       consultant_id=?, entry_date=?, project_key=?, project_name=?,
+                       task_description=?, work_type=?, hours=?, notes=?,
+                       updated_at=datetime('now')
+                       WHERE id=?""",
+                    (fields["consultant_id"], fields["entry_date"],
+                     fields.get("project_key"), fields.get("project_name"),
+                     fields.get("task_description"), fields.get("work_type", "Support"),
+                     fields.get("hours", 0), fields.get("notes"),
+                     fields["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO vendor_timesheets
+                       (consultant_id, entry_date, project_key, project_name,
+                        task_description, work_type, hours, notes)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (fields["consultant_id"], fields["entry_date"],
+                     fields.get("project_key"), fields.get("project_name"),
+                     fields.get("task_description"), fields.get("work_type", "Support"),
+                     fields.get("hours", 0), fields.get("notes")),
+                )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error saving timesheet: {e}"
+
+    def delete_timesheet_entry(self, entry_id: int) -> Optional[str]:
+        try:
+            conn = self._open()
+            conn.execute("DELETE FROM vendor_timesheets WHERE id = ?", (entry_id,))
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error deleting timesheet: {e}"
+
+    def get_timesheet_summary(self, month: str = None, year: int = None) -> list[dict]:
+        """Summarize hours by consultant for a given month or year."""
+        conn = self._open()
+        where = "WHERE 1=1"
+        params = []
+        if month:
+            where += " AND strftime('%Y-%m', vt.entry_date) = ?"
+            params.append(month)
+        if year:
+            where += " AND strftime('%Y', vt.entry_date) = ?"
+            params.append(str(year))
+
+        sql = f"""SELECT vc.id as consultant_id, vc.name, vc.billing_type, vc.hourly_rate,
+                         SUM(CASE WHEN vt.work_type = 'Project' THEN vt.hours ELSE 0 END) as project_hours,
+                         SUM(CASE WHEN vt.work_type = 'Support' THEN vt.hours ELSE 0 END) as support_hours,
+                         SUM(vt.hours) as total_hours,
+                         SUM(CASE WHEN vc.billing_type = 'T&M' THEN vt.hours * vc.hourly_rate ELSE 0 END) as tm_cost
+                  FROM vendor_timesheets vt
+                  JOIN vendor_consultants vc ON vc.id = vt.consultant_id
+                  {where}
+                  GROUP BY vc.id, vc.name
+                  ORDER BY vc.name"""
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Vendor Approvals
+    # ------------------------------------------------------------------
+    def read_approvals(self, month: str = None) -> list[dict]:
+        conn = self._open()
+        sql = """SELECT va.*, vc.name as consultant_name
+                 FROM vendor_approvals va
+                 JOIN vendor_consultants vc ON vc.id = va.consultant_id"""
+        params = []
+        if month:
+            sql += " WHERE va.month = ?"
+            params.append(month)
+        sql += " ORDER BY vc.name"
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_approval(self, fields: dict) -> Optional[str]:
+        try:
+            conn = self._open()
+            conn.execute(
+                """INSERT INTO vendor_approvals
+                   (consultant_id, month, total_hours, status,
+                    vendor_approved, vendor_approved_by, vendor_approved_at,
+                    ete_approved, ete_approved_by, ete_approved_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(consultant_id, month) DO UPDATE SET
+                   total_hours=?, status=?,
+                   vendor_approved=?, vendor_approved_by=?, vendor_approved_at=?,
+                   ete_approved=?, ete_approved_by=?, ete_approved_at=?""",
+                (fields["consultant_id"], fields["month"],
+                 fields.get("total_hours", 0), fields.get("status", "draft"),
+                 fields.get("vendor_approved", 0), fields.get("vendor_approved_by"),
+                 fields.get("vendor_approved_at"),
+                 fields.get("ete_approved", 0), fields.get("ete_approved_by"),
+                 fields.get("ete_approved_at"),
+                 # UPDATE values
+                 fields.get("total_hours", 0), fields.get("status", "draft"),
+                 fields.get("vendor_approved", 0), fields.get("vendor_approved_by"),
+                 fields.get("vendor_approved_at"),
+                 fields.get("ete_approved", 0), fields.get("ete_approved_by"),
+                 fields.get("ete_approved_at")),
+            )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error saving approval: {e}"
+
+    # ------------------------------------------------------------------
+    # Approved Work Register
+    # ------------------------------------------------------------------
+    def read_approved_work(self) -> list[dict]:
+        conn = self._open()
+        rows = conn.execute(
+            "SELECT * FROM approved_work ORDER BY approved_date DESC, jira_key"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_approved_work(self, fields: dict) -> Optional[str]:
+        try:
+            conn = self._open()
+            if fields.get("id"):
+                conn.execute(
+                    """UPDATE approved_work SET
+                       jira_key=?, title=?, work_type=?, work_classification=?,
+                       approved_date=?, approver=?, notes=?
+                       WHERE id=?""",
+                    (fields.get("jira_key"), fields["title"],
+                     fields.get("work_type"), fields.get("work_classification"),
+                     fields.get("approved_date"), fields.get("approver"),
+                     fields.get("notes"), fields["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO approved_work
+                       (jira_key, title, work_type, work_classification,
+                        approved_date, approver, notes)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (fields.get("jira_key"), fields["title"],
+                     fields.get("work_type"), fields.get("work_classification"),
+                     fields.get("approved_date"), fields.get("approver"),
+                     fields.get("notes")),
+                )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error saving approved work: {e}"
+
+    # ------------------------------------------------------------------
+    # Vendor Invoices
+    # ------------------------------------------------------------------
+    def read_invoices(self, year: int = None) -> list[dict]:
+        conn = self._open()
+        sql = "SELECT * FROM vendor_invoices"
+        params = []
+        if year:
+            sql += " WHERE strftime('%Y', month || '-01') = ?"
+            params.append(str(year))
+        sql += " ORDER BY month DESC"
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_invoice(self, fields: dict) -> Optional[str]:
+        try:
+            conn = self._open()
+            if fields.get("id"):
+                conn.execute(
+                    """UPDATE vendor_invoices SET
+                       month=?, msa_amount=?, tm_amount=?, total_amount=?,
+                       invoice_number=?, received_date=?, paid=?, notes=?
+                       WHERE id=?""",
+                    (fields["month"], fields.get("msa_amount", 0),
+                     fields.get("tm_amount", 0), fields.get("total_amount", 0),
+                     fields.get("invoice_number"), fields.get("received_date"),
+                     fields.get("paid", 0), fields.get("notes"), fields["id"]),
+                )
+            else:
+                conn.execute(
+                    """INSERT INTO vendor_invoices
+                       (month, msa_amount, tm_amount, total_amount,
+                        invoice_number, received_date, paid, notes)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (fields["month"], fields.get("msa_amount", 0),
+                     fields.get("tm_amount", 0), fields.get("total_amount", 0),
+                     fields.get("invoice_number"), fields.get("received_date"),
+                     fields.get("paid", 0), fields.get("notes")),
+                )
+            conn.commit()
+            return None
+        except Exception as e:
+            return f"Error saving invoice: {e}"

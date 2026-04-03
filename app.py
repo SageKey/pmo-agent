@@ -25,6 +25,7 @@ import pages_assistant
 import pages_editor
 import pages_roster
 import pages_financials
+import pages_timesheets
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["Executive Summary", "Portfolio", "Capacity", "Timeline", "Financials", "Team Roster", "AI Assistant"],
+        ["Executive Summary", "Portfolio", "Capacity", "Timeline", "Financials", "Timesheets", "Team Roster", "AI Assistant"],
         label_visibility="collapsed",
         key="nav_radio",
     )
@@ -245,6 +246,8 @@ elif page == "Timeline":
     pages_timeline.render(data, utilization, person_demand)
 elif page == "Financials":
     pages_financials.render(data, utilization, person_demand)
+elif page == "Timesheets":
+    pages_timesheets.render(data, utilization, person_demand)
 elif page == "Team Roster":
     pages_roster.render(data, utilization, person_demand)
 elif page == "AI Assistant":

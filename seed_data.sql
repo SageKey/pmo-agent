@@ -624,5 +624,383 @@ INSERT INTO role_phase_efforts VALUES('wms','design',0.1000000000000000055);
 INSERT INTO role_phase_efforts VALUES('wms','build',0.1000000000000000055);
 INSERT INTO role_phase_efforts VALUES('wms','test',0.05000000000000000277);
 INSERT INTO role_phase_efforts VALUES('wms','deploy',0.5);
+CREATE TABLE vendor_consultants (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT UNIQUE NOT NULL,
+    billing_type    TEXT NOT NULL DEFAULT 'MSA',   -- 'MSA' or 'T&M'
+    hourly_rate     REAL NOT NULL DEFAULT 0.0,     -- 0 for MSA-covered
+    role_key        TEXT,
+    active          INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO vendor_consultants VALUES(1,'Ajay','MSA',0.0,'functional',1);
+INSERT INTO vendor_consultants VALUES(2,'Bhavya','T&M',60.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(3,'Deepak','MSA',0.0,'functional',1);
+INSERT INTO vendor_consultants VALUES(4,'Ravi','MSA',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(5,'Sangam','MSA',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(6,'Sarath','T&M',200.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(7,'Vinod','MSA',0.0,'dba',1);
+INSERT INTO vendor_consultants VALUES(8,'Vishnu','MSA',0.0,'technical',1);
+INSERT INTO vendor_consultants VALUES(9,'Akhilesh','T&M',65.0,'technical',1);
+CREATE TABLE vendor_timesheets (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    consultant_id   INTEGER NOT NULL REFERENCES vendor_consultants(id),
+    entry_date      TEXT NOT NULL,                 -- ISO date
+    project_key     TEXT,                          -- Jira key (SSE-xxx) or NULL for general support
+    project_name    TEXT,
+    task_description TEXT,
+    work_type       TEXT NOT NULL DEFAULT 'Support', -- 'Project' or 'Support'
+    hours           REAL NOT NULL DEFAULT 0.0,
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO vendor_timesheets VALUES(1,1,'2026-03-02','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',5.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(2,1,'2026-03-02','SSE-493','Monthly - Customer Statement Report generation pre activity','Monthly - Customer Statement Report generation pre activity','Support',2.0,'Verification','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(3,1,'2026-03-02','SSE-491','Monthly - Inventory Data Extract','Monthly - Inventory Data Extract','Support',1.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(4,1,'2026-03-03','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',6.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(5,1,'2026-03-03','SSE-544','SL enhancement Request: WMERP Warehouse to Warehouse Bulk Transfer Seriall Logs','SL enhancement Request: WMERP Warehouse to Warehouse Bulk Transfer Seriall Logs','Project',2.0,'Testing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(6,1,'2026-03-04','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',5.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(7,1,'2026-03-04','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',1.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(8,1,'2026-03-05','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',5.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(9,1,'2026-03-05','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(10,1,'2026-03-05','SSE-571','Order JR00000345 in Syteline Not Able To Receive Core Lines','Order JR00000345 in Syteline Not Able To Receive Core Lines','Support',1.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(11,1,'2026-03-06','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',3.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(12,1,'2026-03-06','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',3.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(13,1,'2026-03-06','SSE-571','Order JR00000345 in Syteline Not Able To Receive Core Lines','Order JR00000345 in Syteline Not Able To Receive Core Lines','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(14,1,'2026-03-09','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',2.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(15,1,'2026-03-09','SSE-571','Order JR00000345 in Syteline Not Able To Receive Core Lines','Order JR00000345 in Syteline Not Able To Receive Core Lines','Support',2.0,'Fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(16,1,'2026-03-09','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(17,1,'2026-03-09','SSE-563','SR-57772 Mass data change / SQL script request (Delete Unused/Unnecessary Locations)','SR-57772 Mass data change / SQL script request (Delete Unused/Unnecessary Locations)','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(18,1,'2026-03-10','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(19,1,'2026-03-10','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(20,1,'2026-03-10','SSE-545','Installed New Return Type MFDN ETE_TEST','Installed New Return Type MFDN ETE_TEST','Project',2.0,'Testing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(21,1,'2026-03-11','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',6.0,'Process, Planning failed','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(22,1,'2026-03-11','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(23,1,'2026-03-12','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',5.0,'Process, Planning failed','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(24,1,'2026-03-12','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',3.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(25,1,'2026-03-13','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',8.0,'Process,','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(26,1,'2026-03-16','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process,','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(27,1,'2026-03-16','SSE-591','FW: Outstanding EVO PO''s reconciliation','FW: Outstanding EVO PO''s reconciliation','Support',4.0,'Fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(28,1,'2026-03-17','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process, ','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(29,1,'2026-03-17','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(30,1,'2026-03-17','SSE-402','ETE Core Plan issues fix','ETE Core Plan issues fix','Project',2.0,'Response scenario help & call','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(31,1,'2026-03-18','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process, Planning failed','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(32,1,'2026-03-18','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',3.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(33,1,'2026-03-18','SSE-594','Component Pick Plan -- Mfg Items','Component Pick Plan -- Mfg Items','Support',1.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(34,1,'2026-03-19','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process, Planning failed','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(35,1,'2026-03-19','SSE-596','Urgent Task: Corrupted PO/Core Charge Clean up','Urgent Task: Corrupted PO/Core Charge Clean up','Support',2.0,'Fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(36,1,'2026-03-19','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(37,1,'2026-03-20','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',6.0,'Process, Planning failed','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(38,1,'2026-03-20','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Issue reproduced','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(39,1,'2026-03-23','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',8.0,'Process, Planning failed - Call','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(40,1,'2026-03-24','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',2.0,'Process, Planning failed','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(41,1,'2026-03-24','SSE-591','FW: Outstanding EVO PO''s reconciliation','FW: Outstanding EVO PO''s reconciliation','Support',2.0,'Fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(42,1,'2026-03-24','SSE-602','APS Planning failed 3/24','APS Planning failed 3/24','Support',4.0,'Fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(43,1,'2026-03-25','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process, Monitor','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(44,1,'2026-03-25','SSE-602','APS Planning failed 3/24','APS Planning failed 3/24','Support',4.0,'Monitor & Rerun','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(45,1,'2026-03-26','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',3.0,'Process, Monitor','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(46,1,'2026-03-26','SSE-604','Delete Items from WM_Truckloads_mst','Delete Items from WM_Truckloads_mst','Support',1.0,'Fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(47,1,'2026-03-26','SSE-605','Modify WMERP Truckload Transfer To Prevent Issues with Serial Numbers Scanned to Multiple Transfers','Modify WMERP Truckload Transfer To Prevent Issues with Serial Numbers Scanned to Multiple Transfers','Support',2.0,'Test','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(48,1,'2026-03-26','SSE-402','ETE Core Plan issues fix','ETE Core Plan issues fix','Project',2.0,'Test','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(49,1,'2026-03-27','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',5.0,'Process, Monitor','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(50,1,'2026-03-27','SSE-402','ETE Core Plan issues fix','ETE Core Plan issues fix','Project',3.0,'Test','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(51,1,'2026-03-30','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',4.0,'Process, Monitor','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(52,1,'2026-03-30','SSE-559',' ETE Production Oversight - Dyno Data Bug',' ETE Production Oversight - Dyno Data Bug','Support',2.0,'Resolution','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(53,1,'2026-03-30','SSE-611','Fuel Surcharge Notification','Fuel Surcharge Notification','Project',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(54,1,'2026-03-31','SSE-401','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Unposted, JMT Clear,  Planning, get ATP, invoicing, etc, ','Support',3.0,'Process, Monitor','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(55,1,'2026-03-31','SSE-492','Monthly - Vouchers payable write off','Monthly - Vouchers payable write off','Support',3.0,'Process','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(56,1,'2026-03-31','SSE-611','Fuel Surcharge Notification','Fuel Surcharge Notification','Project',2.0,'work with Dev','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(57,2,'2026-03-02','SSE-526','Changes to Accounts Receivable Aging Report','Development (CSV Report)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(58,2,'2026-03-03','SSE-526','Changes to Accounts Receivable Aging Report','Development (CSV Report)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(59,2,'2026-03-04','SSE-526','Changes to Accounts Receivable Aging Report','Development (CSV Report)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(60,2,'2026-03-05','SSE-526','Changes to Accounts Receivable Aging Report','Development (CSV Report)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(61,2,'2026-03-06','SSE-526','Changes to Accounts Receivable Aging Report','Development (CSV Report)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(62,2,'2026-03-09','SSE-526','Changes to Accounts Receivable Aging Report','Development (CSV Report)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(63,2,'2026-03-10','SSE-526','Changes to Accounts Receivable Aging Report','Development (Data View)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(64,2,'2026-03-11','SSE-526','Changes to Accounts Receivable Aging Report','Development (Data View)','Project',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(65,2,'2026-03-11','SSE-526','DEVELOPMENT - Tax Issues - Do not allow credits to credit tax if tax was not charged on the original invoice ETE_Test','Fix issue','Project',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(66,2,'2026-03-12','SSE-526','Changes to Accounts Receivable Aging Report','Development (Data View)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(67,2,'2026-03-13','SSE-526','Changes to Accounts Receivable Aging Report','Development (Data View)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(68,2,'2026-03-16','SSE-526','Changes to Accounts Receivable Aging Report','Development (Data View)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(69,2,'2026-03-17','SSE-526','Changes to Accounts Receivable Aging Report','Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(70,2,'2026-03-18','SSE-526','Changes to Accounts Receivable Aging Report','Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(71,2,'2026-03-19','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Development & Testing','Support',6.0,'Default Account to 20410 for Service Orders(Payment Type: WEX)','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(72,2,'2026-03-19','SSE-526','Changes to Accounts Receivable Aging Report','Testing','Project',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(73,2,'2026-03-20','SSE-526','Changes to Accounts Receivable Aging Report','Adjusting Core and Unit Buckets','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(74,2,'2026-03-23','SSE-526','Changes to Accounts Receivable Aging Report','Adjusting Core and Unit Buckets','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(75,2,'2026-03-24','SSE-526','Changes to Accounts Receivable Aging Report','Adjusting Core and Unit Buckets','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(76,2,'2026-03-25','SSE-526','Changes to Accounts Receivable Aging Report','Adjusting Core and Unit Buckets','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(77,2,'2026-03-26','SSE-526','Changes to Accounts Receivable Aging Report','Testing','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(78,2,'2026-03-26','SSE-495','DEVELOPMENT - Tax Issues - Do not allow credits to credit tax if tax was not charged on the original invoice ETE_Test','Changes moved to Live','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(79,2,'2026-03-27','SSE-526','Changes to Accounts Receivable Aging Report','Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(80,2,'2026-03-30','SSE-526','Changes to Accounts Receivable Aging Report','Fixing issues','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(81,2,'2026-03-31','SSE-526','Changes to Accounts Receivable Aging Report','Deploying changes to AR Test for user testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(82,3,'2026-03-02','SSE-496','Cash App issues requiring SQL programming to fix','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(83,3,'2026-03-03','SSE-557','Clear Temp_Mass_Journal For Feb_2026','Month-end activity','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(84,3,'2026-03-04','SSE-339','FIXED: Issues running A/R aging report','Testing & Analyzing the issue','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(85,3,'2026-03-05','SSE-571','Order JR00000345 in Syteline Not Able To Receive Core Lines','Updated the Unit code 1','Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(86,3,'2026-03-05','SSE-339','FIXED: Issues running A/R aging report','Testing & Analyzing the issue','Support',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(87,3,'2026-03-06','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Analysis the Process','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(88,3,'2026-03-06','SSE-555','AP vendor checks','Analysis & resolved the Issue','Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(89,3,'2026-03-09','SSE-555','AP vendor checks','Analysis & resolved the Issue','Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(90,3,'2026-03-09','SSE-471','DELIVERY - Spend Report for Dean - Analyze Spend Data by GL Acct last 365 days',NULL,'Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(91,3,'2026-03-10','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(92,3,'2026-03-11','SSE-496','Cash Application','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(93,3,'2026-03-12','SSE-526','DEVELOPMENT - Tax Issues - Do not allow credits to credit tax if tax was not charged on the original invoice ETE_Test','Functional Testing','Project',4.0,' ','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(94,3,'2026-03-12','SSE-471','DELIVERY - Spend Report for Dean - Analyze Spend Data by GL Acct last 365 days',NULL,'Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(95,3,'2026-03-13','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(96,3,'2026-03-16','SSE-496','Cash Application','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(97,3,'2026-03-17','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(98,3,'2026-03-18','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Analysis the Process & Developement Support','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(99,3,'2026-03-19','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(100,3,'2026-03-20','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Functional Testing','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(101,3,'2026-03-23','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Functional Testing','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(102,3,'2026-03-24','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(103,3,'2026-03-25',unistr('SSE-598\u000a\u000a\u000a'),'Urgent Task: GL account Voucher Clean up','Functional Testing','Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(104,3,'2026-03-25','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(105,3,'2026-03-26','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(106,3,'2026-03-26','SSE-526','Question on RMA Return Transaction journal entries created from wmerp rma daily returns workbench','Analysis the Issue/Questions','Project',4.0,'Clarification provided for the Journal Entries','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(107,3,'2026-03-27','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(108,3,'2026-03-30','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(109,3,'2026-03-31','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(110,3,'2026-03-31','SSE-566','Outsourced Unit Core Accounting Proposed Change','Analyzing the Requirement','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(111,4,'2026-03-02','SSE-491','Extract inventory file','Extraxcted the inventory file and sent it to Dean','Support',2.0,'Data extraction','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(112,4,'2026-03-02','SSE-544','Warehouse to warehouse bulk transfer','Warehouse to warehouse bulk transfer','Project',6.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(113,4,'2026-03-03','SSE-544','Warehouse to warehouse bulk transfer','Warehouse to warehouse bulk transfer','Project',8.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(114,4,'2026-03-04','SSE-544','Warehouse to warehouse bulk transfer','Warehouse to warehouse bulk transfer','Project',8.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(115,4,'2026-03-05','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',6.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(116,4,'2026-03-05','SSE-538','Including transit location when generating parts plan','Including transit location when generating parts plan','Support',2.0,'Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(117,4,'2026-03-06','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(118,4,'2026-03-09','SSE-563','Mass delete of ISL & locations records','Mass delete of ISL & locations records','Support',8.0,'Mass update','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(119,4,'2026-03-10','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(120,4,'2026-03-11','SSE-563','Mass delete of ISL & locations records','Mass delete of ISL & locations records','Support',8.0,'Mass update','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(121,4,'2026-03-12','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(122,4,'2026-03-13','SSE-402','ETE Core Plan issues fix','ETE Core Plan issues fix','Project',8.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(123,4,'2026-03-16','SSE-563','Mass delete of ISL & locations records in the prod','Mass delete of ISL & locations records in the prod','Support',5.0,'Mass update','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(124,4,'2026-03-16','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',3.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(125,4,'2026-03-17','SSE-563','ISL & locations issue fix','ISL & locations issue fix','Support',3.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(126,4,'2026-03-17','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',5.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(127,4,'2026-03-18','SSE-538','Issue fix & analysis on parts plan','Issue fix & analysis on parts plan','Support',5.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(128,4,'2026-03-18','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',3.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(129,4,'2026-03-19','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(130,4,'2026-03-20','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(131,4,'2026-03-23','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(132,4,'2026-03-24','SSE-591','Outstanding EVO PO''s reconciliation','Outstanding EVO PO''s reconciliation','Support',4.0,'Table update','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(133,4,'2026-03-24','SSE-402','Core plan change request','Core plan change request','Project',4.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(134,4,'2026-03-25','SSE-402','Core plan change request','Core plan change request','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(135,4,'2026-03-26','SSE-604','delete items in wm_truckload transfer table','delete items in wm_truckload transfer table','Support',4.0,'Table update','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(136,4,'2026-03-26','SSE-402','Core plan change request','Core plan change request','Project',4.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(137,4,'2026-03-27','SSE-606','Rules when Po Lines are added Automatically for the core','Rules when Po Lines are added Automatically for the core','Support',2.0,'Debug & Analysis','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(138,4,'2026-03-27','SSE-402','Core plan change request','Core plan change request','Project',6.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(139,4,'2026-03-30','SSE-559','ETE Production Oversight - Dyno Data Bug','ETE Production Oversight - Dyno Data Bug','Support',8.0,'Issue fix','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(140,4,'2026-03-31','SSE-492','Monthly - Vouchers payable write off','Monthly - Vouchers payable write off','Support',4.0,'Mass update','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(141,4,'2026-03-31','SSE-611','Fuel Surcharge Notification','Fuel Surcharge Notification','Project',4.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(142,5,'2026-03-02','SSE-557','Clear Temp_Mass_Journal For Feb_2026','Clearing the Mass Journal posting fo rthe Feb Month','Support',4.0,'Feb Month','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(143,5,'2026-03-02','SSE-561','SL Task Request: Bulk Adding 720 accounts into Syteline','Creating scripts','Support',4.0,'Creating scripts','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(144,5,'2026-03-03','SSE-561','SL Task Request: Bulk Adding 720 accounts into Syteline','Creating scripts','Support',8.0,'Creating scripts','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(145,5,'2026-03-04','SSE-561','SL Task Request: Bulk Adding 720 accounts into Syteline','Creating scripts','Support',8.0,'Creating scripts','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(146,5,'2026-03-05','SSE-561','SL Task Request: Bulk Adding 720 accounts into Syteline','Creating scripts','Support',8.0,'Creating scripts','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(147,5,'2026-03-06','SSE-561','SL Task Request: Bulk Adding 720 accounts into Syteline','Creating scripts','Support',8.0,'Creating scripts','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(148,5,'2026-03-09','SSE-561','SL Task Request: Bulk Adding 720 accounts into Syteline','Deployment to Prod','Support',4.0,'Deployment to Prod','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(149,5,'2026-03-09','SSE-496','Cash Application','Additional Changes','Project',4.0,'Additional Changes','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(150,5,'2026-03-10','SSE-496','Cash Application','Additional Changes','Project',8.0,'Additional Changes','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(151,5,'2026-03-11','SSE-567','Customer Orders - PO Vendor Rejected Cancellations','Analysis and discussed on the requirement','Support',4.0,'Analysis and discussed on the requirement','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(152,5,'2026-03-12','SSE-496','Cash Application','Issues fixing','Project',8.0,'Issues fixing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(153,5,'2026-03-13','SSE-567','Customer Orders - PO Vendor Rejected Cancellations','Development and Testing','Support',8.0,'Development and Testing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(154,5,'2026-03-16','SSE-567','Customer Orders - PO Vendor Rejected Cancellations','Development and Testing','Support',3.0,'Text Message changing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(155,5,'2026-03-16','SSE-496','Cash Application','Development and Testing','Project',5.0,'Adding new field in ARTran and updating the reference','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(156,5,'2026-03-17','SSE-567','Customer Orders - PO Vendor Rejected Cancellations','Deployment to Prod','Support',1.0,'Deployment to Prod','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(157,5,'2026-03-17','SSE-496','Cash Application','Development and Testing','Project',3.0,'Adding new field in ARTran and updating the reference','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(158,5,'2026-03-17','SSE-534','Create Syteline Field in ISL for new location','Requirement analysis and meeting','Support',4.0,'Requirement analysis and meeting, have proposed other solution','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(159,5,'2026-03-18','SSE-496','Cash Application','Development and Testing','Project',8.0,'Prod deployments and monitoring','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(160,5,'2026-03-19','SSE-496','Cash Application','Development and Testing','Project',8.0,'Post deployment issues and monitoring','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(161,5,'2026-03-20','SSE-496','Cash Application','Development and Testing','Project',8.0,'Post deployment issues and monitoring','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(162,5,'2026-03-23','SSE-599','Bridgepay taking payment but not applying deposit or saving approval','Debuggin and fixing the issue','Support',8.0,'Debuggin and fixing the issue','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(163,5,'2026-03-24','SSE-599','Bridgepay taking payment but not applying deposit or saving approval','Debuggin and fixing the issue','Support',8.0,'Debuggin and fixing the issue','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(164,5,'2026-03-25','SSE-599','Bridgepay taking payment but not applying deposit or saving approval','APS Issues','Support',8.0,'Debuggin and fixing the issue','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(165,5,'2026-03-26','SSE-534','Create Syteline Field in ISL for new location','Development','Support',8.0,'Development','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(166,5,'2026-03-27','SSE-534','Create Syteline Field in ISL for new location','Testing','Support',8.0,'Testing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(167,5,'2026-03-30','SSE-534','Create Syteline Field in ISL for new location','Testing','Support',8.0,'Testing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(168,5,'2026-03-31','SSE-534','Create Syteline Field in ISL for new location','Testing','Support',8.0,'Testing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(169,6,'2026-03-02',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team.','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(170,6,'2026-03-03',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Worked with Jim on EDI Issues','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(171,6,'2026-03-04',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended weekly mmeeting with Finance team and ETE BAs','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(172,6,'2026-03-05',NULL,NULL,NULL,'Support',2.0,'Attended meeting India team. Attended Weekly meeting with Jim K and Kishore','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(173,6,'2026-03-06',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended meeting with Audrey to Explain the Cash Application form. Attended Nutanix call to understand the Server migration','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(174,6,'2026-03-09',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India team. Attended Nutanix meeting','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(175,6,'2026-03-10',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India team. Attended Nutanix meeting. Attended weekly meeting with Jim on EDI topics','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(176,6,'2026-03-11',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India team. Attended Nutanix meeting. Attended weekly meeting with Jim k and ETE BA team','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(177,6,'2026-03-12',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India team. Attended Nutanix meeting. Attended weekly meeting with Jim K and Kishore.','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(178,6,'2026-03-13',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India team. Attended Nutanix meeting. Attended weekly meeting with Brett and Jim Y','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(179,6,'2026-03-16',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended Nutanix meeting. Worked with Akilesh and Vishnu on EDI Issues. Was availabe to support from 8 AM to 5 PM CST','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(180,6,'2026-03-17',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended Nutanix meeting. Worked with Akilesh and Vishnu on EDI Issues. Attended weekly meeting with Jim on EDI Issues. Was availabe to support from 8 AM to 5 PM CST','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(181,6,'2026-03-18',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended Nutanix meeting. Worked with Akilesh and Vishnu on EDI Issues. Attended weekly meeting with Jim K and ETE BA and PMO Team. Was availabe to support from 8 AM to 5 PM CST. Attnded meeting with finance team and India team on AR Aging report changes. Worked 3 hours with Vishnu and Ajay to address the APSResync Issue','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(182,6,'2026-03-19',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended Nutanix meeting. Worked with Akilesh and Vishnu on EDI Issues. Attended weekly meeting with Jim K and Kishore. Was availabe to support from 8 AM to 5 PM CST. Worked 3 hours with Vishnu and Ajay to address the APSResync Issue and resolved the issue','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(183,6,'2026-03-20',NULL,NULL,NULL,'Support',5.0,'Attended meeting India team. Attended Nutanix meeting. Worked with Akilesh and Vishnu on EDI Issues. Attended weekly meeting with Tom N and Jim K. Was availabe to support from 8 AM to 5 PM CST','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(184,6,'2026-03-23',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India Team. Worked on Nutanix project support. Available to support from 8 AM to 5 PM','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(185,6,'2026-03-24',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India Team. Worked on Nutanix project Support. Available to support from 8 AM to 5 PM','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(186,6,'2026-03-25',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India team. Attended weekly meeting Jim K, ETE BA and PMO Team. Available to support from 8 AM to 5 PM','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(187,6,'2026-03-26',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India Team. Attended weekly meeting Jim K and Kishore. Attended meeting with Audrey on Core accounitng. Available to support from 8 AM to 5 PM','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(188,6,'2026-03-27',NULL,NULL,NULL,'Support',5.0,'Attended meeting with India Team. Attended weekly meeting with Brett and JiJim to discuss Credit cared processing. Attended weekly meeting with Tom and Jim on weekly touchbase. Attended meeting with Audrey on Core accounting. Available to support from 8 AM to 5 PM.','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(189,6,'2026-03-30',NULL,NULL,NULL,'Support',4.0,'Attended meeting with India team. Worked with the team to provide estimate for automation of Applying Credit memos to Deduction Invoices','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(190,6,'2026-03-31',NULL,NULL,NULL,'Support',4.0,'Attended meetign with India Team. Attended weekly meeting with Jim K on EDI Issues. Workign with Team on Providing estimate for Core accounting changes project.','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(191,7,'2026-03-02',NULL,NULL,'Performed systematic review of SQL Agent job execution histories, including backup, maintenance, and monitoring jobs, and proactively addressed failures to prevent operational disruptions.','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(192,7,'2026-03-03',NULL,NULL,'APSResync job failure','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(193,7,'2026-03-04',NULL,NULL,'Monitored database file growth, disk utilization, and autogrowth configurations to support capacity planning and prevent storage-related risks.','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(194,7,'2026-03-05',NULL,NULL,'Database file shrink performed to reclaim unused space','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(195,7,'2026-03-06','SSE-569',NULL,'DB Clone for Nutanix Project','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(196,7,'2026-03-09',NULL,NULL,'Performed systematic review of SQL Agent job execution histories, including backup, maintenance, and monitoring jobs, and proactively addressed failures to prevent operational disruptions.','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(197,7,'2026-03-10','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(198,7,'2026-03-11','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(199,7,'2026-03-11',NULL,NULL,'Scheduling job failure, worked on Aps server','Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(200,7,'2026-03-12','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(201,7,'2026-03-16',NULL,NULL,'Performed systematic review of SQL Agent job execution histories, including backup, maintenance, and monitoring jobs, and proactively addressed failures to prevent operational disruptions.','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(202,7,'2026-03-17','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(203,7,'2026-03-18','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(204,7,'2026-03-19',NULL,NULL,'APSResync job failure','Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(205,7,'2026-03-19','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(206,7,'2026-03-20',NULL,NULL,'APSResync job failure','Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(207,7,'2026-03-20','SSE-569',NULL,'Nutanix (Replace VMWare)','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(208,7,'2026-03-21','SSE-569','SQL servers Migration','Nutanix (Replace VMWare)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(209,7,'2026-03-22','SSE-569','post migration BI  issues','Nutanix (Replace VMWare)','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(210,7,'2026-03-23',NULL,'SSRS reports and DB mail configuration','Nutanix (Replace VMWare)','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(211,7,'2026-03-24','#INC-58903','LSRestore SQL Job on ETE-DATAW Failures',NULL,'Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(212,7,'2026-03-25','#INC-58938','Disk Space Alert: E Drive Reached Full Capacity - ETE-DATAW',NULL,'Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(213,7,'2026-03-25','#INC-58949','Request for System Administrator Access on ETE-ERPAPS','Scheduling Job failed on server','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(214,7,'2026-03-27',NULL,NULL,'Disk Space addition on ETE-ERPDB','Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(215,7,'2026-03-27','#INC-59011',NULL,'Log shipping Jobs verified and worked on Backup failures on ETE-ERPDB','Support',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(216,7,'2026-03-30',NULL,NULL,'Performed systematic review of SQL Agent job execution histories, including backup, maintenance, and monitoring jobs, and proactively addressed failures to prevent operational disruptions.','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(217,7,'2026-03-31',NULL,NULL,unistr('Investigated log shipping delays and validated restore and recovery times on secondary server\u0009'),'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(218,8,'2026-03-02','SSE-545','Installed New Return Type MFDN','Development','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(219,8,'2026-03-03','SSE-545','Installed New Return Type MFDN','Development','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(220,8,'2026-03-04','SSE-545','Installed New Return Type MFDN','Development','Project',3.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(221,8,'2026-03-04','SSE-570','Napa Stores To Update and Re-send','Development','Support',5.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(222,8,'2026-03-05','SSE-545','Installed New Return Type MFDN','Development','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(223,8,'2026-03-06','SSE-545','Installed New Return Type MFDN','Development','Project',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(224,8,'2026-03-06','SSE-471','DELIVERY - Spend Report for Dean - Analyze Spend Data by GL Acct last 365 days',NULL,'Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(225,8,'2026-03-09','SSE-545','Installed New Return Type MFDN','Development','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(226,8,'2026-03-10','SSE-545','Installed New Return Type MFDN','Development','Project',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(227,8,'2026-03-10','SSE-574','NAPA Resends for 3/9',NULL,'Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(228,8,'2026-03-11','SSE-516','BGTask Error When sending Credit Card Receipts worked before 10/2024',NULL,'Support',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(229,8,'2026-03-11','SSE-514',' Planning Fields Upload Utility ETE_Test','Moving to prodution','Project',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(230,8,'2026-03-12','SSE-580','NAPA Resends 3/12',NULL,'Support',1.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(231,8,'2026-03-12','SSE-471','DELIVERY - Spend Report for Dean - Analyze Spend Data by GL Acct last 365 days',NULL,'Support',7.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(232,8,'2026-03-13','SSE-577','Allow ASN to be sent for one order at a time',NULL,'Support',7.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(233,8,'2026-03-13','SSE-581','NAPA Resends 3/13',NULL,'Support',1.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(234,8,'2026-03-16','SSE-577','Allow ASN to be sent for one order at a time',NULL,'Support',7.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(235,8,'2026-03-16','SSE-592','NAPA Resends 3/16',NULL,'Support',1.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(236,8,'2026-03-17','SSE-576','Modify the EDI Profile and Customer Ship-To''s to enable Customer Service to self-Manage EDI Corrections',NULL,'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(237,8,'2026-03-18','SSE-577','Allow ASN to be sent for one order at a time',NULL,'Support',5.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(238,8,'2026-03-18','SSE-592','NAPA Resends 3/17',NULL,'Support',3.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(239,8,'2026-03-19','SSE-594','Component Pick Plan -- Mfg Items',NULL,'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(240,8,'2026-03-20','SSE-595','SL Generate Parts Plan -- Formula Change',NULL,'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(241,8,'2026-03-23','SSE-600','3PL Labels - Not Being Generated','Debugging and fixing the issue','Support',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(242,8,'2026-03-23','SSE-599','Bridgepay taking payment but not applying deposit or saving approval',NULL,'Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(243,8,'2026-03-24',NULL,NULL,'EDI Support','Support',5.0,'Query to extract missing EDI profile','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(244,8,'2026-03-24','SSE-595','SL Generate Parts Plan -- Formula Change',NULL,'Support',3.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(245,8,'2026-03-25','SSE-602','APS Planning failed 3/24',NULL,'Support',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(246,8,'2026-03-25','SSE-545','Installed New Return Type MFDN ETE_TEST','Production Move','Project',3.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(247,8,'2026-03-25','SSE-595','SL Generate Parts Plan -- Formula Change','Production Move','Support',1.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(248,8,'2026-03-26','SSE-605','Modify WMERP Truckload Transfer To Prevent Issues with Serial Numbers Scanned to Multiple Transfers',NULL,'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(249,8,'2026-03-27','SSE-607','Urgent Enhancement Request: SL generate Parts Plan -- Formula Change Alteration',NULL,'Support',5.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(250,8,'2026-03-27',NULL,NULL,'EDI Support','Support',3.0,'Missing profile for Advance','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(251,8,'2026-03-30','SSE-607','Urgent Enhancement Request: SL generate Parts Plan -- Formula Change Alteration',NULL,'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(252,8,'2026-03-31','SSE-612','Sending ASN and Invoice Without Having Already Sent One',NULL,'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(253,9,'2026-03-02',NULL,NULL,NULL,'Support',2.0,'Worked on Resending Napa Invoices','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(254,9,'2026-03-03',NULL,NULL,NULL,'Support',4.0,'Worked on Resending Napa Invoices','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(255,9,'2026-03-04',NULL,NULL,NULL,'Support',4.0,'Worked with SPS to understand why Car Quest Inovices are failing','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(256,9,'2026-03-05',NULL,NULL,NULL,'Support',4.0,'identified another Issue with Car Quest Invoices not being send to SPS','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(257,9,'2026-03-06',NULL,NULL,NULL,'Support',2.0,'Working with Vishnu to resolve the Car Quest invoices not sending to SPS','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(258,9,'2026-03-09',NULL,NULL,NULL,'Support',2.0,'Worked on EDI Resends','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(259,9,'2026-03-10',NULL,NULL,NULL,'Support',4.0,'Worked on EDI Resends','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(260,9,'2026-03-11',NULL,NULL,NULL,'Support',4.0,'Worked on EDI Resends','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(261,9,'2026-03-12',NULL,NULL,NULL,'Support',4.0,'Worked on EDI Resends','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(262,9,'2026-03-13',NULL,NULL,NULL,'Support',2.0,'Worked on EDI Resends','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(263,9,'2026-03-16',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(264,9,'2026-03-17',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(265,9,'2026-03-18',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(266,9,'2026-03-19',NULL,NULL,NULL,'Support',2.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(267,9,'2026-03-20',NULL,NULL,NULL,'Support',2.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(268,9,'2026-03-23',NULL,NULL,NULL,'Support',2.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(269,9,'2026-03-24',NULL,NULL,NULL,'Support',2.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(270,9,'2026-03-25',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(271,9,'2026-03-26',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(272,9,'2026-03-27',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(273,9,'2026-03-30',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(274,9,'2026-03-31',NULL,NULL,NULL,'Support',4.0,'EDI Support','2026-04-03 21:49:01','2026-04-03 21:49:01');
+CREATE TABLE vendor_approvals (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    consultant_id       INTEGER NOT NULL REFERENCES vendor_consultants(id),
+    month               TEXT NOT NULL,             -- 'YYYY-MM'
+    total_hours         REAL NOT NULL DEFAULT 0.0,
+    status              TEXT NOT NULL DEFAULT 'draft', -- draft, submitted, approved
+    vendor_approved     INTEGER NOT NULL DEFAULT 0,
+    vendor_approved_by  TEXT,
+    vendor_approved_at  TEXT,
+    ete_approved        INTEGER NOT NULL DEFAULT 0,
+    ete_approved_by     TEXT,
+    ete_approved_at     TEXT,
+    UNIQUE(consultant_id, month)
+);
+CREATE TABLE approved_work (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    jira_key            TEXT,
+    title               TEXT NOT NULL,
+    work_type           TEXT,                      -- Project, Enhancement, Break/Fix, Bug
+    work_classification TEXT,                      -- CapEx or Support
+    approved_date       TEXT,
+    approver            TEXT,
+    notes               TEXT
+);
+INSERT INTO approved_work VALUES(1,'SSE-538','Enhancement Request: Adding ''T'' or transit into Part Planning Logic','Enhancement','Support','2026-02-17','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(2,'SSE-526','Changes to Accounts Receivable Aging Report','Project','CapEx','2026-01-16','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(3,'SSE-496','Form for Cash App Issues Requiring SQL Programming to Fix','Project','CapEx','2026-01-16','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(4,'SSE-495','Tax Issues- Disallow Credits to Credit Tax if Not Charged on Original Invoice','Project','CapEx','2026-01-16','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(5,'SSE-538','Adding T or Transit Into Planing Logic','Enhancement','Support','2026-02-17','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(6,'SSE-516','BG Tastk Error When Sending CC Receipts Worked Before 10/2024','Break/Fix','Support','2026-01-29','Jim Young',NULL);
+INSERT INTO approved_work VALUES(7,'SSE-537','New Owner Field on SL Daily Workbench Issues','Break/Fix','Support','2026-02-17','Jim Young','This looks like a bug to me (Brett)');
+INSERT INTO approved_work VALUES(8,'SSE-453','Develop Gear Screen Functionality and Requirements','Project','CapEx','2026-01-12','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(9,'SSE-527','PCR Gear Screen Additional Needs','Project','CapEx','2026-02-09','Brett Anderson','Small PCR Update to the Gear Screen Project');
+INSERT INTO approved_work VALUES(10,'SSE-440','Restocking Fees Added to RMA Credit Memo','Project','CapEx','2026-12-22','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(11,'SSE-402','Execute Development for Spec Core Plan Changes','Project','CapEx','2026-12-12','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(12,'SSE-490','WMERP Production JIT POsting Form Update','Enhancement','Support','2026-01-15','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(13,'SSE-553','SL Enhancement: Adding Column to the Job Transaction Form','Enhancement','Support','2026-02-13','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(14,'SSE-489','Logic Change Request - Enable Post-Invoice Editing on WMERP Customer QE Form','Enhancement','Support','2026-01-15','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(15,'SSE-339','Issues Running A/R Aging Report','Bug','Support','2025-10-08','Jim Young',NULL);
+INSERT INTO approved_work VALUES(16,'SSE-494','ETE-DataW Restore Job - One Off Long Runtime New Example','Enhancement','Support','2026-01-19','Jim Young',NULL);
+INSERT INTO approved_work VALUES(17,'SSE-401','Monitor for Unposted Background Transactions','Enhancement','Support','2026-12-10','Jim Young','Ongoning Monitoring - This is a generic reporting card');
+INSERT INTO approved_work VALUES(18,'SSE-491','Monthly Inventory Data Extract','Enhancement','Support','2026-01-16','Jim Young','Ongoing Monthly Data Extract (Recurring)');
+INSERT INTO approved_work VALUES(19,'SSE-492','Monthly Vouchers Payable Write Off','Enhancement','Support','2026-01-16','Jim Young','Ongoing Monthly Task (Recurring)');
+INSERT INTO approved_work VALUES(20,'SSE-493','Monthly Custome Statement Report ','Enhancement','Support','2026-01-16','Jim Young','Ongoing Monthly Report Task (Recurring)');
+INSERT INTO approved_work VALUES(21,'SSE-540','Weekly EDI Invoice Resends','Enhancement','Support','2026-02-18','Jim Young','Ongoing Weekly Invoice Resends');
+INSERT INTO approved_work VALUES(22,'SSE-514','Planning Fields Upload Utility','Project','CapEx','2026-02-04','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(23,'SSE-488','Investigate Setup Bridgepay to Pilot Environment','Enhancement','Support','2026-01-14','Jim Young',NULL);
+INSERT INTO approved_work VALUES(24,'SSE-539','Urgent Task - Slow Printing 8100 in Syteline','Bug','Support','2026-02-18','Jim Young',NULL);
+INSERT INTO approved_work VALUES(25,'SSE-534','Create Syteline Field in ISL for New Location','Enhancement','Support',NULL,NULL,'NOT YET APPROVED');
+INSERT INTO approved_work VALUES(26,'SSE-530','ETE_Test - Purple Icon on PO Lines PO ETE356','Bug','Support',NULL,NULL,'NOT YET APPROVED');
+INSERT INTO approved_work VALUES(27,'SSE-444','Document Customer Policy (Restocking Fees Added to Credit Memos)','Project','CapEx',NULL,NULL,'NOT YET APPROVED');
+INSERT INTO approved_work VALUES(28,'SSE-543','EDI Customer Name Cleanup','Enhancement','Support','2026-02-20','Jim Young',NULL);
+INSERT INTO approved_work VALUES(29,'SSE-553','Change GL Acct to 20410 for Wex Payments','Enhancement','Support','2026-02-25','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(30,'SSE-545','Installed New Return Type MFDN','Project','CapEx','2026-02-27','Brett Anderson',NULL);
+INSERT INTO approved_work VALUES(31,'SSE-569','Nutanix (replace VMware) Vinod','Project','CapEx','2026-03-03','Brett Anderson',NULL);
+CREATE TABLE vendor_invoices (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    month           TEXT NOT NULL,                 -- 'YYYY-MM'
+    msa_amount      REAL NOT NULL DEFAULT 0.0,
+    tm_amount       REAL NOT NULL DEFAULT 0.0,
+    total_amount    REAL NOT NULL DEFAULT 0.0,
+    invoice_number  TEXT,
+    received_date   TEXT,
+    paid            INTEGER NOT NULL DEFAULT 0,
+    notes           TEXT
+);
+INSERT INTO vendor_invoices VALUES(1,'2026-03',50000.0,51680.0,101680.0,'INV-ETEMar26','2026-04-02',0,'MSA flat fee + T&M: Bhavya 176h@$60, Sarath 105h@$200, Akhilesh 72h@$65');
 INSERT INTO sqlite_sequence VALUES('project_assignments',129);
+INSERT INTO sqlite_sequence VALUES('vendor_consultants',9);
+INSERT INTO sqlite_sequence VALUES('vendor_timesheets',274);
+INSERT INTO sqlite_sequence VALUES('approved_work',31);
+INSERT INTO sqlite_sequence VALUES('vendor_invoices',1);
+CREATE INDEX idx_vt_consultant ON vendor_timesheets(consultant_id);
+CREATE INDEX idx_vt_date ON vendor_timesheets(entry_date);
+CREATE INDEX idx_vt_project ON vendor_timesheets(project_key);
 COMMIT;
