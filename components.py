@@ -96,9 +96,18 @@ def inject_css():
             flex-direction: column;
             justify-content: center;
         }
-        .kpi-card.green { border-left-color: #28A745; }
-        .kpi-card.yellow { border-left-color: #FFC107; }
-        .kpi-card.red { border-left-color: #DC3545; }
+        .kpi-card.green {
+            border-left: 4px solid #28A745;
+            background: linear-gradient(135deg, #f0faf2 0%, #FFFFFF 40%);
+        }
+        .kpi-card.yellow {
+            border-left: 4px solid #FFC107;
+            background: linear-gradient(135deg, #fffbf0 0%, #FFFFFF 40%);
+        }
+        .kpi-card.red {
+            border-left: 4px solid #DC3545;
+            background: linear-gradient(135deg, #fef2f2 0%, #FFFFFF 40%);
+        }
         .kpi-card.navy { border-left-color: #1B3A5C; }
         .kpi-label {
             font-size: 0.7rem;
@@ -473,7 +482,7 @@ def utilization_bar_chart(utilization: dict) -> alt.Chart:
                 axis=alt.Axis(labelFontSize=12, labelFontWeight=500)),
         x=alt.X("Utilization:Q", title="Utilization %",
                 axis=alt.Axis(format=".0%", labelFontSize=11),
-                scale=alt.Scale(domain=[0, max(1.5, df["Utilization"].max() * 1.1)])),
+                scale=alt.Scale(domain=[0, max(1.0, df["Utilization"].max() * 1.15)])),
         color=alt.Color("Status:N",
                         scale=alt.Scale(domain=["GREEN", "YELLOW", "RED"],
                                         range=[GREEN, YELLOW, RED]),
@@ -532,11 +541,11 @@ HEALTH_COLOR_MAP = {
     "At Risk": YELLOW,
     "Needs Help": RED,
     "Postponed": GRAY,
-    "Complete": "#17A2B8",
+    "Complete": GREEN,
     "Not Started": LIGHT_GRAY,
-    "Needs Func Spec": "#6F42C1",
-    "Needs Tech Spec": "#9B59B6",
-    "Needs Spec": "#6F42C1",
+    "Needs Func Spec": YELLOW,
+    "Needs Tech Spec": YELLOW,
+    "Needs Spec": YELLOW,
     "Unknown": LIGHT_GRAY,
 }
 

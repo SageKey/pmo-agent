@@ -126,23 +126,40 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     capacity_signal = "red" if roles_over > 0 else ("yellow" if roles_warning > 0 else "green")
 
+    # Portfolio completion — weighted average by estimated hours
+    total_est = sum(p.est_hours for p in active if p.est_hours > 0)
+    if total_est > 0:
+        portfolio_pct = sum(p.pct_complete * p.est_hours for p in active
+                            if p.est_hours > 0) / total_est
+    else:
+        portfolio_pct = sum(p.pct_complete for p in active) / n_active if n_active else 0
+
+    if portfolio_pct >= 0.7:
+        completion_signal = "green"
+    elif portfolio_pct >= 0.4:
+        completion_signal = "navy"
+    else:
+        completion_signal = "navy"
+
     # ==================================================================
     # TIER 1 — Portfolio Health KPIs (2-second scan)
     # ==================================================================
     kpi_row([
-        {"label": "Active Projects", "value": n_active, "color": "navy",
-         "delta": f"{n_complete} complete · {n_postponed} postponed"},
         {"label": "Portfolio Health", "value": f"{on_track}/{n_active} On Track",
          "color": health_signal,
          "delta": (f"{needs_help} needs help · {at_risk_h} at risk"
                    if needs_help + at_risk_h > 0 else "All projects healthy")},
+        {"label": "Portfolio Completion", "value": f"{portfolio_pct:.0%}",
+         "color": completion_signal,
+         "delta": f"{n_active} active · {n_complete} complete"},
         {"label": "Avg Utilization", "value": f"{avg_util:.0%}",
-         "color": util_signal},
+         "color": util_signal,
+         "delta": f"{len(roster)} team members"},
         {"label": "Capacity Alerts", "value": roles_over if roles_over > 0 else "None",
          "color": capacity_signal,
          "delta": (f"{roles_over} over · {roles_warning} warning"
                    if roles_over + roles_warning > 0
-                   else f"{len(roster)} team members")},
+                   else "All roles within target")},
     ])
 
     # ==================================================================
