@@ -30,27 +30,27 @@ CREATE TABLE projects (
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now'))
 , budget REAL DEFAULT 0.0, actual_cost REAL DEFAULT 0.0, forecast_cost REAL DEFAULT 0.0);
-INSERT INTO projects VALUES('ETE-83','Customer Master Data Cleanup','Key Initiative','Sales & Distribution','Tom Vierling','NEEDS TECHNICAL SPEC',0.4000000000000000222,'High','2025-10-14','2026-06-01',NULL,'Systems Applications','Emily Fridley','Audrey Debaere',NULL,NULL,'Alex Young','XXL: > 640 Hours',1480.0,'Completed Q1',1,'2026-04-02 03:35:22','2026-04-02 15:19:42',0.0,74000.0,185000.0);
-INSERT INTO projects VALUES('ETE-48','System Connection Syteline-VKS','Key Initiative','Engineering','Ray Trumble','NOT STARTED',0.1000000000000000055,'High','2026-02-15','2026-06-30',NULL,'Synnergie','Emily Fridley','Jim Young','Ajay Kumar','Sangamesh Koti','Alex Young','L: 160-320 Hours',240.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,3000.0,30000.0);
+INSERT INTO projects VALUES('ETE-83','Customer Master Data Cleanup','Key Initiative','Sales & Distribution','Tom Vierling','🔵 NEEDS TECHNICAL SPEC',0.4000000000000000222,'High','2025-10-14','2026-06-01',NULL,'Systems Applications','Emily Fridley','Audrey Debaere',NULL,NULL,'Alex Young','XXL: > 640 Hours',1480.0,'Completed Q1',1,'2026-04-02 03:35:22','2026-04-02 15:19:42',0.0,74000.0,185000.0);
+INSERT INTO projects VALUES('ETE-48','System Connection Syteline-VKS','Key Initiative','Engineering','Ray Trumble','⚪ NOT STARTED',0.1000000000000000055,'High','2026-02-15','2026-06-30',NULL,'Synnergie','Emily Fridley','Jim Young','Ajay Kumar','Sangamesh Koti','Alex Young','L: 160-320 Hours',240.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,3000.0,30000.0);
 INSERT INTO projects VALUES('ETE-68','Catalog API Rust2Python','Key Initiative','Information Technology','Jim Koscielniak','🟢 ON TRACK',0.5,'High','2025-11-17','2026-04-24',NULL,'Systems Applications','Emily Fridley','Audrey Debaere',NULL,NULL,'Colin Olson','XXL: > 640 Hours',640.0,NULL,1,'2026-04-02 03:35:22','2026-04-02T07:28:54.815415',0.0,40000.0,80000.0);
 INSERT INTO projects VALUES('ETE-43','Data Security - Microsoft Purview','Key Initiative','Information Technology','Jim Koscielniak','🟢 ON TRACK',0.0,'High','2026-02-02','2026-06-30',NULL,'Infrastructure','Emily Fridley','Audrey Debaere','Deepak Gudwani','Sarath Yeturu','Alex Young',NULL,320.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,0.0,40000.0);
-INSERT INTO projects VALUES('ETE-19','Changes to AR Aging Report','Enhancement','Finance','Tom Newell','NEEDS TECHNICAL SPEC',0.1000000000000000055,'High','2026-02-23','2026-04-17',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','M: 80-160 Hours',120.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 20:42:28',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-49','Marketing: STE Rewards Tier','Enhancement','Sales & Distribution','Tom Vierling','NEEDS TECHNICAL SPEC',0.0,'Medium','2026-04-01','2026-09-16',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young','L: 160-320 Hours',240.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,30000.0);
-INSERT INTO projects VALUES('ETE-7','Outsourced Unit Core Accounting','Enhancement','Finance','Tom Newell','NOT STARTED',0.0,'Medium','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','XXL: > 640 Hours',640.0,'8-9 month project',1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,80000.0);
-INSERT INTO projects VALUES('ETE-52','SWIMS/Syteline Reporting','Enhancement','Supply Chain','Jon Besherse','NOT STARTED',0.0,'Medium','2026-04-01','2026-04-29',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','S: < 80 Hours',40.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-19','Changes to AR Aging Report','Enhancement','Finance','Tom Newell','🔵 NEEDS TECHNICAL SPEC',0.0,'High','2026-02-23','2026-04-17',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','M: 80-160 Hours',120.0,NULL,1,'2026-04-02 03:35:22','2026-04-04 00:31:05',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-49','Marketing: STE Rewards Tier','Enhancement','Sales & Distribution','Tom Vierling','🔵 NEEDS TECHNICAL SPEC',0.0,'Medium','2026-04-01','2026-09-16',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young','L: 160-320 Hours',240.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,30000.0);
+INSERT INTO projects VALUES('ETE-7','Outsourced Unit Core Accounting','Enhancement','Finance','Tom Newell','⚪ NOT STARTED',0.0,'Medium','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','XXL: > 640 Hours',640.0,'8-9 month project',1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,80000.0);
+INSERT INTO projects VALUES('ETE-52','SWIMS/Syteline Reporting','Enhancement','Supply Chain','Jon Besherse','⚪ NOT STARTED',0.0,'Medium','2026-04-01','2026-04-29',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','S: < 80 Hours',40.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-16','Partial Pay w/ CC from WMERP','Enhancement','Finance','Tom Newell','⚪ NOT STARTED',0.0,'Medium','2026-04-01','2026-06-24',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Deepak Gudwani','Ravindra Reddy','Alex Young','M: 80-160 Hours',120.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-37','Magic Search in BuyETE','Enhancement','Sales & Distribution','Tom Vierling','NEEDS TECHNICAL SPEC',0.0,'Highest','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young','S: < 80 Hours',40.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-97','Standard Order Process Notifications','Enhancement','Sales & Distribution','Tom Vierling','NOT STARTED',0.0,'Highest','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,25000.0);
-INSERT INTO projects VALUES('ETE-100','ATSG Expired Members Self-Payment','Enhancement','Sales & Distribution','Tom Vierling','NEEDS FUNCTIONAL SPEC',0.0,'Medium','2026-04-01','2026-05-27',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Deepak Gudwani','Ravindra Reddy','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,25000.0);
-INSERT INTO projects VALUES('ETE-124','Clean Up Return Loads','Enhancement','Finance','Tom Newell','NOT STARTED',0.0,'Highest','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,25000.0);
-INSERT INTO projects VALUES('ETE-58','Transfer Order Moved Items to Transit Location','Enhancement','Finance','Jim Young','POSTPONED',0.0,NULL,'2026-04-01','2026-09-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-51','RMA Credit Memo on Ghost Check-In','Enhancement','Finance','Tom Newell','POSTPONED',0.0,NULL,'2026-04-01','2026-08-26',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-59','Reconcile BridgePay CC Transactions ','Enhancement','Finance','Tom Newell','POSTPONED',0.0,NULL,'2026-04-01','2026-05-13',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-60','EDI Payments Not Posting on Background','Enhancement','Finance','Tom Newell','POSTPONED',0.0,NULL,'2026-04-01','2026-09-02',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-61','Accum Deposits Received Field','Bug','Finance','Tom Newell','POSTPONED',0.0,NULL,'2026-04-01','2026-07-29',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-86','Allow TCM Core Receiving to Post ','Enhancement','Engineering','Ray Trumble','POSTPONED',0.0,NULL,'2026-04-01','2026-05-06',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-34','Salesforce BDR Application & Process Implementation','Enhancement','Sales & Distribution','Tom Vierling','POSTPONED',0.0,NULL,'2026-04-01','2026-04-29',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
-INSERT INTO projects VALUES('ETE-35','BuyETE Ability for Customers to Save Quotes','Enhancement','Sales & Distribution','Tom Vierling','POSTPONED',0.0,NULL,'2026-04-01','2026-05-13',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-37','Magic Search in BuyETE','Enhancement','Sales & Distribution','Tom Vierling','🔵 NEEDS TECHNICAL SPEC',0.0,'Highest','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young','S: < 80 Hours',40.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-97','Standard Order Process Notifications','Enhancement','Sales & Distribution','Tom Vierling','⚪ NOT STARTED',0.0,'Highest','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,25000.0);
+INSERT INTO projects VALUES('ETE-100','ATSG Expired Members Self-Payment','Enhancement','Sales & Distribution','Tom Vierling','🔵 NEEDS FUNCTIONAL SPEC',0.0,'Medium','2026-04-01','2026-05-27',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Deepak Gudwani','Ravindra Reddy','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,25000.0);
+INSERT INTO projects VALUES('ETE-124','Clean Up Return Loads','Enhancement','Finance','Tom Newell','⚪ NOT STARTED',0.0,'Highest','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,25000.0);
+INSERT INTO projects VALUES('ETE-58','Transfer Order Moved Items to Transit Location','Enhancement','Finance','Jim Young','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-09-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-51','RMA Credit Memo on Ghost Check-In','Enhancement','Finance','Tom Newell','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-08-26',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-59','Reconcile BridgePay CC Transactions ','Enhancement','Finance','Tom Newell','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-05-13',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-60','EDI Payments Not Posting on Background','Enhancement','Finance','Tom Newell','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-09-02',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-61','Accum Deposits Received Field','Bug','Finance','Tom Newell','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-07-29',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-86','Allow TCM Core Receiving to Post ','Enhancement','Engineering','Ray Trumble','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-05-06',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-34','Salesforce BDR Application & Process Implementation','Enhancement','Sales & Distribution','Tom Vierling','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-04-29',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-35','BuyETE Ability for Customers to Save Quotes','Enhancement','Sales & Distribution','Tom Vierling','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-05-13',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-33','EDI 3PL Locations','Enhancement','Sales & Distribution','Tom Vierling','🔴 NEEDS HELP',0.0,'High','2026-04-01','2026-06-10',NULL,'Systems Applications','Brett Anderson','Jim Young','Deepak Gudwani','Sarath Yeturu',NULL,'M: 80-160 Hours',120.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 16:04:25',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-67','Avalara Tax Issues','Enhancement','Finance','Tom Newell','✅ COMPLETE',1.0,'Highest','2026-02-04','2026-02-27',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Deepak Gudwani','Sangamesh Koti',NULL,'M: 80-160 Hours',120.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,15000.0,15000.0);
 INSERT INTO projects VALUES('ETE-14','Installed Return RMA Type','Enhancement','Supply Chain','Jon Besherse','✅ COMPLETE',1.0,'Highest','2026-03-02','2026-03-20',NULL,'Synnergie','Bettina Kotico','Audrey Debaere','Ajay Kumar','Sarath Yeturu',NULL,'M: 80-160 Hours',120.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,15000.0,15000.0);
@@ -59,11 +59,11 @@ INSERT INTO projects VALUES('ETE-65','Rebuild Vendor Portal','Enhancement','Sale
 INSERT INTO projects VALUES('ETE-69','Core Plan Optimization','Key Initiative','Supply Chain','Jon Besherse','✅ COMPLETE',1.0,'High','2025-11-12','2026-01-23','2026-01-23','Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Ravindra Reddy',NULL,'L: 160-320 Hours',360.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,45000.0,45000.0);
 INSERT INTO projects VALUES('ETE-31','Restocking Fees Added to RMA Credit Memo','Enhancement','Finance','Tom Newell','✅ COMPLETE',1.0,'High','2024-12-22','2026-02-06','2026-02-28','Synnergie','Brett Anderson','Audrey Debaere','Deepak Gudwani','Bhavya Reddy',NULL,'L: 160-320 Hours',310.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,38750.0,38750.0);
 INSERT INTO projects VALUES('ETE-45','VB Bin Printer Integration','Enhancement','Engineering','Ray Trumble','✅ COMPLETE',1.0,'High','2025-10-20','2026-02-20','2026-02-20','Synnergie','Brett Anderson','Cristian Varelas','Deepak Gudwani','Sangamesh Koti',NULL,'M: 80-160 Hours',160.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,20000.0,20000.0);
-INSERT INTO projects VALUES('ETE-42','Gear Screen - Improved Production Oversight','Key Initiative','Production','Ari Rosengarten','COMPLETE',1.0,'High','2026-01-12','2026-02-05','2026-02-28','Synnergie','Bettina Kotico','Cristian Varelas','Deepak Gudwani','Vishnu Premen',NULL,'M: 80-160 Hours',120.0,'NAPA not ready',3,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,10000.0,10000.0);
+INSERT INTO projects VALUES('ETE-42','Gear Screen - Improved Production Oversight','Key Initiative','Production','Ari Rosengarten','✅ COMPLETE',1.0,'High','2026-01-12','2026-02-05','2026-02-28','Synnergie','Bettina Kotico','Cristian Varelas','Deepak Gudwani','Vishnu Premen',NULL,'M: 80-160 Hours',120.0,'NAPA not ready',3,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,10000.0,10000.0);
 INSERT INTO projects VALUES('ETE-72','Fortigate ZTNA - EMS Setup','Key Initiative','Information Technology','Jim Koscielniak','✅ COMPLETE',1.0,'High','2025-12-12','2025-12-31','2026-02-27','Infrastructure',NULL,NULL,NULL,'Justin Senour',NULL,NULL,0.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,8000.0,8000.0);
 INSERT INTO projects VALUES('ETE-71','One Drive Migration','Key Initiative','Information Technology','Jim Koscielniak','✅ COMPLETE',1.0,'High','2025-12-22','2026-02-06','2026-02-15','Infrastructure',NULL,NULL,NULL,'Michael House',NULL,NULL,0.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,10000.0,10000.0);
-INSERT INTO projects VALUES('ETE-87','Production Dashboard','Enhancement','Production','Ari Rosengarten','COMPLETE',1.0,'High','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Cristian Varelas','Ajay Kumar','Vishnu Premen',NULL,'S: < 80 Hours',40.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,12000.0,12000.0);
-INSERT INTO projects VALUES('ETE-88','Return Load Phase 2','Key Initiative','Finance','Tom Newell','COMPLETE',1.0,'High','2025-10-27','2025-12-29','2026-01-09','Synnergie','Brett Anderson','Audrey Debaere','Deepak Gudwani','Sangamesh Koti',NULL,NULL,320.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,40000.0,40000.0);
+INSERT INTO projects VALUES('ETE-87','Production Dashboard','Enhancement','Production','Ari Rosengarten','✅ COMPLETE',1.0,'High','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Cristian Varelas','Ajay Kumar','Vishnu Premen',NULL,'S: < 80 Hours',40.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,12000.0,12000.0);
+INSERT INTO projects VALUES('ETE-88','Return Load Phase 2','Key Initiative','Finance','Tom Newell','✅ COMPLETE',1.0,'High','2025-10-27','2025-12-29','2026-01-09','Synnergie','Brett Anderson','Audrey Debaere','Deepak Gudwani','Sangamesh Koti',NULL,NULL,320.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,40000.0,40000.0);
 INSERT INTO projects VALUES('ETE-73','Teal Parts Daily Inventory Feed','Enhancement','Sales & Distribution','Tom Vierling','✅ COMPLETE',1.0,'Highest','2026-04-01','2026-08-19',NULL,'Systems Applications','Brett Anderson','Cristian Varelas','Deepak Gudwani','Sarath Yeturu',NULL,'S: < 80 Hours',40.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,8000.0,8000.0);
 INSERT INTO projects VALUES('ETE-10','Upload Utility for Planning Fields','Enhancement','Supply Chain','Tom Green','✅ COMPLETE',1.0,'Highest','2026-04-01','2026-09-09',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Deepak Gudwani','Bhavya Reddy','Alex Young','S: < 80 Hours',80.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 15:19:42',0.0,8000.0,8000.0);
 INSERT INTO projects VALUES('ETE-32','Form: Cash App SQL Fix','Enhancement','Finance','Tom Newell','✅ COMPLETE',1.0,'High','2026-04-01','2026-04-29',NULL,'Synnergie','Bettina Kotico','Audrey Debaere','Deepak Gudwani','Vishnu Premen',NULL,'L: 160-320 Hours',320.0,NULL,3,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,40000.0,40000.0);
@@ -996,49 +996,202 @@ CREATE TABLE vendor_invoices (
     notes           TEXT
 );
 INSERT INTO vendor_invoices VALUES(1,'2026-03',50000.0,51680.0,101680.0,'INV-ETEMar26','2026-04-02',0,'MSA flat fee + T&M: Bhavya 176h@$60, Sarath 105h@$200, Akhilesh 72h@$65');
+CREATE TABLE project_mapping (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    sse_key         TEXT NOT NULL UNIQUE,           -- SSE-xxx Jira key
+    ete_project_id  TEXT,                           -- ETE-xx portfolio project ID
+    sse_title       TEXT,                           -- Human-readable SSE title
+    relationship    TEXT DEFAULT 'subtask',         -- subtask, support, related
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO project_mapping VALUES(1,'SSE-526','ETE-19','Changes to AR Aging Report','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(2,'SSE-339','ETE-19','Issues running A/R aging report','support',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(3,'SSE-514','ETE-10','Planning Fields Upload Utility','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(4,'SSE-545','ETE-14','Installed New Return Type MFDN','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(5,'SSE-495','ETE-67','Tax Issues - Credit tax on invoices','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(6,'SSE-566','ETE-7','Outsourced Unit Core Accounting Proposed Change','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(7,'SSE-402','ETE-69','Core Plan change request / issues fix','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(8,'SSE-559','ETE-42','ETE Production Oversight - Dyno Data Bug','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(9,'SSE-496','ETE-32','Cash Application SQL fix','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(10,'SSE-599','ETE-59','Bridgepay payment not applying deposit','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(11,'SSE-538','ETE-58','Including transit location in parts plan','related',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(12,'SSE-576','ETE-33','Modify EDI Profile for Customer Ship-Tos','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(13,'SSE-577','ETE-33','Allow ASN to be sent for one order','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(14,'SSE-600','ETE-33','3PL Labels Not Being Generated','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(15,'SSE-612','ETE-33','Sending ASN and Invoice','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(16,'SSE-544','ETE-124','Warehouse to Warehouse Bulk Transfer','related',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(17,'SSE-605','ETE-124','Modify WMERP Truckload Transfer serial numbers','related',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(18,'SSE-594','ETE-69','Component Pick Plan - Mfg Items','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(19,'SSE-595','ETE-69','SL Generate Parts Plan - Formula Change','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(20,'SSE-607','ETE-69','Parts Plan Formula Change Alteration','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(21,'SSE-516','ETE-16','BGTask Error sending Credit Card Receipts','support',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(22,'SSE-534','ETE-33','Create Syteline Field for new location','related',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(23,'SSE-606','ETE-7','Rules when PO Lines added for core','subtask',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(24,'SSE-553','ETE-60','Change GL Acct for WEX Payments','related',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+INSERT INTO project_mapping VALUES(25,'SSE-611','ETE-76','Fuel Surcharge Notification','related',NULL,'2026-04-03 22:36:19','2026-04-03 22:36:19');
+CREATE TABLE project_comments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    author          TEXT NOT NULL,
+    body            TEXT NOT NULL,
+    comment_type    TEXT NOT NULL DEFAULT 'comment',  -- 'comment', 'status_update', 'system'
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO project_comments VALUES(1,'ETE-19','Brett Anderson','Kicking off AR Aging report changes. Synnergie team assigned.','comment','2026-04-03 23:18:46','2026-04-03 23:18:46');
+CREATE TABLE project_attachments (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    filename        TEXT NOT NULL,
+    file_size       INTEGER DEFAULT 0,
+    mime_type       TEXT,
+    stored_path     TEXT NOT NULL,
+    uploaded_by     TEXT NOT NULL,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE project_audit_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    action          TEXT NOT NULL,
+    actor           TEXT NOT NULL,
+    field_changed   TEXT,
+    old_value       TEXT,
+    new_value       TEXT,
+    details         TEXT,
+    created_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO project_audit_log VALUES(1,'ETE-19','comment_added','Brett Anderson',NULL,NULL,NULL,'Kicking off AR Aging report changes. Synnergie team assigned.','2026-04-03 23:18:46');
+INSERT INTO project_audit_log VALUES(2,'ETE-19','milestones_seeded','Brett Anderson',NULL,NULL,NULL,'SDLC template (8 milestones)','2026-04-04 00:30:20');
+INSERT INTO project_audit_log VALUES(3,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Requirements Sign-off — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(4,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Project Plan Approved — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(5,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Functional Spec Complete — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(6,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Technical Spec Complete — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(7,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Development Complete — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(8,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'UAT Sign-off — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(9,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Go-Live — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(10,'ETE-19','task_added','Brett Anderson',NULL,NULL,NULL,'Post Go-Live Review — Planning','2026-04-04 00:30:29');
+INSERT INTO project_audit_log VALUES(11,'ETE-19','task_completed','Brett Anderson',NULL,NULL,NULL,'Requirements Sign-off — Planning','2026-04-04 00:35:32');
+INSERT INTO project_audit_log VALUES(12,'ETE-48','milestones_seeded','Brett Anderson',NULL,NULL,NULL,'SDLC template (8 milestones)','2026-04-04 00:45:40');
+INSERT INTO project_audit_log VALUES(13,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Requirements Sign-off — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(14,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Project Plan Approved — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(15,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Functional Spec Complete — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(16,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Technical Spec Complete — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(17,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Development Complete — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(18,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'UAT Sign-off — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(19,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Go-Live — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(20,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Post Go-Live Review — Planning','2026-04-04 00:45:47');
+INSERT INTO project_audit_log VALUES(21,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'test','2026-04-04 00:46:39');
+INSERT INTO project_audit_log VALUES(22,'ETE-68','milestones_seeded','Brett Anderson',NULL,NULL,NULL,'SDLC template (8 milestones)','2026-04-04 01:22:35');
+CREATE TABLE project_milestones (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    milestone_type  TEXT NOT NULL DEFAULT 'deliverable',
+    due_date        TEXT,
+    completed_date  TEXT,
+    status          TEXT NOT NULL DEFAULT 'not_started',
+    owner           TEXT,
+    jira_epic_key   TEXT,
+    progress_pct    REAL DEFAULT 0.0,
+    sort_order      INTEGER DEFAULT 0,
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO project_milestones VALUES(1,'ETE-19','Requirements Sign-off','gate','2026-03-01',NULL,'not_started',NULL,NULL,0.0,0,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(2,'ETE-19','Project Plan Approved','gate','2026-03-08',NULL,'not_started',NULL,NULL,0.0,1,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(3,'ETE-19','Functional Spec Complete','gate','2026-03-14',NULL,'not_started',NULL,NULL,0.0,2,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(4,'ETE-19','Technical Spec Complete','gate','2026-03-21',NULL,'not_started',NULL,NULL,0.0,3,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(5,'ETE-19','Development Complete','deliverable','2026-03-28',NULL,'not_started',NULL,NULL,0.0,4,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(6,'ETE-19','UAT Sign-off','gate','2026-04-03',NULL,'not_started',NULL,NULL,0.0,5,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(7,'ETE-19','Go-Live','go_live','2026-04-10',NULL,'not_started',NULL,NULL,0.0,6,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(8,'ETE-19','Post Go-Live Review','checkpoint','2026-04-17',NULL,'not_started',NULL,NULL,0.0,7,NULL,'2026-04-04 00:30:20','2026-04-04 00:30:20');
+INSERT INTO project_milestones VALUES(9,'ETE-48','Requirements Sign-off','gate','2026-03-03',NULL,'not_started',NULL,NULL,0.0,0,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(10,'ETE-48','Project Plan Approved','gate','2026-03-20',NULL,'not_started',NULL,NULL,0.0,1,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(11,'ETE-48','Functional Spec Complete','gate','2026-04-06',NULL,'not_started',NULL,NULL,0.0,2,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(12,'ETE-48','Technical Spec Complete','gate','2026-04-23',NULL,'not_started',NULL,NULL,0.0,3,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(13,'ETE-48','Development Complete','deliverable','2026-05-10',NULL,'not_started',NULL,NULL,0.0,4,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(14,'ETE-48','UAT Sign-off','gate','2026-05-27',NULL,'not_started',NULL,NULL,0.0,5,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(15,'ETE-48','Go-Live','go_live','2026-06-13',NULL,'not_started',NULL,NULL,0.0,6,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(16,'ETE-48','Post Go-Live Review','checkpoint','2026-06-30',NULL,'not_started',NULL,NULL,0.0,7,NULL,'2026-04-04 00:45:40','2026-04-04 00:45:40');
+INSERT INTO project_milestones VALUES(17,'ETE-68','Requirements Sign-off','gate','2025-12-06',NULL,'not_started',NULL,NULL,0.0,0,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(18,'ETE-68','Project Plan Approved','gate','2025-12-26',NULL,'not_started',NULL,NULL,0.0,1,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(19,'ETE-68','Functional Spec Complete','gate','2026-01-15',NULL,'not_started',NULL,NULL,0.0,2,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(20,'ETE-68','Technical Spec Complete','gate','2026-02-04',NULL,'not_started',NULL,NULL,0.0,3,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(21,'ETE-68','Development Complete','deliverable','2026-02-23',NULL,'not_started',NULL,NULL,0.0,4,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(22,'ETE-68','UAT Sign-off','gate','2026-03-15',NULL,'not_started',NULL,NULL,0.0,5,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(23,'ETE-68','Go-Live','go_live','2026-04-04',NULL,'not_started',NULL,NULL,0.0,6,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+INSERT INTO project_milestones VALUES(24,'ETE-68','Post Go-Live Review','checkpoint','2026-04-24',NULL,'not_started',NULL,NULL,0.0,7,NULL,'2026-04-04 01:22:35','2026-04-04 01:22:35');
+CREATE TABLE project_tasks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    milestone_id    INTEGER REFERENCES project_milestones(id) ON DELETE SET NULL,
+    parent_task_id  INTEGER REFERENCES project_tasks(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    assignee        TEXT,
+    role_key        TEXT,
+    start_date      TEXT,
+    end_date        TEXT,
+    est_hours       REAL DEFAULT 0.0,
+    actual_hours    REAL DEFAULT 0.0,
+    status          TEXT NOT NULL DEFAULT 'not_started',
+    progress_pct    REAL DEFAULT 0.0,
+    priority        TEXT DEFAULT 'Medium',
+    jira_key        TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+INSERT INTO project_tasks VALUES(1,'ETE-19',1,NULL,'Requirements Sign-off — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'complete',100.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:35:32');
+INSERT INTO project_tasks VALUES(2,'ETE-19',2,NULL,'Project Plan Approved — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(3,'ETE-19',3,NULL,'Functional Spec Complete — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(4,'ETE-19',4,NULL,'Technical Spec Complete — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(5,'ETE-19',5,NULL,'Development Complete — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(6,'ETE-19',6,NULL,'UAT Sign-off — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(7,'ETE-19',7,NULL,'Go-Live — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(8,'ETE-19',8,NULL,'Post Go-Live Review — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:30:29','2026-04-04 00:30:29');
+INSERT INTO project_tasks VALUES(9,'ETE-48',9,NULL,'Requirements Sign-off — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(10,'ETE-48',10,NULL,'Project Plan Approved — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(11,'ETE-48',11,NULL,'Functional Spec Complete — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(12,'ETE-48',12,NULL,'Technical Spec Complete — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(13,'ETE-48',13,NULL,'Development Complete — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(14,'ETE-48',14,NULL,'UAT Sign-off — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(15,'ETE-48',15,NULL,'Go-Live — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(16,'ETE-48',16,NULL,'Post Go-Live Review — Planning',NULL,NULL,NULL,NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,0,'2026-04-04 00:45:47','2026-04-04 00:45:47');
+INSERT INTO project_tasks VALUES(17,'ETE-48',9,NULL,'test',NULL,'brett','pm',NULL,NULL,0.0,0.0,'not_started',0.0,'Medium',NULL,8,'2026-04-04 00:46:39','2026-04-04 00:46:39');
+CREATE TABLE task_dependencies (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id         INTEGER NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+    depends_on_id   INTEGER NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+    dependency_type TEXT NOT NULL DEFAULT 'finish_to_start'
+);
 INSERT INTO sqlite_sequence VALUES('project_assignments',129);
 INSERT INTO sqlite_sequence VALUES('vendor_consultants',9);
 INSERT INTO sqlite_sequence VALUES('vendor_timesheets',274);
 INSERT INTO sqlite_sequence VALUES('approved_work',31);
 INSERT INTO sqlite_sequence VALUES('vendor_invoices',1);
-CREATE TABLE IF NOT EXISTS project_mapping (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    sse_key         TEXT NOT NULL UNIQUE,
-    ete_project_id  TEXT,
-    sse_title       TEXT,
-    relationship    TEXT DEFAULT 'subtask',
-    notes           TEXT,
-    created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
-);
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-339', 'ETE-19', 'Issues running A/R aging report', 'support');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-402', 'ETE-69', 'Core Plan change request / issues fix', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-495', 'ETE-67', 'Tax Issues - Credit tax on invoices', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-496', 'ETE-32', 'Cash Application SQL fix', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-514', 'ETE-10', 'Planning Fields Upload Utility', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-516', 'ETE-16', 'BGTask Error sending Credit Card Receipts', 'support');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-526', 'ETE-19', 'Changes to AR Aging Report', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-534', 'ETE-33', 'Create Syteline Field for new location', 'related');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-538', 'ETE-58', 'Including transit location in parts plan', 'related');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-544', 'ETE-124', 'Warehouse to Warehouse Bulk Transfer', 'related');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-545', 'ETE-14', 'Installed New Return Type MFDN', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-553', 'ETE-60', 'Change GL Acct for WEX Payments', 'related');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-559', 'ETE-42', 'ETE Production Oversight - Dyno Data Bug', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-566', 'ETE-7', 'Outsourced Unit Core Accounting Proposed Change', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-576', 'ETE-33', 'Modify EDI Profile for Customer Ship-Tos', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-577', 'ETE-33', 'Allow ASN to be sent for one order', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-594', 'ETE-69', 'Component Pick Plan - Mfg Items', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-595', 'ETE-69', 'SL Generate Parts Plan - Formula Change', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-599', 'ETE-59', 'Bridgepay payment not applying deposit', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-600', 'ETE-33', '3PL Labels Not Being Generated', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-605', 'ETE-124', 'Modify WMERP Truckload Transfer serial numbers', 'related');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-606', 'ETE-7', 'Rules when PO Lines added for core', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-607', 'ETE-69', 'Parts Plan Formula Change Alteration', 'subtask');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-611', 'ETE-76', 'Fuel Surcharge Notification', 'related');
-INSERT OR IGNORE INTO project_mapping (sse_key, ete_project_id, sse_title, relationship) VALUES ('SSE-612', 'ETE-33', 'Sending ASN and Invoice', 'subtask');
+INSERT INTO sqlite_sequence VALUES('project_mapping',25);
+INSERT INTO sqlite_sequence VALUES('project_comments',1);
+INSERT INTO sqlite_sequence VALUES('project_audit_log',22);
+INSERT INTO sqlite_sequence VALUES('project_milestones',24);
+INSERT INTO sqlite_sequence VALUES('project_tasks',17);
 CREATE INDEX idx_vt_consultant ON vendor_timesheets(consultant_id);
 CREATE INDEX idx_vt_date ON vendor_timesheets(entry_date);
 CREATE INDEX idx_vt_project ON vendor_timesheets(project_key);
-CREATE INDEX IF NOT EXISTS idx_pm_sse ON project_mapping(sse_key);
-CREATE INDEX IF NOT EXISTS idx_pm_ete ON project_mapping(ete_project_id);
+CREATE INDEX idx_pm_sse ON project_mapping(sse_key);
+CREATE INDEX idx_pm_ete ON project_mapping(ete_project_id);
+CREATE INDEX idx_pc_project ON project_comments(project_id);
+CREATE INDEX idx_pa_project ON project_attachments(project_id);
+CREATE INDEX idx_pal_project ON project_audit_log(project_id);
+CREATE INDEX idx_pms_project ON project_milestones(project_id);
+CREATE INDEX idx_pms_due ON project_milestones(due_date);
+CREATE INDEX idx_pt_project ON project_tasks(project_id);
+CREATE INDEX idx_pt_milestone ON project_tasks(milestone_id);
+CREATE INDEX idx_pt_parent ON project_tasks(parent_task_id);
+CREATE INDEX idx_pt_assignee ON project_tasks(assignee);
+CREATE INDEX idx_td_task ON task_dependencies(task_id);
+CREATE INDEX idx_td_dep ON task_dependencies(depends_on_id);
 COMMIT;
