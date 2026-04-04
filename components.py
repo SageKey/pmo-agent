@@ -109,6 +109,13 @@ def inject_css():
             background: linear-gradient(135deg, #fef2f2 0%, #FFFFFF 40%);
         }
         .kpi-card.navy { border-left-color: #1B3A5C; }
+        .kpi-clickable {
+            transition: box-shadow 0.15s ease, transform 0.15s ease;
+        }
+        .kpi-clickable:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
         .kpi-label {
             font-size: 0.7rem;
             font-weight: 600;
@@ -264,7 +271,9 @@ def kpi_card(label: str, value, color: str = "navy", delta: str = None):
 def kpi_row(items: list):
     """Render a responsive flex row of KPI cards.
 
-    items: list of dicts with keys: label, value, color (optional), delta (optional)
+    items: list of dicts with keys:
+        label, value, color (optional), delta (optional),
+        href (optional) — makes the card a clickable link
     """
     cards = []
     for item in items:
@@ -272,16 +281,24 @@ def kpi_row(items: list):
         value = item["value"]
         color = item.get("color", "navy")
         delta = item.get("delta")
+        href = item.get("href")
         delta_html = ""
         if delta:
             css_class = "positive" if not str(delta).startswith("-") else "negative"
             delta_html = f'<div class="kpi-delta {css_class}">{delta}</div>'
-        cards.append(
-            f'<div class="kpi-card {color}">'
+        inner = (
             f'<div class="kpi-label">{label}</div>'
             f'<div class="kpi-value">{value}</div>'
-            f'{delta_html}</div>'
+            f'{delta_html}'
         )
+        if href:
+            cards.append(
+                f'<a href="{href}" target="_self" class="kpi-card kpi-clickable {color}"'
+                f' style="text-decoration:none; color:inherit; cursor:pointer;">'
+                f'{inner}</a>'
+            )
+        else:
+            cards.append(f'<div class="kpi-card {color}">{inner}</div>')
     st.markdown(
         '<div class="kpi-flex-row">' + ''.join(cards) + '</div>',
         unsafe_allow_html=True,

@@ -60,9 +60,12 @@ with st.sidebar:
     if pending:
         st.session_state["nav_radio"] = pending
 
-    # Handle query param navigation (e.g. linked project names, portfolio filter)
+    # Handle query param navigation (e.g. KPI click-through, linked project names)
     qp = st.query_params
-    if "project" in qp:
+    if "nav" in qp:
+        st.session_state["nav_radio"] = qp["nav"]
+        st.query_params.clear()
+    elif "project" in qp:
         st.session_state["nav_radio"] = "Portfolio"
         st.session_state["selected_project_id"] = qp["project"]
         st.query_params.clear()

@@ -156,18 +156,22 @@ def render(data: dict, utilization: dict, person_demand: list):
     kpi_row([
         {"label": "Portfolio Health", "value": f"{on_track} On Track",
          "color": health_signal,
-         "delta": health_delta},
+         "delta": health_delta,
+         "href": "?nav=Portfolio"},
         {"label": "Total Projects", "value": n_total,
          "color": "navy",
-         "delta": f"{n_active} active · {n_complete} complete · {n_postponed} postponed"},
+         "delta": f"{n_active} active · {n_complete} complete · {n_postponed} postponed",
+         "href": "?nav=Portfolio"},
         {"label": "Avg Utilization", "value": f"{avg_util:.0%}",
          "color": util_signal,
-         "delta": f"{len(roster)} team members"},
+         "delta": f"{len(roster)} team members",
+         "href": "?nav=Capacity"},
         {"label": "Capacity Alerts", "value": roles_over if roles_over > 0 else "None",
          "color": capacity_signal,
          "delta": (f"{roles_over} over · {roles_warning} warning"
                    if roles_over + roles_warning > 0
-                   else "All roles within target")},
+                   else "All roles within target"),
+         "href": "?nav=Capacity"},
     ])
 
     # ==================================================================
