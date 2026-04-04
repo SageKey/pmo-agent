@@ -179,6 +179,8 @@ def render(data: dict, utilization: dict, person_demand: list):
     attention_projects = []
     for p in active:
         hl = health_label(p.health)
+        if hl in ("Complete", "Postponed"):
+            continue
         if hl in ("Needs Help", "At Risk"):
             attention_projects.append(p)
         elif p.end_date and (p.end_date - today).days <= 14 and p.pct_complete < 0.9:
