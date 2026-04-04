@@ -405,14 +405,13 @@ def _render_schedule(schedule: list, recommendation: dict,
                     st.success(
                         f"All {len(roles_needed)} roles are staffed and available. "
                         f"**{proj_id}** can start as planned.",
-                        icon="✓",
+                        icon="✅",
                     )
                 else:
                     waiting = sum(1 for r in readiness_rows if "✗" in r["Status"])
                     st.warning(
                         f"{waiting} of {len(roles_needed)} roles are not yet available. "
                         f"See details below.",
-                        icon="⚠️",
                     )
 
                 st.dataframe(
