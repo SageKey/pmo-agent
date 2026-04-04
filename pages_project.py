@@ -1085,193 +1085,6 @@ def _dlg_enable_plan(project, milestones: list):
             st.rerun()
 
 
-# ── Table builder ──────────────────────────────────────────────────
-def _build_plan_table_html(milestones, tasks, today, has_plan):
-    """Build a styled HTML <table> for the project plan."""
-    tasks_by_ms = {}
-    unassigned = []
-    for t in tasks:
-        mid = t["milestone_id"]
-        if mid:
-            tasks_by_ms.setdefault(mid, []).append(t)
-        else:
-            unassigned.append(t)
-
-    rows = []
-    item_index = []  # parallel list: (type, id, label) for selectbox
-
-    for m in milestones:
-        mid = m["id"]
-        ms_tasks = tasks_by_ms.get(mid, [])
-        status = m["status"]
-        s_style, s_label = _MS_STATUS_STYLE.get(
-            status, ("background:#E9ECEF; color:#495057;", status))
-        owner = m["owner"] or ""
-        icon = _MS_TYPE_ICON.get(m["milestone_type"], "📍")
-        progress = m["progress_pct"] or 0
-
-        if ms_tasks:
-            ms_done = sum(1 for t in ms_tasks if t["status"] == "complete")
-            progress = (ms_done / len(ms_tasks) * 100) if ms_tasks else 0
-
-        prog_pct = progress / 100 if progress > 1 else progress
-        if status == "complete":
-            prog_pct = 1.0
-            bar_c = GREEN
-        elif status == "at_risk":
-            bar_c = YELLOW
-        elif status == "blocked":
-            bar_c = RED
-        else:
-            bar_c = BLUE
-
-        # Due
-        due = m["due_date"]
-        if m["completed_date"]:
-            due_html = f'<span style="color:{GREEN};">Done</span>'
-        elif due:
-            d = date.fromisoformat(due)
-            days = (d - today).days
-            if days < 0:
-                due_html = f'<span style="color:#DC3545; font-weight:600;">{abs(days)}d late</span>'
-            elif days <= 7:
-                due_html = f'<span style="color:#E67E22;">{d.strftime("%b %d")}</span>'
-            else:
-                due_html = d.strftime("%b %d")
-        else:
-            due_html = '<span style="color:#CED4DA;">—</span>'
-
-        task_ct = ""
-        if has_plan and ms_tasks:
-            ms_done_ct = sum(1 for t in ms_tasks if t["status"] == "complete")
-            task_ct = (f' <span style="font-weight:400; font-size:0.7rem;'
-                       f' color:#6C757D;">({ms_done_ct}/{len(ms_tasks)})</span>')
-
-        prog_bar = (
-            f'<div style="display:flex; align-items:center; gap:0.4rem;">'
-            f'<div style="flex:1; height:5px; background:#E9ECEF; border-radius:3px;'
-            f' overflow:hidden;">'
-            f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
-            f' background:{bar_c}; border-radius:3px;"></div></div>'
-            f'<span style="font-size:0.68rem; color:#6C757D; min-width:2rem;'
-            f' text-align:right;">{prog_pct:.0%}</span></div>')
-
-        border_l = GREEN if status == "complete" else (
-            RED if status in ("blocked", "at_risk") else NAVY)
-
-        rows.append(
-            f'<tr style="border-left:3px solid {border_l};">'
-            f'<td style="padding:0.55rem 0.5rem; font-weight:600; color:{NAVY};'
-            f' font-size:0.82rem; white-space:nowrap;">'
-            f'{icon} {m["title"]}{task_ct}</td>'
-            f'<td style="text-align:center; padding:0.55rem 0.25rem;">'
-            f'<span style="{s_style} display:inline-block; padding:0.15rem 0.5rem;'
-            f' border-radius:12px; font-size:0.68rem; font-weight:600;">'
-            f'{s_label}</span></td>'
-            f'<td style="text-align:center; font-size:0.75rem; color:#495057;'
-            f' padding:0.55rem 0.25rem;">{owner if owner else "<span style=color:#CED4DA>—</span>"}</td>'
-            f'<td style="text-align:center; font-size:0.75rem;'
-            f' padding:0.55rem 0.25rem;">{due_html}</td>'
-            f'<td style="padding:0.55rem 0.5rem; min-width:100px;">{prog_bar}</td>'
-            f'</tr>')
-        item_index.append(("milestone", mid, f"{icon} {m['title']}"))
-
-        # Task rows under this milestone
-        for t in ms_tasks:
-            rows.append(_build_task_row_html(t, today))
-            item_index.append(("task", t["id"],
-                               f"   ↳ {t['title']}"))
-
-    # Unassigned tasks
-    if unassigned:
-        rows.append(
-            '<tr><td colspan="5" style="padding:0.55rem 0.5rem; font-weight:600;'
-            f' font-size:0.78rem; color:#6C757D; background:#F8F9FA;">'
-            f'📌 Unassigned ({len(unassigned)})</td></tr>')
-        for t in unassigned:
-            rows.append(_build_task_row_html(t, today))
-            item_index.append(("task", t["id"], f"   ↳ {t['title']}"))
-
-    table_html = (
-        '<div style="background:#FFFFFF; border-radius:12px;'
-        ' box-shadow:0 1px 4px rgba(0,0,0,0.08); overflow:hidden;'
-        ' margin-bottom:0.75rem;">'
-        '<table style="width:100%; border-collapse:collapse; font-size:0.78rem;">'
-        '<thead><tr style="background:#F1F3F5; border-bottom:2px solid #DEE2E6;">'
-        '<th style="text-align:left; padding:0.5rem 0.5rem; font-size:0.68rem;'
-        f' font-weight:700; color:#495057; text-transform:uppercase;'
-        f' letter-spacing:0.05em;">Item</th>'
-        '<th style="text-align:center; padding:0.5rem 0.25rem; font-size:0.68rem;'
-        ' font-weight:700; color:#495057; text-transform:uppercase;">Status</th>'
-        '<th style="text-align:center; padding:0.5rem 0.25rem; font-size:0.68rem;'
-        ' font-weight:700; color:#495057; text-transform:uppercase;">Owner</th>'
-        '<th style="text-align:center; padding:0.5rem 0.25rem; font-size:0.68rem;'
-        ' font-weight:700; color:#495057; text-transform:uppercase;">Due</th>'
-        '<th style="padding:0.5rem 0.5rem; font-size:0.68rem;'
-        ' font-weight:700; color:#495057; text-transform:uppercase;'
-        ' min-width:100px;">Progress</th>'
-        '</tr></thead><tbody>'
-        + ''.join(rows)
-        + '</tbody></table></div>'
-    )
-    return table_html, item_index
-
-
-def _build_task_row_html(t, today):
-    """Build HTML <tr> for a single task."""
-    t_status = t["status"]
-    t_s_style, t_s_label = _MS_STATUS_STYLE.get(
-        t_status, ("background:#E9ECEF; color:#495057;", t_status))
-    assignee = t.get("assignee") or ""
-    est = t["est_hours"] or 0
-    prog = t["progress_pct"] or 0
-
-    bar_c = GREEN if t_status == "complete" else (
-        BLUE if t_status == "in_progress" else (
-            YELLOW if t_status == "at_risk" else (
-                RED if t_status == "blocked" else GRAY)))
-    prog_val = 100.0 if t_status == "complete" else prog
-
-    due = t.get("end_date")
-    if t_status == "complete":
-        due_html = f'<span style="color:{GREEN};">✓</span>'
-    elif due:
-        d = date.fromisoformat(due)
-        days = (d - today).days
-        if days < 0:
-            due_html = f'<span style="color:#DC3545;">{abs(days)}d late</span>'
-        else:
-            due_html = d.strftime("%b %d")
-    else:
-        due_html = '<span style="color:#CED4DA;">—</span>'
-
-    hours_html = (f' <span style="font-size:0.65rem; color:#ADB5BD;">'
-                  f'{est:.0f}h</span>' if est else "")
-
-    prog_bar = (
-        f'<div style="height:3px; background:#E9ECEF; border-radius:2px;'
-        f' overflow:hidden; margin-right:2.5rem;">'
-        f'<div style="width:{prog_val:.0f}%; height:100%;'
-        f' background:{bar_c}; border-radius:2px;"></div></div>')
-
-    return (
-        f'<tr style="border-left:3px solid transparent; background:#FAFBFC;">'
-        f'<td style="padding:0.4rem 0.5rem 0.4rem 1.75rem; color:{NAVY};'
-        f' font-size:0.76rem; border-top:1px solid #F1F3F5;">↳ {t["title"]}'
-        f'{hours_html}</td>'
-        f'<td style="text-align:center; padding:0.4rem 0.25rem;'
-        f' border-top:1px solid #F1F3F5;">'
-        f'<span style="{t_s_style} display:inline-block; padding:0.1rem 0.4rem;'
-        f' border-radius:8px; font-size:0.62rem; font-weight:600;">'
-        f'{t_s_label}</span></td>'
-        f'<td style="text-align:center; font-size:0.72rem; color:#495057;'
-        f' padding:0.4rem 0.25rem; border-top:1px solid #F1F3F5;">'
-        f'{assignee if assignee else "<span style=color:#CED4DA>—</span>"}</td>'
-        f'<td style="text-align:center; font-size:0.72rem;'
-        f' padding:0.4rem 0.25rem; border-top:1px solid #F1F3F5;">{due_html}</td>'
-        f'<td style="padding:0.4rem 0.5rem; border-top:1px solid #F1F3F5;">'
-        f'{prog_bar}</td></tr>'
-    )
 
 
 # ── Dialog dispatcher ──────────────────────────────────────────────
@@ -1409,25 +1222,144 @@ def _render_project_plan_section(project):
         unsafe_allow_html=True,
     )
 
-    # --- Build and render the HTML table ---
-    table_html, item_index = _build_plan_table_html(
-        milestones, tasks, today, has_plan)
-    st.markdown(table_html, unsafe_allow_html=True)
+    # --- Build DataFrame for st.dataframe ---
+    rows = []
+    item_index = []  # parallel: (type, id)
 
-    # --- Action bar: select item → Complete / Edit ---
-    if item_index:
+    tasks_by_ms = {}
+    unassigned = []
+    for t in tasks:
+        mid = t["milestone_id"]
+        if mid:
+            tasks_by_ms.setdefault(mid, []).append(t)
+        else:
+            unassigned.append(t)
+
+    _STATUS_LABEL = {
+        "not_started": "Not Started", "in_progress": "In Progress",
+        "complete": "Complete", "at_risk": "At Risk", "blocked": "Blocked",
+    }
+
+    for m in milestones:
+        mid = m["id"]
+        ms_tasks = tasks_by_ms.get(mid, [])
+        icon = _MS_TYPE_ICON.get(m["milestone_type"], "📍")
+        status = _STATUS_LABEL.get(m["status"], m["status"])
+        owner = m["owner"] or "—"
+        progress = m["progress_pct"] or 0
+
+        if ms_tasks:
+            ms_done = sum(1 for t in ms_tasks if t["status"] == "complete")
+            progress = (ms_done / len(ms_tasks) * 100) if ms_tasks else 0
+
+        prog_pct = progress / 100 if progress > 1 else progress
+        if m["status"] == "complete":
+            prog_pct = 1.0
+
+        # Due
+        due = m["due_date"]
+        if m["completed_date"]:
+            due_text = "✅ Done"
+        elif due:
+            d = date.fromisoformat(due)
+            days = (d - today).days
+            if days < 0:
+                due_text = f"⚠️ {abs(days)}d late"
+            else:
+                due_text = d.strftime("%b %d")
+        else:
+            due_text = "—"
+
+        task_ct = ""
+        if has_plan and ms_tasks:
+            ms_done_ct = sum(1 for t in ms_tasks if t["status"] == "complete")
+            task_ct = f" ({ms_done_ct}/{len(ms_tasks)})"
+
+        rows.append({
+            "Item": f"{icon} {m['title']}{task_ct}",
+            "Status": status,
+            "Owner": owner,
+            "Due": due_text,
+            "Progress": prog_pct,
+        })
+        item_index.append(("milestone", mid))
+
+        for t in ms_tasks:
+            t_status = _STATUS_LABEL.get(t["status"], t["status"])
+            t_assignee = t.get("assignee") or "—"
+            t_prog = t["progress_pct"] or 0
+            t_prog_pct = t_prog / 100 if t_prog > 1 else t_prog
+            if t["status"] == "complete":
+                t_prog_pct = 1.0
+            t_est = t["est_hours"] or 0
+            hours_txt = f" ({t_est:.0f}h)" if t_est else ""
+
+            t_due = t.get("end_date")
+            if t["status"] == "complete":
+                t_due_text = "✅"
+            elif t_due:
+                td = date.fromisoformat(t_due)
+                t_days = (td - today).days
+                if t_days < 0:
+                    t_due_text = f"⚠️ {abs(t_days)}d late"
+                else:
+                    t_due_text = td.strftime("%b %d")
+            else:
+                t_due_text = "—"
+
+            rows.append({
+                "Item": f"    ↳ {t['title']}{hours_txt}",
+                "Status": t_status,
+                "Owner": t_assignee,
+                "Due": t_due_text,
+                "Progress": t_prog_pct,
+            })
+            item_index.append(("task", t["id"]))
+
+    for t in unassigned:
+        t_status = _STATUS_LABEL.get(t["status"], t["status"])
+        t_prog = t["progress_pct"] or 0
+        t_prog_pct = t_prog / 100 if t_prog > 1 else t_prog
+        if t["status"] == "complete":
+            t_prog_pct = 1.0
+        rows.append({
+            "Item": f"    ↳ {t['title']}",
+            "Status": t_status,
+            "Owner": t.get("assignee") or "—",
+            "Due": "—",
+            "Progress": t_prog_pct,
+        })
+        item_index.append(("task", t["id"]))
+
+    if rows:
+        df = pd.DataFrame(rows)
+        st.dataframe(
+            df,
+            column_config={
+                "Item": st.column_config.TextColumn("Item", width="large"),
+                "Status": st.column_config.TextColumn("Status", width="small"),
+                "Owner": st.column_config.TextColumn("Owner", width="small"),
+                "Due": st.column_config.TextColumn("Due", width="small"),
+                "Progress": st.column_config.ProgressColumn(
+                    "Progress", min_value=0, max_value=1.0,
+                    format="%.0f%%", width="small"),
+            },
+            hide_index=True,
+            use_container_width=True,
+        )
+
+        # --- Action bar ---
+        labels = [f"{rows[i]['Item'].strip()}" for i in range(len(rows))]
         act_sel, act_complete, act_edit = st.columns([4, 1, 1])
         with act_sel:
-            options = [(itype, iid, label) for itype, iid, label in item_index]
-            labels = [label for _, _, label in options]
             selected_idx = st.selectbox(
-                "Select item to manage",
+                "Select item",
                 range(len(labels)),
                 format_func=lambda i: labels[i],
                 key="_plan_select",
                 label_visibility="collapsed",
             )
-        sel_type, sel_id, sel_label = options[selected_idx]
+        sel_type, sel_id = item_index[selected_idx]
         with act_complete:
             if st.button("✅ Complete", key="_plan_complete",
                           use_container_width=True):
@@ -1437,7 +1369,6 @@ def _render_project_plan_section(project):
                         connector.complete_milestone(sel_id, actor=user)
                     else:
                         connector.complete_task(sel_id, actor=user)
-                        # Auto-complete milestone if all sibling tasks done
                         task_obj = next(
                             (t for t in tasks if t["id"] == sel_id), None)
                         if task_obj and task_obj.get("milestone_id"):
