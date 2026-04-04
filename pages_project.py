@@ -616,10 +616,8 @@ def _render_edit_form(project, data):
             st.rerun()
 
 
-def _render_view_mode(project, data, utilization, person_demand):
-    """Render the read-only project detail view."""
-
-    # --- Health badge colors ---
+def _render_summary_card(project):
+    """Render the project summary card with badges, progress, and key metrics."""
     health = clean_health(project.health)
     h_label = health_label(health)
     _BADGE_STYLES = {
@@ -643,7 +641,6 @@ def _render_view_mode(project, data, utilization, person_demand):
     health_style, health_icon = _BADGE_STYLES.get(h_label, ("background:#E9ECEF; color:#495057;", ""))
     priority_style = _PRIORITY_BADGE.get(project.priority or "", "background:#E9ECEF; color:#495057;")
 
-    # Progress bar
     pct = project.pct_complete
     pct_display = f"{pct:.0%}"
     if pct >= 0.8:
@@ -653,15 +650,10 @@ def _render_view_mode(project, data, utilization, person_demand):
     else:
         bar_color = "#8BA4C4"
 
-    # Duration / Hours
     duration_str = f"{project.duration_weeks:.0f} wks" if project.duration_weeks else "—"
     hours_str = f"{project.est_hours:,.0f}" if project.est_hours else "—"
-
-    # Jira link
     jira_url = f"https://etedevops.atlassian.net/browse/{project.id}"
 
-    # --- Project Summary Card ---
-    # Badges row
     st.markdown(
         f'<div style="background:#FFFFFF; border-radius:12px; padding:1.25rem 1.5rem;'
         f' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
@@ -702,6 +694,10 @@ def _render_view_mode(project, data, utilization, person_demand):
         f'</div></div>',
         unsafe_allow_html=True,
     )
+
+
+def _render_overview_tab(project, data):
+    """Render the Overview tab — details, team assignments, financials."""
 
     # --- Financial KPIs (finance-gated) ---
     if is_finance_user() and (project.budget > 0 or project.actual_cost > 0 or project.forecast_cost > 0):
@@ -796,9 +792,6 @@ def _render_view_mode(project, data, utilization, person_demand):
                     hide_index=True,
                     use_container_width=True,
                 )
-
-    # --- Milestones & Project Plan ---
-    _render_project_plan_section(project)
 
 
 # ── Module-level constants for milestones / tasks ──────────────────
@@ -1627,7 +1620,7 @@ def _render_project_panel(project_id: str, project_name: str):
 
 
 def render_project_detail(project, data: dict, utilization: dict, person_demand: list):
-    """Render the full project detail — header, view/edit, analysis sections.
+    """Render the full project detail — header, summary card, tabbed content.
 
     Extracted so it can be called from Portfolio page when a project is selected.
     """
@@ -1647,14 +1640,29 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
         if st.button("💬 Activity", key="_toggle_panel", use_container_width=True):
             _render_project_panel(project.id, project.name)
 
-    # --- Edit vs View Mode ---
+    # --- Edit mode takes over the full page ---
     if st.session_state.get("edit_mode", False):
         _render_edit_form(project, data)
         return
 
-    _render_view_mode(project, data, utilization, person_demand)
+    # --- Summary card (always visible above tabs) ---
+    _render_summary_card(project)
 
-    # --- Demand Analysis ---
+    # --- Tabbed layout ---
+    tab_overview, tab_plan, tab_analysis = st.tabs(["Overview", "Plan", "Analysis"])
+
+    with tab_overview:
+        _render_overview_tab(project, data)
+
+    with tab_plan:
+        _render_project_plan_section(project)
+
+    with tab_analysis:
+        _render_analysis_tab(project)
+
+
+def _render_analysis_tab(project):
+    """Render demand analysis, duration estimate, and scheduling availability."""
     mtime = get_file_mtime()
     analysis = _get_project_analysis(mtime, project.id)
 
