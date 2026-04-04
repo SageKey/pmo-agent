@@ -234,30 +234,14 @@ def render(data: dict, utilization: dict, person_demand: list):
     if has_attention:
         section_header("Needs Attention")
 
-        # Layout: projects + capacity side by side, milestones below
-        col_left, col_right = st.columns([3, 2])
+        # Projects needing attention (full width)
+        if attention_projects:
+            _render_attention_projects(attention_projects, today)
 
-        with col_left:
-            if attention_projects:
-                _render_attention_projects(attention_projects, today)
-            else:
-                st.markdown(
-                    f'<div style="background:#D4EDDA; border-radius:8px; padding:0.75rem 1rem;'
-                    f' font-size:0.85rem; color:#155724;">'
-                    f'All projects are on track.</div>',
-                    unsafe_allow_html=True,
-                )
-
-        with col_right:
-            if capacity_alerts:
-                _render_capacity_alerts(capacity_alerts)
-            else:
-                st.markdown(
-                    f'<div style="background:#D4EDDA; border-radius:8px; padding:0.75rem 1rem;'
-                    f' font-size:0.85rem; color:#155724;">'
-                    f'All roles within capacity.</div>',
-                    unsafe_allow_html=True,
-                )
+        # Capacity alerts only shown when roles are actually stressed
+        if capacity_alerts:
+            st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+            _render_capacity_alerts(capacity_alerts)
 
         if attention_ms:
             _render_attention_milestones(attention_ms, today)
