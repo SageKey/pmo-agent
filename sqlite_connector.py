@@ -17,7 +17,7 @@ from models import (
 DEFAULT_DB = "pmo_data.db"
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
@@ -240,6 +240,43 @@ CREATE TABLE IF NOT EXISTS project_milestones (
 );
 CREATE INDEX IF NOT EXISTS idx_pms_project ON project_milestones(project_id);
 CREATE INDEX IF NOT EXISTS idx_pms_due ON project_milestones(due_date);
+
+-- Project Tasks (optional full project plan) ----------------------------
+
+CREATE TABLE IF NOT EXISTS project_tasks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    milestone_id    INTEGER REFERENCES project_milestones(id) ON DELETE SET NULL,
+    parent_task_id  INTEGER REFERENCES project_tasks(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    assignee        TEXT,
+    role_key        TEXT,
+    start_date      TEXT,
+    end_date        TEXT,
+    est_hours       REAL DEFAULT 0.0,
+    actual_hours    REAL DEFAULT 0.0,
+    status          TEXT NOT NULL DEFAULT 'not_started',
+    progress_pct    REAL DEFAULT 0.0,
+    priority        TEXT DEFAULT 'Medium',
+    jira_key        TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pt_project ON project_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_pt_milestone ON project_tasks(milestone_id);
+CREATE INDEX IF NOT EXISTS idx_pt_parent ON project_tasks(parent_task_id);
+CREATE INDEX IF NOT EXISTS idx_pt_assignee ON project_tasks(assignee);
+
+CREATE TABLE IF NOT EXISTS task_dependencies (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id         INTEGER NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+    depends_on_id   INTEGER NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
+    dependency_type TEXT NOT NULL DEFAULT 'finish_to_start'
+);
+CREATE INDEX IF NOT EXISTS idx_td_task ON task_dependencies(task_id);
+CREATE INDEX IF NOT EXISTS idx_td_dep ON task_dependencies(depends_on_id);
 """
 
 
@@ -1339,3 +1376,238 @@ class SQLiteConnector:
                         details=f"SDLC template ({created} milestones)")
         conn.commit()
         return created
+
+    # ------------------------------------------------------------------
+    # Project Tasks (Full Project Plan)
+    # ------------------------------------------------------------------
+    def has_project_plan(self, project_id: str) -> bool:
+        """Check if a project has any tasks (i.e. full plan enabled)."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT COUNT(*) FROM project_tasks WHERE project_id=?",
+            (project_id,),
+        ).fetchone()
+        return row[0] > 0
+
+    def get_tasks(self, project_id: str,
+                  milestone_id: int = None) -> list[dict]:
+        """Get tasks for a project, optionally filtered by milestone."""
+        conn = self._open()
+        if milestone_id is not None:
+            rows = conn.execute(
+                """SELECT * FROM project_tasks
+                   WHERE project_id=? AND milestone_id=?
+                   ORDER BY sort_order, id""",
+                (project_id, milestone_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT * FROM project_tasks
+                   WHERE project_id=?
+                   ORDER BY milestone_id, sort_order, id""",
+                (project_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_task(self, project_id: str, title: str,
+                  milestone_id: int = None, parent_task_id: int = None,
+                  assignee: str = None, role_key: str = None,
+                  start_date: str = None, end_date: str = None,
+                  est_hours: float = 0.0, status: str = "not_started",
+                  progress_pct: float = 0.0, priority: str = "Medium",
+                  jira_key: str = None, sort_order: int = 0,
+                  description: str = None, task_id: int = None,
+                  actor: str = "System") -> int:
+        """Create or update a task. Returns task ID."""
+        conn = self._open()
+        if task_id:
+            conn.execute(
+                """UPDATE project_tasks SET
+                   title=?, milestone_id=?, parent_task_id=?,
+                   assignee=?, role_key=?, start_date=?, end_date=?,
+                   est_hours=?, status=?, progress_pct=?, priority=?,
+                   jira_key=?, sort_order=?, description=?,
+                   updated_at=datetime('now')
+                   WHERE id=?""",
+                (title, milestone_id, parent_task_id,
+                 assignee, role_key, start_date, end_date,
+                 est_hours, status, progress_pct, priority,
+                 jira_key, sort_order, description, task_id),
+            )
+            self._log_audit(project_id, "task_updated", actor, details=title)
+            conn.commit()
+            return task_id
+        else:
+            cur = conn.execute(
+                """INSERT INTO project_tasks
+                   (project_id, title, milestone_id, parent_task_id,
+                    assignee, role_key, start_date, end_date,
+                    est_hours, status, progress_pct, priority,
+                    jira_key, sort_order, description)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (project_id, title, milestone_id, parent_task_id,
+                 assignee, role_key, start_date, end_date,
+                 est_hours, status, progress_pct, priority,
+                 jira_key, sort_order, description),
+            )
+            tid = cur.lastrowid
+            self._log_audit(project_id, "task_added", actor, details=title)
+            conn.commit()
+            return tid
+
+    def complete_task(self, task_id: int, actor: str = "System") -> None:
+        """Mark a task as complete."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT project_id, title FROM project_tasks WHERE id=?",
+            (task_id,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                """UPDATE project_tasks SET
+                   status='complete', progress_pct=100.0,
+                   updated_at=datetime('now')
+                   WHERE id=?""",
+                (task_id,),
+            )
+            self._log_audit(row["project_id"], "task_completed", actor,
+                            details=row["title"])
+            conn.commit()
+
+    def delete_task(self, task_id: int, actor: str = "System") -> None:
+        """Delete a task."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT project_id, title FROM project_tasks WHERE id=?",
+            (task_id,),
+        ).fetchone()
+        if row:
+            self._log_audit(row["project_id"], "task_deleted", actor,
+                            details=row["title"])
+            conn.execute("DELETE FROM project_tasks WHERE id=?", (task_id,))
+            conn.commit()
+
+    def rollup_milestone_progress(self, project_id: str) -> dict:
+        """Recalculate milestone progress from task completion.
+        Returns {milestone_id: new_pct} for milestones that changed."""
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT milestone_id,
+                      COUNT(*) as total,
+                      SUM(CASE WHEN status='complete' THEN 1 ELSE 0 END) as done,
+                      AVG(progress_pct) as avg_pct
+               FROM project_tasks
+               WHERE project_id=? AND milestone_id IS NOT NULL
+               GROUP BY milestone_id""",
+            (project_id,),
+        ).fetchall()
+
+        changes = {}
+        for r in rows:
+            mid = r["milestone_id"]
+            new_pct = r["avg_pct"] if r["total"] > 0 else 0
+            # Update milestone
+            old = conn.execute(
+                "SELECT progress_pct, status FROM project_milestones WHERE id=?",
+                (mid,),
+            ).fetchone()
+            if old and abs(old["progress_pct"] - new_pct) > 0.5:
+                new_status = old["status"]
+                if new_pct >= 100:
+                    new_status = "complete"
+                elif new_pct > 0 and old["status"] == "not_started":
+                    new_status = "in_progress"
+                conn.execute(
+                    """UPDATE project_milestones SET
+                       progress_pct=?, status=?,
+                       completed_date=CASE WHEN ?='complete' THEN date('now') ELSE completed_date END,
+                       updated_at=datetime('now')
+                       WHERE id=?""",
+                    (new_pct, new_status, new_status, mid),
+                )
+                changes[mid] = new_pct
+        if changes:
+            conn.commit()
+        return changes
+
+    def rollup_project_progress(self, project_id: str) -> float:
+        """Calculate overall project progress from milestones + tasks.
+        Returns new pct_complete (0-1)."""
+        conn = self._open()
+
+        # If tasks exist, use task-level rollup
+        task_row = conn.execute(
+            """SELECT COUNT(*) as total,
+                      AVG(progress_pct) as avg_pct
+               FROM project_tasks WHERE project_id=?""",
+            (project_id,),
+        ).fetchone()
+
+        if task_row and task_row["total"] > 0:
+            return (task_row["avg_pct"] or 0) / 100.0
+
+        # Otherwise use milestone-level
+        ms_row = conn.execute(
+            """SELECT COUNT(*) as total,
+                      AVG(progress_pct) as avg_pct
+               FROM project_milestones WHERE project_id=?""",
+            (project_id,),
+        ).fetchone()
+
+        if ms_row and ms_row["total"] > 0:
+            return (ms_row["avg_pct"] or 0) / 100.0
+
+        return 0.0
+
+    def get_task_demand_by_person(self, project_id: str = None) -> list[dict]:
+        """Get task-level demand aggregated by assignee and role.
+        Used to feed into capacity/utilization calculations."""
+        conn = self._open()
+        where = "WHERE t.assignee IS NOT NULL AND t.status != 'complete'"
+        params = []
+        if project_id:
+            where += " AND t.project_id = ?"
+            params.append(project_id)
+
+        rows = conn.execute(
+            f"""SELECT t.project_id, t.assignee, t.role_key,
+                       SUM(t.est_hours) as total_est_hours,
+                       COUNT(*) as task_count,
+                       p.name as project_name
+                FROM project_tasks t
+                JOIN projects p ON p.id = t.project_id
+                {where}
+                GROUP BY t.project_id, t.assignee, t.role_key""",
+            params,
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def add_dependency(self, task_id: int, depends_on_id: int,
+                       dep_type: str = "finish_to_start") -> int:
+        """Add a dependency between tasks."""
+        conn = self._open()
+        cur = conn.execute(
+            """INSERT INTO task_dependencies (task_id, depends_on_id, dependency_type)
+               VALUES (?, ?, ?)""",
+            (task_id, depends_on_id, dep_type),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+    def get_dependencies(self, project_id: str) -> list[dict]:
+        """Get all dependencies for tasks in a project."""
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT d.*, t1.title as task_title, t2.title as depends_on_title
+               FROM task_dependencies d
+               JOIN project_tasks t1 ON t1.id = d.task_id
+               JOIN project_tasks t2 ON t2.id = d.depends_on_id
+               WHERE t1.project_id = ?""",
+            (project_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_dependency(self, dep_id: int) -> None:
+        conn = self._open()
+        conn.execute("DELETE FROM task_dependencies WHERE id=?", (dep_id,))
+        conn.commit()
