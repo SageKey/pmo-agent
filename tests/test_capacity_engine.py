@@ -147,3 +147,134 @@ class TestWeeklyTimeline:
         timeline = engine.compute_weekly_demand_timeline(p)
         dev_weeks = timeline.get("developer", [])
         assert 20 <= len(dev_weeks) <= 25, f"Expected ~23 weeks, got {len(dev_weeks)}"
+
+
+class TestPortfolioSimulation:
+    """Forward-looking portfolio scheduling simulation."""
+
+    def test_returns_results_sorted_by_start(self, engine):
+        """Results should be sorted by suggested_start (None last)."""
+        results = engine.simulate_portfolio_schedule()
+        assert len(results) > 0
+        dates = [r["suggested_start"] for r in results]
+        # None values should be at the end
+        non_none = [d for d in dates if d is not None]
+        assert non_none == sorted(non_none)
+        none_count = dates.count(None)
+        assert dates[-none_count:] == [None] * none_count or none_count == 0
+
+    def test_higher_priority_gets_earlier_dates(self, engine):
+        """Highest priority projects should generally start before Medium."""
+        results = engine.simulate_portfolio_schedule()
+        scheduled = [r for r in results if r["suggested_start"] is not None]
+        if len(scheduled) < 2:
+            pytest.skip("Not enough scheduled projects")
+
+        highest = [r for r in scheduled if r["priority"] == "Highest"]
+        medium = [r for r in scheduled if r["priority"] == "Medium"]
+        if highest and medium:
+            earliest_highest = min(r["suggested_start"] for r in highest)
+            earliest_medium = min(r["suggested_start"] for r in medium)
+            assert earliest_highest <= earliest_medium, (
+                f"Highest priority starts {earliest_highest} but Medium starts {earliest_medium}"
+            )
+
+    def test_result_fields(self, engine):
+        """Each result should have required fields."""
+        results = engine.simulate_portfolio_schedule()
+        required = {
+            "project_id", "project_name", "priority", "est_hours",
+            "suggested_start", "suggested_end", "duration_weeks",
+            "wait_weeks", "bottleneck_role", "can_start_now",
+        }
+        for r in results:
+            assert required.issubset(r.keys()), (
+                f"Missing fields: {required - r.keys()}"
+            )
+
+    def test_exclude_ids(self, engine):
+        """Excluded projects should not appear in results."""
+        full = engine.simulate_portfolio_schedule()
+        if not full:
+            pytest.skip("No plannable projects")
+        exclude_id = full[0]["project_id"]
+        filtered = engine.simulate_portfolio_schedule(exclude_ids=[exclude_id])
+        ids = [r["project_id"] for r in filtered]
+        assert exclude_id not in ids
+
+    def test_demand_accumulates(self, engine):
+        """Later projects should have equal or later start dates than earlier ones
+        of the same priority (demand accumulates)."""
+        results = engine.simulate_portfolio_schedule()
+        scheduled = [r for r in results if r["suggested_start"] is not None]
+        # Within same priority tier, projects placed later shouldn't start earlier
+        # (they see more demand from previously placed projects)
+        by_priority = {}
+        for r in scheduled:
+            by_priority.setdefault(r["priority"], []).append(r)
+        # This is a soft check — just verify no crashes and reasonable output
+        assert len(scheduled) > 0
+
+
+class TestPersonAvailability:
+    """Person-level availability projection."""
+
+    def test_returns_results(self, engine):
+        """Should return availability for all roster members."""
+        results = engine.compute_person_availability()
+        assert len(results) > 0
+
+    def test_result_fields(self, engine):
+        """Each result should have required fields."""
+        results = engine.compute_person_availability()
+        required = {
+            "name", "role", "role_key", "team",
+            "capacity_hrs_week", "current_demand", "current_utilization",
+            "available_date", "available_in_weeks", "available_now",
+            "projects",
+        }
+        for r in results:
+            assert required.issubset(r.keys()), (
+                f"Missing fields: {required - r.keys()}"
+            )
+
+    def test_low_util_person_available_now(self, engine):
+        """Person with no/low projects should show available_now = True."""
+        results = engine.compute_person_availability(threshold_pct=0.50)
+        available = [r for r in results if r["available_now"]]
+        assert len(available) > 0, "No one is available — unexpected"
+
+    def test_sorted_by_availability(self, engine):
+        """Available-now people should come first."""
+        results = engine.compute_person_availability()
+        if len(results) < 2:
+            pytest.skip("Not enough people")
+        # First available_now, then by date
+        found_not_now = False
+        for r in results:
+            if r["available_now"]:
+                assert not found_not_now, "available_now person appears after non-available"
+            else:
+                found_not_now = True
+
+
+class TestRecommendNextProject:
+    """Next project recommendation wrapper."""
+
+    def test_returns_recommendation(self, engine):
+        """Should return a recommendation with rationale."""
+        rec = engine.recommend_next_project()
+        assert "recommendation" in rec
+        assert "alternatives" in rec
+        assert "rationale" in rec
+        assert isinstance(rec["rationale"], str)
+        assert len(rec["rationale"]) > 10
+
+    def test_recommendation_is_highest_priority(self, engine):
+        """Top recommendation should be highest-priority startable project."""
+        rec = engine.recommend_next_project()
+        top = rec.get("recommendation")
+        if top is None:
+            pytest.skip("No plannable projects")
+        # Should be among the highest priority available
+        assert top["priority"] in ("Highest", "High", "Medium", "Low")

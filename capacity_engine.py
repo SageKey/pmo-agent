@@ -757,6 +757,443 @@ class CapacityEngine:
             }
 
     # ------------------------------------------------------------------
+    # Portfolio simulation — forward-looking capacity planning
+    # ------------------------------------------------------------------
+
+    PRIORITY_ORDER = {"Highest": 0, "High": 1, "Medium": 2, "Low": 3}
+
+    def _classify_projects(self) -> tuple[list, list]:
+        """Split active portfolio into in-development vs plannable.
+
+        In development: ON TRACK, AT RISK, NEEDS HELP, or pct_complete > 0.
+        Plannable: NOT STARTED, NEEDS FUNC SPEC, NEEDS TECH SPEC with pct=0.
+        Skips: COMPLETE, POSTPONED (already filtered by is_active, but
+        health=COMPLETE with pct=0 can slip through).
+        """
+        data = self._load()
+        in_dev = []
+        plannable = []
+        for p in data["active_portfolio"]:
+            if p.est_hours <= 0:
+                continue
+            h = (p.health or "").upper()
+            # Skip projects marked complete via health even if pct_complete=0
+            if "COMPLETE" in h:
+                continue
+            active_roles = {k: v for k, v in p.role_allocations.items() if v > 0}
+            if not active_roles:
+                continue
+
+            is_in_dev = (
+                p.pct_complete > 0
+                or "ON TRACK" in h
+                or "AT RISK" in h
+                or "NEEDS HELP" in h
+            )
+            if is_in_dev:
+                in_dev.append(p)
+            else:
+                plannable.append(p)
+        return in_dev, plannable
+
+    def _build_demand_grid(
+        self,
+        projects: list,
+        scan_start: date,
+        horizon_weeks: int,
+    ) -> dict:
+        """Build a week×role demand grid from a list of projects.
+
+        Returns: {week_index: {role_key: demand_hrs}}
+        """
+        phase_weights = self.assumptions.sdlc_phase_weights
+        role_phase_efforts = self.assumptions.role_phase_efforts
+        grid = defaultdict(lambda: defaultdict(float))
+
+        for project in projects:
+            if not project.start_date or not project.end_date:
+                continue
+            if project.est_hours <= 0:
+                continue
+
+            proj_duration_days = (project.end_date - project.start_date).days
+            if proj_duration_days <= 0:
+                continue
+
+            # Phase boundaries
+            phase_bounds = []
+            cumulative = 0
+            for phase in SDLC_PHASES:
+                w = phase_weights.get(phase, 0.0)
+                pd_days = round(proj_duration_days * w)
+                phase_bounds.append((phase, cumulative, cumulative + pd_days))
+                cumulative += pd_days
+
+            for role_key, alloc_pct in project.role_allocations.items():
+                if alloc_pct <= 0 or role_key not in role_phase_efforts:
+                    continue
+                role_hrs = project.est_hours * alloc_pct
+
+                for week_idx in range(horizon_weeks):
+                    week_start = scan_start + timedelta(weeks=week_idx)
+                    week_end = week_start + timedelta(days=7)
+
+                    if week_end <= project.start_date or week_start >= project.end_date:
+                        continue
+
+                    day_offset = max(0, (week_start - project.start_date).days)
+                    current_phase = SDLC_PHASES[-1]
+                    for pname, ps, pe in phase_bounds:
+                        if ps <= day_offset < pe:
+                            current_phase = pname
+                            break
+
+                    phase_effort = role_phase_efforts[role_key].get(current_phase, 0.0)
+                    proj_weeks = max(1, proj_duration_days / 7.0)
+                    weekly_demand = role_hrs * phase_effort / proj_weeks
+                    grid[week_idx][role_key] += weekly_demand
+
+        return grid
+
+    def simulate_portfolio_schedule(
+        self,
+        max_util_pct: float = 0.85,
+        horizon_weeks: int = 52,
+        exclude_ids: list = None,
+    ) -> list[dict]:
+        """Simulate scheduling all plannable projects onto the capacity grid.
+
+        Algorithm:
+        1. Seed demand grid with in-development projects
+        2. Collect plannable projects (not started, needs spec, pct=0)
+        3. Sort by priority (Highest first), then est_hours desc (big first)
+        4. Greedy placement: for each project, scan forward for earliest week
+           where all roles stay under max_util_pct
+        5. Stamp demand into grid so subsequent projects see updated load
+        6. Return results with suggested dates, wait time, bottleneck info
+
+        Args:
+            max_util_pct: Maximum utilization threshold (default 85%)
+            horizon_weeks: How far ahead to scan (default 52 weeks)
+            exclude_ids: Project IDs to exclude from simulation
+
+        Returns: list of dicts sorted by suggested_start, each with:
+            project_id, project_name, priority, est_hours,
+            suggested_start, suggested_end, duration_weeks,
+            wait_weeks, bottleneck_role, can_start_now
+        """
+        exclude_ids = set(exclude_ids or [])
+        supply = self.compute_supply_by_role()
+        role_phase_efforts = self.assumptions.role_phase_efforts
+        phase_weights = self.assumptions.sdlc_phase_weights
+
+        # Scan start: next Monday
+        today = date.today()
+        days_to_monday = (7 - today.weekday()) % 7
+        scan_start = today + timedelta(days=days_to_monday if days_to_monday else 0)
+
+        # Classify projects
+        in_dev, plannable = self._classify_projects()
+
+        # Filter exclusions
+        plannable = [p for p in plannable if p.id not in exclude_ids]
+
+        # Seed demand grid from in-development projects
+        grid = self._build_demand_grid(in_dev, scan_start, horizon_weeks)
+
+        # Sort plannable: priority order, then largest first within tier
+        priority_map = self.PRIORITY_ORDER
+        plannable.sort(key=lambda p: (
+            priority_map.get(p.priority, 99),
+            -p.est_hours,
+        ))
+
+        results = []
+
+        for project in plannable:
+            active_roles = {k: v for k, v in project.role_allocations.items()
+                           if v > 0 and k in role_phase_efforts}
+            if not active_roles:
+                continue
+
+            # Get duration estimate
+            duration_result = self.estimate_duration(
+                project.est_hours, active_roles, max_util_pct
+            )
+            duration_weeks = max(1, duration_result["total_duration_days"] / 5.0)
+            duration_weeks_ceil = max(1, int(duration_weeks + 0.99))
+
+            # Build this project's weekly demand profile (phase-aware)
+            new_proj_weekly = []
+            for phase_info in duration_result["phases"]:
+                phase_weeks = max(0.2, phase_info["duration_days"] / 5.0)
+                phase_week_count = max(1, int(phase_weeks + 0.99))
+                for _ in range(phase_week_count):
+                    week_demand = {}
+                    for role_info in phase_info["roles"]:
+                        hrs_per_week = role_info["hours"] / phase_weeks
+                        week_demand[role_info["role"]] = hrs_per_week
+                    new_proj_weekly.append(week_demand)
+
+            # Scan for earliest viable start
+            suggested_week = None
+            bottleneck_role = None
+            max_scan = horizon_weeks - len(new_proj_weekly)
+
+            for candidate_week in range(max(0, max_scan)):
+                fits = True
+                worst_role = None
+                worst_util = 0.0
+
+                for offset, week_demand in enumerate(new_proj_weekly):
+                    abs_week = candidate_week + offset
+                    for role_key, new_hrs in week_demand.items():
+                        existing = grid[abs_week].get(role_key, 0.0)
+                        total = existing + new_hrs
+                        role_supply = supply.get(role_key, 0.0)
+                        if role_supply <= 0:
+                            fits = False
+                            worst_role = role_key
+                            break
+                        util = total / role_supply
+                        if util > max_util_pct:
+                            fits = False
+                            if util > worst_util:
+                                worst_util = util
+                                worst_role = role_key
+                            break
+                        if util > worst_util:
+                            worst_util = util
+                            worst_role = role_key
+                    if not fits:
+                        break
+
+                if fits:
+                    suggested_week = candidate_week
+                    break
+                else:
+                    bottleneck_role = worst_role
+
+            if suggested_week is not None:
+                start_date = scan_start + timedelta(weeks=suggested_week)
+                end_date = start_date + timedelta(weeks=duration_weeks)
+
+                # Stamp this project's demand into the grid for subsequent projects
+                for offset, week_demand in enumerate(new_proj_weekly):
+                    abs_week = suggested_week + offset
+                    if abs_week < horizon_weeks:
+                        for role_key, hrs in week_demand.items():
+                            grid[abs_week][role_key] += hrs
+
+                results.append({
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "priority": project.priority or "",
+                    "est_hours": project.est_hours,
+                    "health": project.health or "",
+                    "suggested_start": start_date.isoformat(),
+                    "suggested_end": end_date.isoformat(),
+                    "duration_weeks": round(duration_weeks, 1),
+                    "wait_weeks": suggested_week,
+                    "bottleneck_role": bottleneck_role,
+                    "can_start_now": suggested_week == 0,
+                })
+            else:
+                results.append({
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "priority": project.priority or "",
+                    "est_hours": project.est_hours,
+                    "health": project.health or "",
+                    "suggested_start": None,
+                    "suggested_end": None,
+                    "duration_weeks": round(duration_weeks, 1),
+                    "wait_weeks": None,
+                    "bottleneck_role": bottleneck_role or "unknown",
+                    "can_start_now": False,
+                })
+
+        # Sort by suggested start (None last)
+        results.sort(key=lambda r: (
+            r["suggested_start"] is None,
+            r["suggested_start"] or "",
+        ))
+        return results
+
+    # ------------------------------------------------------------------
+    # Person availability projection
+    # ------------------------------------------------------------------
+    def compute_person_availability(
+        self,
+        threshold_pct: float = 0.50,
+    ) -> list[dict]:
+        """For each person, project when their utilization drops below threshold.
+
+        Walks forward in time: as each active project reaches its end date,
+        that project's demand is removed. The first date where utilization
+        drops below threshold = available date.
+
+        Args:
+            threshold_pct: Utilization level considered "available" (default 50%)
+
+        Returns: list of dicts sorted by available_date, each with:
+            name, role, role_key, team, capacity_hrs_week, current_demand,
+            current_utilization, available_date, available_in_weeks,
+            projects (with end dates and demand contribution)
+        """
+        person_demand = self.compute_person_demand()
+        data = self._load()
+
+        # Build project end-date lookup
+        project_end_dates = {}
+        for p in data["active_portfolio"]:
+            if p.end_date:
+                project_end_dates[p.id] = p.end_date
+
+        today = date.today()
+        results = []
+
+        for person in person_demand:
+            capacity = person["capacity_hrs_week"]
+            current_demand = person["demand_hrs_week"]
+            current_util = current_demand / capacity if capacity > 0 else 0.0
+
+            # Collect this person's projects with end dates and demand
+            projects_with_dates = []
+            for proj in person["projects"]:
+                end = project_end_dates.get(proj["project_id"])
+                projects_with_dates.append({
+                    "project_id": proj["project_id"],
+                    "project_name": proj["project_name"],
+                    "role": proj["role"],
+                    "weekly_hours": proj["weekly_hours"],
+                    "end_date": end.isoformat() if end else None,
+                })
+
+            # Sort projects by end date (earliest ending first)
+            projects_sorted = sorted(
+                projects_with_dates,
+                key=lambda x: (x["end_date"] is None, x["end_date"] or ""),
+            )
+
+            # Walk forward: remove demand as projects end
+            remaining_demand = current_demand
+            available_date = None
+
+            if current_util < threshold_pct:
+                # Already available
+                available_date = today
+            else:
+                for proj in projects_sorted:
+                    if proj["end_date"] is None:
+                        continue
+                    remaining_demand -= proj["weekly_hours"]
+                    util_after = remaining_demand / capacity if capacity > 0 else 0.0
+                    if util_after < threshold_pct:
+                        available_date = date.fromisoformat(proj["end_date"])
+                        break
+
+            available_in_weeks = None
+            if available_date:
+                delta = (available_date - today).days
+                available_in_weeks = max(0, round(delta / 7.0, 1))
+
+            results.append({
+                "name": person["name"],
+                "role": person["role"],
+                "role_key": person["role_key"],
+                "team": person["team"],
+                "capacity_hrs_week": capacity,
+                "current_demand": current_demand,
+                "current_utilization": round(current_util, 3),
+                "status": person["status"],
+                "available_date": available_date.isoformat() if available_date else None,
+                "available_in_weeks": available_in_weeks,
+                "available_now": available_date is not None and available_date <= today,
+                "projects": projects_sorted,
+            })
+
+        # Sort: available now first, then by available_date, then unavailable
+        results.sort(key=lambda r: (
+            not r["available_now"],
+            r["available_date"] is None,
+            r["available_date"] or "",
+        ))
+        return results
+
+    # ------------------------------------------------------------------
+    # Next project recommendation
+    # ------------------------------------------------------------------
+    def recommend_next_project(
+        self,
+        max_util_pct: float = 0.85,
+    ) -> dict:
+        """Recommend the best project to start next based on capacity simulation.
+
+        Thin wrapper around simulate_portfolio_schedule that returns the top
+        recommendation plus alternatives, with human-readable rationale.
+
+        Returns: dict with:
+            recommendation: top project dict (or None)
+            alternatives: list of 2-3 other options
+            rationale: human-readable string explaining the recommendation
+        """
+        schedule = self.simulate_portfolio_schedule(max_util_pct=max_util_pct)
+
+        if not schedule:
+            return {
+                "recommendation": None,
+                "alternatives": [],
+                "rationale": "No plannable projects found. All active projects "
+                             "are either in development, complete, or postponed.",
+            }
+
+        # Find projects that can start now or soonest
+        can_start_now = [s for s in schedule if s["can_start_now"]]
+        has_dates = [s for s in schedule if s["suggested_start"] is not None]
+
+        if can_start_now:
+            # Among those that can start now, pick highest priority, then largest
+            top = can_start_now[0]  # Already sorted by priority
+            alternatives = can_start_now[1:3] + [
+                s for s in has_dates if not s["can_start_now"]
+            ][:2]
+
+            rationale = (
+                f"{top['project_id']} ({top['project_name']}) can start immediately. "
+                f"Priority: {top['priority']}. Estimated duration: {top['duration_weeks']:.0f} weeks. "
+                f"Team capacity is available at the current {max_util_pct:.0%} utilization target."
+            )
+        elif has_dates:
+            top = has_dates[0]
+            alternatives = has_dates[1:4]
+            rationale = (
+                f"{top['project_id']} ({top['project_name']}) is the soonest startable project. "
+                f"Suggested start: {top['suggested_start']} (in {top['wait_weeks']} weeks). "
+                f"Priority: {top['priority']}. "
+            )
+            if top["bottleneck_role"]:
+                rationale += (
+                    f"Current delay is due to {top['bottleneck_role']} capacity constraints."
+                )
+        else:
+            top = schedule[0]
+            alternatives = schedule[1:4]
+            rationale = (
+                f"No projects can be scheduled within the planning horizon at "
+                f"{max_util_pct:.0%} utilization. Consider adjusting the target "
+                f"or freeing up resources."
+            )
+
+        return {
+            "recommendation": top,
+            "alternatives": alternatives[:3],
+            "rationale": rationale,
+            "total_plannable": len(schedule),
+            "can_start_now_count": len(can_start_now),
+        }
+
+    # ------------------------------------------------------------------
     # Summary report
     # ------------------------------------------------------------------
     def print_utilization_report(self):

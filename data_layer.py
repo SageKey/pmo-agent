@@ -442,6 +442,36 @@ def load_weekly_heatmap(_mtime: float, weeks: int = 26) -> pd.DataFrame:
         engine.connector.close()
 
 
+@st.cache_data(ttl=30)
+def load_portfolio_simulation(_mtime: float, max_util_pct: float = 0.85) -> list[dict]:
+    """Simulate scheduling all plannable projects. Returns list of dicts."""
+    engine = _build_engine()
+    try:
+        return engine.simulate_portfolio_schedule(max_util_pct=max_util_pct)
+    finally:
+        engine.connector.close()
+
+
+@st.cache_data(ttl=30)
+def load_person_availability(_mtime: float, threshold_pct: float = 0.50) -> list[dict]:
+    """Project when each person becomes available. Returns list of dicts."""
+    engine = _build_engine()
+    try:
+        return engine.compute_person_availability(threshold_pct=threshold_pct)
+    finally:
+        engine.connector.close()
+
+
+@st.cache_data(ttl=30)
+def load_next_recommendation(_mtime: float, max_util_pct: float = 0.85) -> dict:
+    """Recommend the best project to start next. Returns dict."""
+    engine = _build_engine()
+    try:
+        return engine.recommend_next_project(max_util_pct=max_util_pct)
+    finally:
+        engine.connector.close()
+
+
 def safe_load():
     """Top-level safe loader.
     Returns (all_data, utilization, person_demand) or shows error."""
