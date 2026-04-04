@@ -9,8 +9,10 @@ from components import (
     kpi_row, kpi_bar_row, summary_banner, section_header,
     utilization_bar_chart, health_donut,
     util_status, health_label, clean_health,
-    NAVY, GREEN, YELLOW, RED, GRAY,
+    NAVY, BLUE, GREEN, YELLOW, RED, GRAY,
 )
+from data_layer import DB_PATH
+from sqlite_connector import SQLiteConnector
 
 
 def render(data: dict, utilization: dict, person_demand: list):
@@ -124,9 +126,83 @@ def render(data: dict, utilization: dict, person_demand: list):
         else:
             st.info("No health data available.")
 
-    # --- Upcoming Milestones ---
-    section_header("Projects Ending Soon")
+    # --- Upcoming Milestones (from milestone tracker) ---
     today = date.today()
+
+    connector = SQLiteConnector(DB_PATH)
+    try:
+        upcoming_ms = connector.get_all_milestones(
+            days_ahead=60,
+            status_filter=["not_started", "in_progress", "at_risk", "blocked"],
+        )
+    finally:
+        connector.close()
+
+    if upcoming_ms:
+        section_header("Upcoming Milestones")
+
+        _TYPE_ICON = {
+            "gate": "🚪", "deliverable": "📦",
+            "go_live": "🚀", "checkpoint": "📍",
+        }
+        _STATUS_PILL = {
+            "not_started": ("background:#E9ECEF; color:#495057;", "Not Started"),
+            "in_progress": ("background:#D6EAF8; color:#1B4F72;", "In Progress"),
+            "at_risk": ("background:#FFF3CD; color:#856404;", "At Risk"),
+            "blocked": ("background:#F8D7DA; color:#721C24;", "Blocked"),
+        }
+
+        ms_html = ('<div style="background:#FFFFFF; border-radius:12px;'
+                   ' box-shadow:0 1px 3px rgba(0,0,0,0.08); overflow:hidden;'
+                   ' margin-bottom:1rem;">')
+
+        for m in upcoming_ms[:10]:
+            icon = _TYPE_ICON.get(m["milestone_type"], "📍")
+            s_style, s_label = _STATUS_PILL.get(
+                m["status"], ("background:#E9ECEF; color:#495057;", m["status"]))
+            pid = m["project_id"]
+            pname = m.get("project_name", pid)
+            due = m["due_date"]
+            priority = m.get("priority", "")
+
+            # Date urgency
+            if due:
+                d = date.fromisoformat(due)
+                days_left = (d - today).days
+                if days_left < 0:
+                    date_html = (f'<span style="color:#DC3545; font-weight:600;'
+                                 f' font-size:0.78rem;">⚠️ {abs(days_left)}d overdue</span>')
+                elif days_left <= 7:
+                    date_html = (f'<span style="color:#E67E22; font-size:0.78rem;">'
+                                 f'{d.strftime("%b %d")} ({days_left}d)</span>')
+                else:
+                    date_html = (f'<span style="color:{NAVY}; font-size:0.78rem;">'
+                                 f'{d.strftime("%b %d")} ({days_left}d)</span>')
+            else:
+                date_html = ''
+
+            proj_link = (f'<a href="?project={pid}" target="_self"'
+                         f' style="color:#1565C0; text-decoration:none;'
+                         f' font-size:0.78rem; font-weight:500;">{pid}</a>')
+
+            ms_html += (
+                f'<div style="padding:0.65rem 1rem; border-bottom:1px solid #F0F2F5;'
+                f' display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;">'
+                f'<span style="font-size:0.95rem;">{icon}</span>'
+                f'<span style="font-size:0.83rem; font-weight:600; color:{NAVY};">'
+                f'{m["title"]}</span>'
+                f'<span style="{s_style} display:inline-block; padding:0.12rem 0.45rem;'
+                f' border-radius:10px; font-size:0.68rem; font-weight:600;">{s_label}</span>'
+                f'{proj_link}'
+                f'<span style="margin-left:auto;">{date_html}</span>'
+                f'</div>'
+            )
+
+        ms_html += '</div>'
+        st.markdown(ms_html, unsafe_allow_html=True)
+
+    # --- Projects Ending Soon ---
+    section_header("Projects Ending Soon")
     horizon = today + timedelta(days=60)
 
     milestones = []

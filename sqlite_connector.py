@@ -17,7 +17,7 @@ from models import (
 DEFAULT_DB = "pmo_data.db"
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
@@ -219,6 +219,27 @@ CREATE TABLE IF NOT EXISTS project_audit_log (
     created_at      TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_pal_project ON project_audit_log(project_id);
+
+-- Project Milestones ---------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS project_milestones (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title           TEXT NOT NULL,
+    milestone_type  TEXT NOT NULL DEFAULT 'deliverable',
+    due_date        TEXT,
+    completed_date  TEXT,
+    status          TEXT NOT NULL DEFAULT 'not_started',
+    owner           TEXT,
+    jira_epic_key   TEXT,
+    progress_pct    REAL DEFAULT 0.0,
+    sort_order      INTEGER DEFAULT 0,
+    notes           TEXT,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pms_project ON project_milestones(project_id);
+CREATE INDEX IF NOT EXISTS idx_pms_due ON project_milestones(due_date);
 """
 
 
@@ -1147,3 +1168,174 @@ class SQLiteConnector:
             (project_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Project Milestones
+    # ------------------------------------------------------------------
+    def get_milestones(self, project_id: str) -> list[dict]:
+        """Get milestones for a project, ordered by sort_order then due_date."""
+        conn = self._open()
+        rows = conn.execute(
+            """SELECT * FROM project_milestones
+               WHERE project_id = ?
+               ORDER BY sort_order, due_date, id""",
+            (project_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_all_milestones(self, days_ahead: int = None,
+                           status_filter: list = None) -> list[dict]:
+        """Get milestones across all projects, optionally filtered.
+
+        days_ahead: only milestones due within this many days
+        status_filter: list of statuses to include
+        """
+        conn = self._open()
+        sql = """SELECT m.*, p.name as project_name, p.health, p.priority
+                 FROM project_milestones m
+                 JOIN projects p ON p.id = m.project_id
+                 WHERE 1=1"""
+        params = []
+
+        if days_ahead is not None:
+            sql += " AND m.due_date IS NOT NULL AND m.due_date <= date('now', '+' || ? || ' days')"
+            params.append(days_ahead)
+
+        if status_filter:
+            placeholders = ','.join('?' * len(status_filter))
+            sql += f" AND m.status IN ({placeholders})"
+            params.extend(status_filter)
+
+        sql += " ORDER BY m.due_date, m.sort_order, m.id"
+        rows = conn.execute(sql, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def save_milestone(self, project_id: str, title: str,
+                       milestone_type: str = "deliverable",
+                       due_date: str = None, status: str = "not_started",
+                       owner: str = None, jira_epic_key: str = None,
+                       progress_pct: float = 0.0, sort_order: int = 0,
+                       notes: str = None, milestone_id: int = None,
+                       actor: str = "System") -> int:
+        """Create or update a milestone. Returns milestone ID."""
+        conn = self._open()
+
+        if milestone_id:
+            # Update existing
+            conn.execute(
+                """UPDATE project_milestones SET
+                   title=?, milestone_type=?, due_date=?, status=?,
+                   owner=?, jira_epic_key=?, progress_pct=?,
+                   sort_order=?, notes=?, updated_at=datetime('now')
+                   WHERE id=?""",
+                (title, milestone_type, due_date, status,
+                 owner, jira_epic_key, progress_pct,
+                 sort_order, notes, milestone_id),
+            )
+            self._log_audit(project_id, "milestone_updated", actor,
+                            details=title)
+            conn.commit()
+            return milestone_id
+        else:
+            # Insert new
+            cur = conn.execute(
+                """INSERT INTO project_milestones
+                   (project_id, title, milestone_type, due_date, status,
+                    owner, jira_epic_key, progress_pct, sort_order, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (project_id, title, milestone_type, due_date, status,
+                 owner, jira_epic_key, progress_pct, sort_order, notes),
+            )
+            mid = cur.lastrowid
+            self._log_audit(project_id, "milestone_added", actor,
+                            details=title)
+            conn.commit()
+            return mid
+
+    def complete_milestone(self, milestone_id: int, actor: str = "System") -> None:
+        """Mark a milestone as complete with today's date."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT project_id, title FROM project_milestones WHERE id=?",
+            (milestone_id,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                """UPDATE project_milestones SET
+                   status='complete', progress_pct=100.0,
+                   completed_date=date('now'), updated_at=datetime('now')
+                   WHERE id=?""",
+                (milestone_id,),
+            )
+            self._log_audit(row["project_id"], "milestone_completed", actor,
+                            details=row["title"])
+            conn.commit()
+
+    def delete_milestone(self, milestone_id: int, actor: str = "System") -> None:
+        """Delete a milestone."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT project_id, title FROM project_milestones WHERE id=?",
+            (milestone_id,),
+        ).fetchone()
+        if row:
+            self._log_audit(row["project_id"], "milestone_deleted", actor,
+                            details=row["title"])
+            conn.execute("DELETE FROM project_milestones WHERE id=?",
+                         (milestone_id,))
+            conn.commit()
+
+    def seed_sdlc_milestones(self, project_id: str, start_date: str = None,
+                              end_date: str = None,
+                              actor: str = "System") -> int:
+        """Seed SDLC milestone template for a project. Returns count created."""
+        conn = self._open()
+        # Check if milestones already exist
+        count = conn.execute(
+            "SELECT COUNT(*) FROM project_milestones WHERE project_id=?",
+            (project_id,),
+        ).fetchone()[0]
+        if count > 0:
+            return 0  # Don't overwrite existing milestones
+
+        SDLC_TEMPLATE = [
+            ("Requirements Sign-off", "gate", 0),
+            ("Project Plan Approved", "gate", 1),
+            ("Functional Spec Complete", "gate", 2),
+            ("Technical Spec Complete", "gate", 3),
+            ("Development Complete", "deliverable", 4),
+            ("UAT Sign-off", "gate", 5),
+            ("Go-Live", "go_live", 6),
+            ("Post Go-Live Review", "checkpoint", 7),
+        ]
+
+        # If dates provided, distribute milestones evenly
+        dates = [None] * len(SDLC_TEMPLATE)
+        if start_date and end_date:
+            from datetime import date as dt_date, timedelta
+            try:
+                s = dt_date.fromisoformat(start_date)
+                e = dt_date.fromisoformat(end_date)
+                span = (e - s).days
+                n = len(SDLC_TEMPLATE)
+                for i in range(n):
+                    d = s + timedelta(days=int(span * (i + 1) / n))
+                    dates[i] = d.isoformat()
+            except Exception:
+                pass
+
+        created = 0
+        for i, (title, mtype, order) in enumerate(SDLC_TEMPLATE):
+            conn.execute(
+                """INSERT INTO project_milestones
+                   (project_id, title, milestone_type, due_date,
+                    status, sort_order)
+                   VALUES (?, ?, ?, ?, 'not_started', ?)""",
+                (project_id, title, mtype, dates[i], order),
+            )
+            created += 1
+
+        self._log_audit(project_id, "milestones_seeded", actor,
+                        details=f"SDLC template ({created} milestones)")
+        conn.commit()
+        return created

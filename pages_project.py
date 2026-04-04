@@ -804,6 +804,367 @@ def _render_view_mode(project, data, utilization, person_demand):
                     use_container_width=True,
                 )
 
+    # --- Milestones & Project Plan ---
+    _render_milestones(project)
+
+
+def _render_milestones(project):
+    """Render the milestones section for a project."""
+    from datetime import date as dt_date
+
+    connector = SQLiteConnector(DB_PATH)
+    try:
+        milestones = connector.get_milestones(project.id)
+    finally:
+        connector.close()
+
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+
+    # --- Header with actions ---
+    section_header("Project Plan & Milestones")
+
+    if not milestones:
+        st.markdown(
+            '<div style="background:#FFFFFF; border-radius:12px; padding:1.5rem;'
+            ' box-shadow:0 1px 3px rgba(0,0,0,0.08); text-align:center;'
+            ' color:#8BA4C4; margin-bottom:1rem;">'
+            '<div style="font-size:2rem; margin-bottom:0.5rem;">📋</div>'
+            '<div style="font-size:0.9rem; font-weight:500;">No milestones defined yet</div>'
+            '<div style="font-size:0.8rem; margin-top:0.25rem;">'
+            'Add milestones to track key deliverables and gate reviews.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    btn_c1, btn_c2 = st.columns(2)
+    with btn_c1:
+        if not milestones and st.button("📋 Apply SDLC Template", key="_seed_ms",
+                                         use_container_width=True, type="primary"):
+            connector = SQLiteConnector(DB_PATH)
+            try:
+                sd = project.start_date.isoformat() if project.start_date else None
+                ed = project.end_date.isoformat() if project.end_date else None
+                connector.seed_sdlc_milestones(project.id, sd, ed, actor=user)
+            finally:
+                connector.close()
+            st.cache_data.clear()
+            st.rerun()
+    with btn_c2:
+        add_clicked = st.button("➕ Add Milestone", key="_add_ms",
+                                 use_container_width=True)
+
+    # --- Add Milestone Form ---
+    if add_clicked:
+        st.session_state["_ms_adding"] = True
+
+    if st.session_state.get("_ms_adding"):
+        with st.form("add_milestone_form", clear_on_submit=True):
+            st.markdown("**New Milestone**")
+            mc1, mc2 = st.columns(2)
+            with mc1:
+                ms_title = st.text_input("Title", placeholder="e.g., UAT Sign-off")
+                ms_type = st.selectbox("Type",
+                    ["gate", "deliverable", "go_live", "checkpoint"],
+                    format_func=lambda x: {
+                        "gate": "🚪 Gate Review",
+                        "deliverable": "📦 Deliverable",
+                        "go_live": "🚀 Go-Live",
+                        "checkpoint": "📍 Checkpoint",
+                    }.get(x, x))
+            with mc2:
+                ms_due = st.date_input("Due Date", value=None)
+                ms_owner = st.text_input("Owner", value=project.pm or "")
+            ms_notes = st.text_input("Notes (optional)", placeholder="Additional context...")
+
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                if st.form_submit_button("Save Milestone", type="primary",
+                                          use_container_width=True):
+                    if ms_title and ms_title.strip():
+                        connector = SQLiteConnector(DB_PATH)
+                        try:
+                            connector.save_milestone(
+                                project_id=project.id,
+                                title=ms_title.strip(),
+                                milestone_type=ms_type,
+                                due_date=ms_due.isoformat() if ms_due else None,
+                                owner=ms_owner or None,
+                                notes=ms_notes or None,
+                                sort_order=len(milestones),
+                                actor=user,
+                            )
+                        finally:
+                            connector.close()
+                        st.session_state.pop("_ms_adding", None)
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error("Title is required.")
+            with sc2:
+                if st.form_submit_button("Cancel", use_container_width=True):
+                    st.session_state.pop("_ms_adding", None)
+                    st.rerun()
+
+    if not milestones:
+        return
+
+    # --- Milestone Summary Banner ---
+    n_total = len(milestones)
+    n_complete = sum(1 for m in milestones if m["status"] == "complete")
+    n_in_progress = sum(1 for m in milestones if m["status"] == "in_progress")
+    n_at_risk = sum(1 for m in milestones if m["status"] == "at_risk")
+    n_blocked = sum(1 for m in milestones if m["status"] == "blocked")
+    overall_pct = n_complete / n_total if n_total > 0 else 0
+
+    today = dt_date.today()
+    overdue = [m for m in milestones
+               if m["due_date"] and m["status"] not in ("complete",)
+               and dt_date.fromisoformat(m["due_date"]) < today]
+
+    _PILL = {
+        "green": "background:#D4EDDA; color:#155724;",
+        "yellow": "background:#FFF3CD; color:#856404;",
+        "red": "background:#F8D7DA; color:#721C24;",
+        "blue": "background:#D6EAF8; color:#1B4F72;",
+        "gray": "background:#E9ECEF; color:#495057;",
+    }
+
+    pills = [
+        {"label": f"{n_complete}/{n_total} Complete", "icon": "✅",
+         "style": _PILL["green"]},
+    ]
+    if n_in_progress > 0:
+        pills.append({"label": f"{n_in_progress} In Progress", "icon": "🔄",
+                       "style": _PILL["blue"]})
+    if n_at_risk > 0:
+        pills.append({"label": f"{n_at_risk} At Risk", "icon": "🟡",
+                       "style": _PILL["yellow"]})
+    if n_blocked > 0:
+        pills.append({"label": f"{n_blocked} Blocked", "icon": "🔴",
+                       "style": _PILL["red"]})
+    if overdue:
+        pills.append({"label": f"{len(overdue)} Overdue", "icon": "⚠️",
+                       "style": _PILL["red"]})
+
+    # Overall progress bar
+    st.markdown(
+        '<div style="background:#FFFFFF; border-radius:12px; padding:1rem 1.25rem;'
+        ' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
+        '<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;'
+        ' margin-bottom:0.75rem;">'
+        + ''.join(
+            f'<span style="{p["style"]} display:inline-block; padding:0.2rem 0.6rem;'
+            f' border-radius:16px; font-size:0.75rem; font-weight:600;">'
+            f'{p.get("icon", "")} {p["label"]}</span>'
+            for p in pills
+        )
+        + '</div>'
+        + f'<div style="display:flex; justify-content:space-between; align-items:baseline;'
+          f' margin-bottom:0.3rem;">'
+          f'<span style="font-size:0.7rem; font-weight:600; color:#6C757D;'
+          f' text-transform:uppercase; letter-spacing:0.05em;">Overall Progress</span>'
+          f'<span style="font-size:1rem; font-weight:700; color:{NAVY};">'
+          f'{overall_pct:.0%}</span></div>'
+          f'<div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">'
+          f'<div style="width:{overall_pct*100:.0f}%; height:100%;'
+          f' background:{GREEN}; border-radius:4px;"></div></div>'
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Milestone Timeline (visual) ---
+    _TYPE_ICON = {
+        "gate": "🚪", "deliverable": "📦",
+        "go_live": "🚀", "checkpoint": "📍",
+    }
+    _STATUS_STYLE = {
+        "not_started": ("background:#E9ECEF; color:#495057;", "Not Started"),
+        "in_progress": ("background:#D6EAF8; color:#1B4F72;", "In Progress"),
+        "complete":    ("background:#D4EDDA; color:#155724;", "Complete"),
+        "at_risk":     ("background:#FFF3CD; color:#856404;", "At Risk"),
+        "blocked":     ("background:#F8D7DA; color:#721C24;", "Blocked"),
+    }
+
+    for m in milestones:
+        mid = m["id"]
+        title = m["title"]
+        mtype = m["milestone_type"]
+        status = m["status"]
+        due = m["due_date"]
+        completed = m["completed_date"]
+        owner = m["owner"] or ""
+        progress = m["progress_pct"] or 0
+        notes = m["notes"] or ""
+        icon = _TYPE_ICON.get(mtype, "📍")
+        s_style, s_label = _STATUS_STYLE.get(status, ("background:#E9ECEF; color:#495057;", status))
+
+        # Due date formatting
+        if completed:
+            date_html = (f'<span style="color:{GREEN}; font-size:0.78rem;">'
+                         f'✅ Completed {completed}</span>')
+        elif due:
+            d = dt_date.fromisoformat(due)
+            days_left = (d - today).days
+            if days_left < 0:
+                date_html = (f'<span style="color:#DC3545; font-weight:600;'
+                             f' font-size:0.78rem;">⚠️ {abs(days_left)}d overdue</span>')
+            elif days_left <= 7:
+                date_html = (f'<span style="color:#E67E22; font-size:0.78rem;">'
+                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
+            elif days_left <= 30:
+                date_html = (f'<span style="color:{NAVY}; font-size:0.78rem;">'
+                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
+            else:
+                date_html = (f'<span style="color:#6C757D; font-size:0.78rem;">'
+                             f'Due {d.strftime("%b %d, %Y")}</span>')
+        else:
+            date_html = '<span style="color:#8BA4C4; font-size:0.78rem;">No date set</span>'
+
+        # Owner
+        owner_html = ""
+        if owner:
+            initial = owner[0].upper()
+            owner_html = (
+                f'<span style="display:inline-flex; align-items:center; gap:0.3rem;'
+                f' font-size:0.75rem; color:#5A6A7E;">'
+                f'<span style="width:20px; height:20px; border-radius:50%;'
+                f' background:{NAVY}; color:white; display:inline-flex;'
+                f' align-items:center; justify-content:center;'
+                f' font-size:0.6rem; font-weight:700;">{initial}</span>'
+                f'{owner}</span>'
+            )
+
+        # Progress bar
+        prog_pct = progress / 100 if progress > 1 else progress
+        if status == "complete":
+            prog_pct = 1.0
+            bar_c = GREEN
+        elif status == "at_risk":
+            bar_c = YELLOW
+        elif status == "blocked":
+            bar_c = RED
+        else:
+            bar_c = BLUE
+
+        # Notes
+        notes_html = ""
+        if notes:
+            notes_html = (f'<div style="font-size:0.75rem; color:#6C757D;'
+                          f' margin-top:0.3rem; font-style:italic;">{notes}</div>')
+
+        # Card
+        border_left = GREEN if status == "complete" else (
+            YELLOW if status == "at_risk" else (
+                RED if status == "blocked" else "#E8ECF1"))
+
+        st.markdown(
+            f'<div style="background:#FFFFFF; border-radius:10px; padding:0.85rem 1rem;'
+            f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-bottom:0.5rem;'
+            f' border-left:4px solid {border_left};">'
+            f'<div style="display:flex; flex-wrap:wrap; align-items:center;'
+            f' gap:0.5rem; margin-bottom:0.4rem;">'
+            f'<span style="font-size:1rem;">{icon}</span>'
+            f'<span style="font-size:0.88rem; font-weight:600; color:{NAVY};">{title}</span>'
+            f'<span style="{s_style} display:inline-block; padding:0.15rem 0.5rem;'
+            f' border-radius:12px; font-size:0.7rem; font-weight:600;">{s_label}</span>'
+            f'{owner_html}'
+            f'<span style="margin-left:auto;">{date_html}</span>'
+            f'</div>'
+            f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
+            f' overflow:hidden;">'
+            f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
+            f' background:{bar_c}; border-radius:3px;"></div></div>'
+            f'{notes_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Action buttons (inline)
+        if status != "complete":
+            ac1, ac2, ac3 = st.columns([1, 1, 4])
+            with ac1:
+                if st.button("✅ Complete", key=f"_ms_done_{mid}",
+                              use_container_width=True):
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.complete_milestone(mid, actor=user)
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+            with ac2:
+                if st.button("✏️ Edit", key=f"_ms_edit_{mid}",
+                              use_container_width=True):
+                    st.session_state[f"_ms_editing_{mid}"] = True
+                    st.rerun()
+
+        # Inline edit form
+        if st.session_state.get(f"_ms_editing_{mid}"):
+            with st.form(f"edit_ms_{mid}"):
+                ec1, ec2 = st.columns(2)
+                with ec1:
+                    e_title = st.text_input("Title", value=title, key=f"_mse_t_{mid}")
+                    e_type = st.selectbox("Type",
+                        ["gate", "deliverable", "go_live", "checkpoint"],
+                        index=["gate", "deliverable", "go_live", "checkpoint"].index(mtype)
+                        if mtype in ["gate", "deliverable", "go_live", "checkpoint"] else 1,
+                        format_func=lambda x: {
+                            "gate": "🚪 Gate Review", "deliverable": "📦 Deliverable",
+                            "go_live": "🚀 Go-Live", "checkpoint": "📍 Checkpoint",
+                        }.get(x, x), key=f"_mse_ty_{mid}")
+                    e_status = st.selectbox("Status",
+                        ["not_started", "in_progress", "complete", "at_risk", "blocked"],
+                        index=["not_started", "in_progress", "complete", "at_risk", "blocked"].index(status)
+                        if status in ["not_started", "in_progress", "complete", "at_risk", "blocked"] else 0,
+                        key=f"_mse_s_{mid}")
+                with ec2:
+                    e_due = st.date_input("Due Date",
+                        value=dt_date.fromisoformat(due) if due else None,
+                        key=f"_mse_d_{mid}")
+                    e_owner = st.text_input("Owner", value=owner, key=f"_mse_o_{mid}")
+                    e_progress = st.slider("Progress %", 0, 100, int(progress),
+                                            key=f"_mse_p_{mid}")
+                e_notes = st.text_input("Notes", value=notes, key=f"_mse_n_{mid}")
+
+                ebc1, ebc2, ebc3 = st.columns([2, 2, 1])
+                with ebc1:
+                    if st.form_submit_button("Save", type="primary",
+                                              use_container_width=True):
+                        connector = SQLiteConnector(DB_PATH)
+                        try:
+                            connector.save_milestone(
+                                project_id=project.id,
+                                title=e_title.strip(),
+                                milestone_type=e_type,
+                                due_date=e_due.isoformat() if e_due else None,
+                                status=e_status,
+                                owner=e_owner or None,
+                                progress_pct=float(e_progress),
+                                notes=e_notes or None,
+                                milestone_id=mid,
+                                sort_order=m["sort_order"],
+                                actor=user,
+                            )
+                        finally:
+                            connector.close()
+                        st.session_state.pop(f"_ms_editing_{mid}", None)
+                        st.cache_data.clear()
+                        st.rerun()
+                with ebc2:
+                    if st.form_submit_button("Cancel", use_container_width=True):
+                        st.session_state.pop(f"_ms_editing_{mid}", None)
+                        st.rerun()
+                with ebc3:
+                    if st.form_submit_button("🗑️ Delete", use_container_width=True):
+                        connector = SQLiteConnector(DB_PATH)
+                        try:
+                            connector.delete_milestone(mid, actor=user)
+                        finally:
+                            connector.close()
+                        st.session_state.pop(f"_ms_editing_{mid}", None)
+                        st.cache_data.clear()
+                        st.rerun()
+
+
 @st.dialog("Project Activity", width="large")
 def _render_project_panel(project_id: str, project_name: str):
     """Render the collaboration panel for a project as a modal dialog."""
