@@ -1058,7 +1058,7 @@ def _dlg_enable_plan(project, milestones: list):
     user = st.session_state.get("user_display_name", "Brett Anderson")
     st.markdown(
         "This will enable full project planning with **tasks under each milestone**, "
-        "a **Gantt chart**, resource assignments, and automatic progress rollups."
+        "**resource assignments** and automatic progress tracking."
     )
     st.markdown(f"**{len(milestones)} milestones** will each get a starter task.")
     bc1, bc2 = st.columns(2)
@@ -1389,7 +1389,7 @@ def _render_project_plan_section(project):
             elif btn == "enable_plan":
                 if st.button("➕ Enable Tasks", key="_tb_enable",
                               use_container_width=True,
-                              help="Add tasks under milestones with progress rollups"):
+                              help="Add tasks under each milestone"):
                     st.session_state["_open_dlg"] = "enable_plan"
                     st.rerun()
 
