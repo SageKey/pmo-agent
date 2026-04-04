@@ -46,6 +46,10 @@ def _seed_database_if_missing():
             need_seed = True
 
     if need_seed:
+        # Remove existing file to avoid "table already exists" errors
+        # when re-seeding a schema-only DB
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
         conn = sqlite3.connect(DB_PATH)
         try:
             conn.executescript(SEED_SQL.read_text())
