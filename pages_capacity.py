@@ -1,9 +1,7 @@
-"""Capacity Dashboard page for the ETE PMO Dashboard.
+"""Capacity Dashboard — clear signals, actionable insights.
 
-Three-tab layout:
-  Tab 1 — Overview: current utilization, supply vs demand, heatmap
-  Tab 2 — Team: person availability with search/filter
-  Tab 3 — Planning: portfolio simulation, start-next recommendation, what-if
+Answers 7 planning questions through bold declarative statements
+with supporting data available for drill-down.
 """
 
 from datetime import date
@@ -12,8 +10,8 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    section_header, supply_demand_chart, kpi_bar_row, capacity_heatmap,
-    util_status, util_color, ROLE_DISPLAY, ROLE_ORDER,
+    section_header, supply_demand_chart, capacity_heatmap,
+    util_status, ROLE_DISPLAY, ROLE_ORDER,
     GREEN, YELLOW, RED, GRAY, NAVY,
 )
 from data_layer import (
@@ -23,119 +21,311 @@ from data_layer import (
 )
 
 
+# ======================================================================
+# Insight cards — Apple-style bold signals
+# ======================================================================
+
+def _insight_card(headline: str, detail: str, color: str = GREEN, icon: str = ""):
+    """Render a bold insight card with headline and supporting detail."""
+    bg_map = {
+        GREEN: "linear-gradient(135deg, #f0faf2 0%, #FFFFFF 40%)",
+        YELLOW: "linear-gradient(135deg, #fffbf0 0%, #FFFFFF 40%)",
+        RED: "linear-gradient(135deg, #fef2f2 0%, #FFFFFF 40%)",
+        NAVY: "linear-gradient(135deg, #f0f4f8 0%, #FFFFFF 40%)",
+    }
+    bg = bg_map.get(color, bg_map[NAVY])
+    icon_html = f'<span style="font-size:1.3rem; margin-right:0.4rem;">{icon}</span>' if icon else ""
+
+    st.markdown(f"""
+    <div style="background:{bg}; border-left:4px solid {color}; border-radius:12px;
+         padding:1.25rem 1.5rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:0.75rem;">
+        <div style="font-size:1.15rem; font-weight:700; color:#1B3A5C; line-height:1.3;">
+            {icon_html}{headline}</div>
+        <div style="font-size:0.85rem; color:#6C757D; margin-top:0.35rem; line-height:1.5;">
+            {detail}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _mini_metric(label: str, value: str, color: str = NAVY):
+    """Small inline metric for supporting context."""
+    st.markdown(f"""
+    <div style="text-align:center; padding:0.5rem;">
+        <div style="font-size:0.65rem; font-weight:600; color:#6C757D;
+             text-transform:uppercase; letter-spacing:0.05em;">{label}</div>
+        <div style="font-size:1.4rem; font-weight:700; color:{color};">{value}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ======================================================================
+# Main render
+# ======================================================================
+
 def render(data: dict, utilization: dict, person_demand: list):
-    """Render the Capacity Dashboard page."""
+    """Render the Capacity Dashboard."""
 
-    tab_overview, tab_team, tab_planning = st.tabs([
-        "Overview", "Team", "Planning"
-    ])
+    mtime = get_file_mtime()
 
-    # ==================================================================
-    # TAB 1 — Overview
-    # ==================================================================
-    with tab_overview:
-        _render_overview(data, utilization, person_demand)
+    # Load all planning data
+    availability = load_person_availability(mtime)
+    recommendation = load_next_recommendation(mtime)
+    schedule = load_portfolio_simulation(mtime)
 
-    # ==================================================================
-    # TAB 2 — Team
-    # ==================================================================
-    with tab_team:
-        _render_team(data, utilization, person_demand)
-
-    # ==================================================================
-    # TAB 3 — Planning
-    # ==================================================================
-    with tab_planning:
-        _render_planning(data)
-
-
-# ======================================================================
-# TAB 1 — Overview
-# ======================================================================
-def _render_overview(data: dict, utilization: dict, person_demand: list):
-    """Current state: KPIs, utilization bars, supply/demand, heatmap."""
-
-    # --- Summary KPIs ---
+    # Derived facts
     roles_with_data = [r for r in ROLE_ORDER if r in utilization]
     total_supply = sum(utilization[r]["supply_hrs_week"] for r in roles_with_data)
     total_demand = sum(utilization[r]["demand_hrs_week"] for r in roles_with_data)
     avg_util = total_demand / total_supply if total_supply > 0 else 0
+    red_roles = [r for r in roles_with_data if utilization[r]["status"] == "RED"]
     headcount = len(person_demand) if person_demand else 0
-    red_roles = sum(1 for r in roles_with_data if utilization[r]["status"] == "RED")
-    green_roles = sum(1 for r in roles_with_data if utilization[r]["status"] == "GREEN")
 
-    kpi_items = [
-        {"label": "Avg Utilization", "value": f"{avg_util:.0%}",
-         "color": util_status(avg_util).lower(),
-         "subtitle": f"{total_demand:.0f} / {total_supply:.0f} hrs/wk"},
-        {"label": "Team Size", "value": str(headcount),
-         "color": "green", "subtitle": f"{len(roles_with_data)} roles staffed"},
-        {"label": "Roles Over Capacity", "value": str(red_roles),
-         "color": "red" if red_roles > 0 else "green",
-         "subtitle": f"{green_roles} under 80%"},
-    ]
-    kpi_bar_row(kpi_items)
+    available_now = [a for a in availability if a["available_now"]]
+    overloaded = [a for a in availability
+                  if a["current_utilization"] >= 1.0]
+    busy = [a for a in availability
+            if not a["available_now"] and a["current_utilization"] < 1.0]
 
-    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+    can_start_now = [s for s in schedule if s["can_start_now"]]
+    no_fit = [s for s in schedule if s["suggested_start"] is None]
 
-    # --- Role Utilization bars ---
-    section_header("Role Utilization")
+    rec = recommendation.get("recommendation")
 
-    items = []
-    for role_key in roles_with_data:
-        u = utilization[role_key]
-        pct = u["utilization_pct"]
-        supply = u["supply_hrs_week"]
-        demand = u["demand_hrs_week"]
-        if pct >= 1.0:
-            bar_color = RED
-        elif pct >= 0.80:
-            bar_color = YELLOW
+    # ==================================================================
+    # TOP SECTION — Bold insight signals
+    # ==================================================================
+
+    col1, col2, col3 = st.columns(3)
+
+    # --- Signal 1: Team Capacity ---
+    with col1:
+        if red_roles:
+            role_names = ", ".join(ROLE_DISPLAY.get(r, r) for r in red_roles)
+            _insight_card(
+                f"{len(red_roles)} Role{'s' if len(red_roles) > 1 else ''} Over Capacity",
+                f"{role_names}. Team is at {avg_util:.0%} average utilization "
+                f"with {len(available_now)} of {headcount} people available.",
+                RED, "⚠️",
+            )
+        elif avg_util >= 0.80:
+            _insight_card(
+                "Capacity is Tight",
+                f"No roles are over 100%, but the team is at {avg_util:.0%} average "
+                f"utilization. {len(available_now)} of {headcount} people available.",
+                YELLOW, "📊",
+            )
         else:
-            bar_color = GREEN
-        items.append({
-            "label": ROLE_DISPLAY.get(role_key, role_key),
-            "value": f"{pct:.0%}" if pct != float("inf") else "OVER",
-            "pct": min(pct, 1.0),
-            "color": util_status(pct).lower(),
-            "bar_color": bar_color,
-            "subtitle": f"{demand:.0f} / {supply:.0f} hrs",
+            _insight_card(
+                "Capacity is Healthy",
+                f"Team is at {avg_util:.0%} average utilization. "
+                f"{len(available_now)} of {headcount} people are available for new work.",
+                GREEN, "✓",
+            )
+
+    # --- Signal 2: Start Next ---
+    with col2:
+        if rec and rec["can_start_now"]:
+            _insight_card(
+                f"Start {rec['project_id']} Now",
+                f"{rec['project_name']}. {rec['priority']} priority, "
+                f"~{rec['duration_weeks']:.0f} weeks, {rec['est_hours']:.0f} hours. "
+                f"Capacity is available.",
+                GREEN, "🚀",
+            )
+        elif rec and rec["suggested_start"]:
+            _insight_card(
+                f"Next Up: {rec['project_id']}",
+                f"{rec['project_name']}. Available to start {rec['suggested_start']} "
+                f"(in {rec['wait_weeks']} weeks). "
+                f"{'Bottleneck: ' + ROLE_DISPLAY.get(rec.get('bottleneck_role', ''), rec.get('bottleneck_role', '')) + '.' if rec.get('bottleneck_role') else ''}",
+                YELLOW, "📅",
+            )
+        else:
+            _insight_card(
+                "No Projects Ready",
+                "All active projects are in development, complete, or postponed. "
+                "No plannable projects in the queue.",
+                NAVY, "📋",
+            )
+
+    # --- Signal 3: Bottleneck / Constraint ---
+    with col3:
+        if overloaded:
+            top = overloaded[0]  # Highest utilization
+            avail_text = f"available {top['available_date']}" if top["available_date"] else "no clear date"
+            _insight_card(
+                f"{top['name']} is Overloaded",
+                f"{top['current_utilization']:.0%} utilized across "
+                f"{len(top['projects'])} projects. "
+                f"{top['role']} — {avail_text}.",
+                RED, "🔴",
+            )
+        elif busy:
+            _insight_card(
+                f"{len(available_now)} of {headcount} Available",
+                f"No one is overloaded. {len(busy)} people are moderately busy.",
+                GREEN, "👥",
+            )
+        else:
+            _insight_card(
+                "Full Team Available",
+                f"All {headcount} team members are below 50% utilization "
+                f"and ready for new projects.",
+                GREEN, "👥",
+            )
+
+    st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+
+    # --- Metrics row ---
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
+        _mini_metric("Supply", f"{total_supply:.0f} hrs/wk", NAVY)
+    with m2:
+        _mini_metric("Demand", f"{total_demand:.0f} hrs/wk", NAVY)
+    with m3:
+        _mini_metric("Utilization", f"{avg_util:.0%}",
+                     RED if avg_util >= 1.0 else YELLOW if avg_util >= 0.8 else GREEN)
+    with m4:
+        _mini_metric("Available", f"{len(available_now)}/{headcount}", GREEN)
+    with m5:
+        _mini_metric("Ready to Start", str(len(can_start_now)),
+                     GREEN if can_start_now else GRAY)
+
+    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
+
+    # ==================================================================
+    # TABS — Supporting detail
+    # ==================================================================
+
+    tab_schedule, tab_team, tab_utilization = st.tabs([
+        "Portfolio Schedule", "Team Availability", "Utilization Detail"
+    ])
+
+    # ------------------------------------------------------------------
+    # Tab 1: Portfolio Schedule (Q5, Q7, Q4)
+    # ------------------------------------------------------------------
+    with tab_schedule:
+        _render_schedule(schedule, recommendation)
+
+    # ------------------------------------------------------------------
+    # Tab 2: Team Availability (Q6)
+    # ------------------------------------------------------------------
+    with tab_team:
+        _render_team(availability)
+
+    # ------------------------------------------------------------------
+    # Tab 3: Utilization Detail (Q1, Q2, Q3)
+    # ------------------------------------------------------------------
+    with tab_utilization:
+        _render_utilization_detail(utilization, person_demand)
+
+
+# ======================================================================
+# Tab: Portfolio Schedule
+# ======================================================================
+def _render_schedule(schedule: list, recommendation: dict):
+    """Suggested start dates for all unstarted projects + what-if."""
+
+    if not schedule:
+        st.info("No unstarted projects to schedule.")
+        return
+
+    # --- Schedule table ---
+    rows = []
+    for s in schedule:
+        start = s["suggested_start"]
+        wait = s["wait_weeks"]
+
+        if s["can_start_now"]:
+            status_label = "✓ Ready Now"
+        elif start:
+            status_label = f"In {wait} weeks"
+        else:
+            status_label = "Does not fit"
+
+        rows.append({
+            "Project": s["project_id"],
+            "Name": s["project_name"],
+            "Priority": s["priority"],
+            "Hours": s["est_hours"],
+            "Suggested Start": start or "—",
+            "Suggested End": s["suggested_end"] or "—",
+            "Duration": f"{s['duration_weeks']:.0f} wks",
+            "Status": status_label,
+            "Bottleneck": ROLE_DISPLAY.get(s["bottleneck_role"] or "", s["bottleneck_role"] or "—"),
         })
 
-    if items:
-        kpi_bar_row(items)
+    st.dataframe(
+        pd.DataFrame(rows),
+        column_config={
+            "Hours": st.column_config.NumberColumn(format="%.0f"),
+        },
+        hide_index=True,
+        use_container_width=True,
+        height=min(500, max(200, len(rows) * 38 + 40)),
+    )
 
-    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
+    can_start = sum(1 for s in schedule if s["can_start_now"])
+    has_date = sum(1 for s in schedule if s["suggested_start"])
+    no_fit = len(schedule) - has_date
+    st.caption(
+        f"{len(schedule)} plannable projects — "
+        f"{can_start} ready now · {has_date - can_start} queued · "
+        f"{no_fit} beyond horizon"
+    )
 
-    # --- Charts side by side ---
-    col_chart, col_heatmap = st.columns(2)
+    # --- What-If ---
+    st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+    section_header("What-If Analysis")
+    st.caption("Remove projects to see how the schedule shifts — "
+               "answers \"what happens if we add or remove a project?\"")
 
-    with col_chart:
-        section_header("Supply vs Demand")
-        chart = supply_demand_chart(utilization)
-        if chart:
-            st.altair_chart(chart, use_container_width=True)
+    all_plannable = [s["project_id"] for s in schedule]
+    excluded = st.multiselect(
+        "Exclude from simulation",
+        all_plannable,
+        label_visibility="collapsed",
+        placeholder="Select projects to exclude...",
+    )
+    if excluded:
+        from data_layer import _build_engine
+        engine = _build_engine()
+        try:
+            alt_schedule = engine.simulate_portfolio_schedule(exclude_ids=excluded)
+        finally:
+            engine.connector.close()
 
-    with col_heatmap:
-        section_header("26-Week Capacity Heatmap")
-        mtime = get_file_mtime()
-        heatmap_df = load_weekly_heatmap(mtime)
-        if heatmap_df is not None and not heatmap_df.empty:
-            hm = capacity_heatmap(heatmap_df)
-            if hm:
-                st.altair_chart(hm, use_container_width=True)
+        if alt_schedule:
+            # Show changes
+            original_starts = {s["project_id"]: s["suggested_start"] for s in schedule}
+            changes = []
+            for s in alt_schedule:
+                orig = original_starts.get(s["project_id"])
+                if orig != s["suggested_start"]:
+                    old = orig or "Does not fit"
+                    new = s["suggested_start"] or "Does not fit"
+                    direction = "earlier" if (s["suggested_start"] and (not orig or s["suggested_start"] < orig)) else "later"
+                    changes.append({
+                        "Project": s["project_id"],
+                        "Name": s["project_name"],
+                        "Before": old,
+                        "After": new,
+                        "Impact": f"Moved {direction}",
+                    })
+
+            if changes:
+                st.dataframe(pd.DataFrame(changes), hide_index=True, use_container_width=True)
+            else:
+                st.caption("No impact — removing these projects doesn't shift the schedule.")
         else:
-            st.info("No heatmap data available.")
+            st.caption("No remaining plannable projects.")
 
 
 # ======================================================================
-# TAB 2 — Team
+# Tab: Team Availability
 # ======================================================================
-def _render_team(data: dict, utilization: dict, person_demand: list):
-    """Person availability: when does each person free up?"""
-
-    mtime = get_file_mtime()
-    availability = load_person_availability(mtime)
+def _render_team(availability: list):
+    """Person availability with search, filter, and detail."""
 
     if not availability:
         st.info("No team data available.")
@@ -151,42 +341,19 @@ def _render_team(data: dict, utilization: dict, person_demand: list):
         role_filter = st.selectbox("Filter by role", ["All Roles"] + all_roles,
                                    label_visibility="collapsed")
 
-    # Apply filters
     filtered = availability
     if search:
         filtered = [a for a in filtered if search.lower() in a["name"].lower()]
     if role_filter != "All Roles":
         filtered = [a for a in filtered if a["role"] == role_filter]
 
-    # --- Summary KPIs ---
-    available_now = sum(1 for a in filtered if a["available_now"])
-    busy_count = len(filtered) - available_now
-    avg_util = (sum(a["current_utilization"] for a in filtered) / len(filtered)
-                if filtered else 0)
-
-    kpi_bar_row([
-        {"label": "Available Now", "value": str(available_now),
-         "color": "green" if available_now > 0 else "yellow",
-         "subtitle": f"< 50% utilized"},
-        {"label": "Busy", "value": str(busy_count),
-         "color": "red" if busy_count > available_now else "yellow",
-         "subtitle": f"≥ 50% utilized"},
-        {"label": "Avg Utilization", "value": f"{avg_util:.0%}",
-         "color": util_status(avg_util).lower(),
-         "subtitle": f"{len(filtered)} team members"},
-    ])
-
-    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-
-    # --- Team Table ---
-    today = date.today()
+    # --- Table ---
     rows = []
     for a in filtered:
-        avail_date = a["available_date"]
         if a["available_now"]:
             avail_display = "Available Now"
-        elif avail_date:
-            avail_display = avail_date
+        elif a["available_date"]:
+            avail_display = a["available_date"]
         else:
             avail_display = "Not within horizon"
 
@@ -198,25 +365,22 @@ def _render_team(data: dict, utilization: dict, person_demand: list):
             "Name": a["name"],
             "Role": a["role"],
             "Team": a["team"] or "",
-            "Capacity (hrs/wk)": a["capacity_hrs_week"],
-            "Demand (hrs/wk)": a["current_demand"],
+            "Capacity": a["capacity_hrs_week"],
+            "Demand": a["current_demand"],
             "Utilization": round(a["current_utilization"] * 100, 1),
             "Status": a["status"],
             "Projects": proj_names,
-            "Available Date": avail_display,
-            "In Weeks": a["available_in_weeks"] if a["available_in_weeks"] is not None else "",
+            "Available": avail_display,
         })
 
     if rows:
-        df = pd.DataFrame(rows)
-
         st.dataframe(
-            df,
+            pd.DataFrame(rows),
             column_config={
                 "Utilization": st.column_config.ProgressColumn(
                     "Utilization", min_value=0, max_value=100, format="%.0f%%"),
-                "Capacity (hrs/wk)": st.column_config.NumberColumn(format="%.1f"),
-                "Demand (hrs/wk)": st.column_config.NumberColumn(format="%.1f"),
+                "Capacity": st.column_config.NumberColumn("Capacity (hrs/wk)", format="%.1f"),
+                "Demand": st.column_config.NumberColumn("Demand (hrs/wk)", format="%.1f"),
             },
             hide_index=True,
             use_container_width=True,
@@ -226,10 +390,9 @@ def _render_team(data: dict, utilization: dict, person_demand: list):
     # --- Person Detail ---
     person_names = [a["name"] for a in filtered if a["projects"]]
     if person_names:
-        # Check if a member was pre-selected via query param
         preselected = st.session_state.pop("selected_member", None)
-        default_idx = 0
         options = [""] + person_names
+        default_idx = 0
         if preselected and preselected in person_names:
             default_idx = options.index(preselected)
 
@@ -243,12 +406,6 @@ def _render_team(data: dict, utilization: dict, person_demand: list):
         if selected:
             person = next((a for a in filtered if a["name"] == selected), None)
             if person and person["projects"]:
-                st.markdown(
-                    f"**{person['name']}** ({person['role']}) — "
-                    f"{person['current_demand']:.1f} hrs/wk demand, "
-                    f"{person['capacity_hrs_week']:.1f} hrs/wk capacity"
-                )
-
                 proj_rows = []
                 for p in person["projects"]:
                     proj_rows.append({
@@ -265,209 +422,72 @@ def _render_team(data: dict, utilization: dict, person_demand: list):
                 )
 
                 if person["available_now"]:
-                    st.success(f"✓ {person['name']} is available now ({person['current_utilization']:.0%} utilized)")
+                    st.success(f"{person['name']} is available — {person['current_utilization']:.0%} utilized")
                 elif person["available_date"]:
-                    st.info(f"Available on {person['available_date']} (in ~{person['available_in_weeks']:.0f} weeks)")
+                    st.info(f"Available on {person['available_date']} (~{person['available_in_weeks']:.0f} weeks)")
                 else:
                     st.warning("Not available within planning horizon")
 
 
 # ======================================================================
-# TAB 3 — Planning
+# Tab: Utilization Detail
 # ======================================================================
-def _render_planning(data: dict):
-    """Portfolio simulation, recommendations, what-if analysis."""
+def _render_utilization_detail(utilization: dict, person_demand: list):
+    """Role utilization, supply/demand chart, heatmap, person table."""
 
-    mtime = get_file_mtime()
+    col_chart, col_heatmap = st.columns(2)
 
-    # --- Controls ---
-    col_slider, col_spacer = st.columns([1, 2])
-    with col_slider:
-        util_target = st.slider(
-            "Utilization Target",
-            min_value=0.50, max_value=1.0, value=0.85, step=0.05,
-            format="%.0f%%",
-            help="Maximum utilization before a role is considered at capacity",
-        )
+    with col_chart:
+        section_header("Supply vs Demand")
+        chart = supply_demand_chart(utilization)
+        if chart:
+            st.altair_chart(chart, use_container_width=True)
 
-    # --- Load simulation data ---
-    recommendation = load_next_recommendation(mtime, max_util_pct=util_target)
-    schedule = load_portfolio_simulation(mtime, max_util_pct=util_target)
+    with col_heatmap:
+        section_header("26-Week Forecast")
+        mtime = get_file_mtime()
+        heatmap_df = load_weekly_heatmap(mtime)
+        if heatmap_df is not None and not heatmap_df.empty:
+            hm = capacity_heatmap(heatmap_df)
+            if hm:
+                st.altair_chart(hm, use_container_width=True)
 
-    # --- Start Next Recommendation Card ---
-    section_header("Recommended Next Project")
+    # --- Person utilization table ---
+    section_header("Person Utilization")
 
-    rec = recommendation.get("recommendation")
-    if rec:
-        can_now = rec["can_start_now"]
-        color = GREEN if can_now else YELLOW
+    if person_demand:
+        rows = []
+        for p in person_demand:
+            pct_str = p["utilization_pct"]
+            try:
+                pct_val = float(pct_str.replace("%", ""))
+            except (ValueError, AttributeError):
+                pct_val = 0.0
 
-        col_rec, col_details = st.columns([2, 1])
-        with col_rec:
-            if can_now:
-                st.success(
-                    f"**{rec['project_id']}** — {rec['project_name']}  \n"
-                    f"Can start **immediately**. "
-                    f"Priority: {rec['priority']}. "
-                    f"Duration: ~{rec['duration_weeks']:.0f} weeks ({rec['est_hours']:.0f} hrs).",
-                    icon="🚀",
-                )
-            else:
-                wait = rec.get("wait_weeks", "?")
-                st.info(
-                    f"**{rec['project_id']}** — {rec['project_name']}  \n"
-                    f"Earliest start: **{rec['suggested_start']}** (in {wait} weeks). "
-                    f"Priority: {rec['priority']}. "
-                    f"Duration: ~{rec['duration_weeks']:.0f} weeks.",
-                    icon="📅",
-                )
-                if rec.get("bottleneck_role"):
-                    st.caption(f"Bottleneck: {ROLE_DISPLAY.get(rec['bottleneck_role'], rec['bottleneck_role'])}")
-
-        with col_details:
-            alts = recommendation.get("alternatives", [])
-            if alts:
-                st.markdown("**Alternatives:**")
-                for alt in alts:
-                    start = alt["suggested_start"] or "No fit"
-                    now_badge = " ✓ now" if alt["can_start_now"] else ""
-                    st.caption(f"• {alt['project_id']} — {alt['priority']}, "
-                              f"{alt['est_hours']:.0f}h, start {start}{now_badge}")
-
-        st.caption(recommendation.get("rationale", ""))
-    else:
-        st.info("No plannable projects found. All active projects are in development, complete, or postponed.")
-
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
-
-    # --- Portfolio Schedule Table ---
-    section_header("Suggested Schedule — All Unstarted Projects")
-
-    if schedule:
-        today = date.today()
-        sched_rows = []
-        for s in schedule:
-            start = s["suggested_start"]
-            end = s["suggested_end"]
-            wait = s["wait_weeks"]
-
-            if s["can_start_now"]:
-                status_label = "Ready Now"
-            elif start:
-                status_label = f"In {wait} weeks"
-            else:
-                status_label = "No fit"
-
-            sched_rows.append({
-                "Project": s["project_id"],
-                "Name": s["project_name"],
-                "Priority": s["priority"],
-                "Est Hours": s["est_hours"],
-                "Health": s["health"],
-                "Suggested Start": start or "—",
-                "Suggested End": end or "—",
-                "Duration (wks)": s["duration_weeks"],
-                "Wait": status_label,
-                "Bottleneck": ROLE_DISPLAY.get(s["bottleneck_role"] or "", s["bottleneck_role"] or "—"),
+            rows.append({
+                "Name": p["name"],
+                "Role": p["role"],
+                "Team": p["team"] or "",
+                "Capacity (hrs/wk)": p["capacity_hrs_week"],
+                "Demand (hrs/wk)": p["demand_hrs_week"],
+                "Utilization": pct_val,
+                "Status": p["status"],
+                "Projects": p["project_count"],
             })
 
-        df = pd.DataFrame(sched_rows)
+        df = pd.DataFrame(rows).sort_values("Utilization", ascending=False)
 
         st.dataframe(
             df,
             column_config={
-                "Est Hours": st.column_config.NumberColumn(format="%.0f"),
-                "Duration (wks)": st.column_config.NumberColumn(format="%.1f"),
+                "Utilization": st.column_config.ProgressColumn(
+                    "Utilization", min_value=0, max_value=100, format="%.0f%%"),
+                "Capacity (hrs/wk)": st.column_config.NumberColumn(format="%.1f"),
+                "Demand (hrs/wk)": st.column_config.NumberColumn(format="%.1f"),
             },
             hide_index=True,
             use_container_width=True,
-            height=min(500, max(200, len(sched_rows) * 38 + 40)),
-        )
-
-        # Summary stats
-        can_start = sum(1 for s in schedule if s["can_start_now"])
-        has_date = sum(1 for s in schedule if s["suggested_start"])
-        no_fit = len(schedule) - has_date
-        st.caption(
-            f"{len(schedule)} plannable projects: "
-            f"{can_start} ready now · {has_date - can_start} queued · "
-            f"{no_fit} don't fit within horizon"
+            height=min(600, max(200, len(rows) * 38 + 40)),
         )
     else:
-        st.info("No unstarted projects to schedule.")
-
-    st.markdown("<div style='height: 1rem'></div>", unsafe_allow_html=True)
-
-    # --- What-If Analysis ---
-    section_header("What-If Analysis")
-    with st.expander("Exclude projects from simulation", expanded=False):
-        st.caption("Remove projects to see how the schedule changes — "
-                   "useful for answering 'what happens if we add/remove a project?'")
-
-        # Get all plannable project IDs
-        all_plannable = [s["project_id"] for s in schedule] if schedule else []
-        if all_plannable:
-            excluded = st.multiselect(
-                "Exclude from simulation",
-                all_plannable,
-                label_visibility="collapsed",
-            )
-            if excluded:
-                # Re-run simulation with exclusions
-                from capacity_engine import CapacityEngine
-                from data_layer import _build_engine
-                engine = _build_engine()
-                try:
-                    alt_schedule = engine.simulate_portfolio_schedule(
-                        max_util_pct=util_target,
-                        exclude_ids=excluded,
-                    )
-                finally:
-                    engine.connector.close()
-
-                if alt_schedule:
-                    alt_rows = []
-                    for s in alt_schedule:
-                        start = s["suggested_start"]
-                        wait = s["wait_weeks"]
-                        if s["can_start_now"]:
-                            status_label = "Ready Now"
-                        elif start:
-                            status_label = f"In {wait} weeks"
-                        else:
-                            status_label = "No fit"
-
-                        alt_rows.append({
-                            "Project": s["project_id"],
-                            "Name": s["project_name"],
-                            "Priority": s["priority"],
-                            "Suggested Start": start or "—",
-                            "Wait": status_label,
-                            "Bottleneck": ROLE_DISPLAY.get(s["bottleneck_role"] or "", s["bottleneck_role"] or "—"),
-                        })
-
-                    st.dataframe(
-                        pd.DataFrame(alt_rows),
-                        hide_index=True,
-                        use_container_width=True,
-                    )
-
-                    # Show what changed
-                    original_starts = {s["project_id"]: s["suggested_start"] for s in schedule}
-                    changes = []
-                    for s in alt_schedule:
-                        orig = original_starts.get(s["project_id"])
-                        if orig != s["suggested_start"]:
-                            changes.append(
-                                f"**{s['project_id']}**: {orig or 'No fit'} → {s['suggested_start'] or 'No fit'}"
-                            )
-                    if changes:
-                        st.markdown("**Changes from baseline:**")
-                        for c in changes:
-                            st.markdown(f"- {c}")
-                    else:
-                        st.caption("No changes from baseline schedule.")
-                else:
-                    st.info("No remaining plannable projects.")
-        else:
-            st.caption("No plannable projects available for what-if analysis.")
+        st.info("No person-level data available.")
