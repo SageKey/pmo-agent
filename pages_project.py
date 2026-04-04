@@ -617,7 +617,7 @@ def _render_edit_form(project, data):
 
 
 def _render_summary_card(project):
-    """Render the project summary card with badges, progress, and key metrics."""
+    """Render the project summary card with badges, progress, schedule, and key metrics."""
     health = clean_health(project.health)
     h_label = health_label(health)
     _BADGE_STYLES = {
@@ -654,50 +654,110 @@ def _render_summary_card(project):
     hours_str = f"{project.est_hours:,.0f}" if project.est_hours else "—"
     jira_url = f"https://etedevops.atlassian.net/browse/{project.id}"
 
+    # Schedule status
+    today = date.today()
+    if project.start_date and project.end_date:
+        start_str = project.start_date.strftime("%b %d, %Y")
+        end_str = project.end_date.strftime("%b %d, %Y")
+        if project.pct_complete >= 1.0:
+            sched_label = "Complete"
+            sched_style = f"background:#D4EDDA; color:#155724;"
+        elif project.end_date < today:
+            days_over = (today - project.end_date).days
+            sched_label = f"Overdue by {days_over}d"
+            sched_style = f"background:#F8D7DA; color:#721C24;"
+        elif project.start_date > today:
+            days_until = (project.start_date - today).days
+            sched_label = f"Starts in {days_until}d"
+            sched_style = f"background:#D6EAF8; color:#1B4F72;"
+        else:
+            # In progress — check if on pace
+            total_days = (project.end_date - project.start_date).days or 1
+            elapsed_days = (today - project.start_date).days
+            expected_pct = min(elapsed_days / total_days, 1.0)
+            days_left = (project.end_date - today).days
+            if pct >= expected_pct - 0.1:
+                sched_label = f"On Track \u00b7 {days_left}d left"
+                sched_style = f"background:#D4EDDA; color:#155724;"
+            else:
+                behind_pct = expected_pct - pct
+                sched_label = f"Behind {behind_pct:.0%} \u00b7 {days_left}d left"
+                sched_style = f"background:#FFF3CD; color:#856404;"
+        date_range = f"{start_str}  \u2192  {end_str}"
+    else:
+        date_range = "Not scheduled"
+        sched_label = "No dates"
+        sched_style = "background:#E9ECEF; color:#495057;"
+
+    # Metric helper
+    _metric = (
+        '<div style="min-width:100px;">'
+        '<div style="font-size:0.65rem; font-weight:600; color:#6C757D;'
+        ' text-transform:uppercase; letter-spacing:0.05em;">{label}</div>'
+        '<div style="font-size:1.25rem; font-weight:700; color:{color};">{value}</div></div>'
+    )
+
     st.markdown(
         f'<div style="background:#FFFFFF; border-radius:12px; padding:1.25rem 1.5rem;'
-        f' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
-        f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.6rem; margin-bottom:1rem;">'
-        f'<span style="{priority_style} display:inline-block; padding:0.3rem 0.75rem;'
-        f' border-radius:20px; font-size:0.8rem; font-weight:600;">'
+        f' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:0.75rem;">'
+        # Row 1: badges
+        f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem; margin-bottom:1rem;">'
+        f'<span style="{priority_style} display:inline-block; padding:0.25rem 0.7rem;'
+        f' border-radius:20px; font-size:0.78rem; font-weight:600;">'
         f'{project.priority or "N/A"}</span>'
-        f'<span style="{health_style} display:inline-block; padding:0.3rem 0.75rem;'
-        f' border-radius:20px; font-size:0.8rem; font-weight:600;">'
+        f'<span style="{health_style} display:inline-block; padding:0.25rem 0.7rem;'
+        f' border-radius:20px; font-size:0.78rem; font-weight:600;">'
         f'{health_icon} {h_label}</span>'
+        f'<span style="{sched_style} display:inline-block; padding:0.25rem 0.7rem;'
+        f' border-radius:20px; font-size:0.78rem; font-weight:600;">'
+        f'{sched_label}</span>'
         f'<a href="{jira_url}" target="_blank"'
-        f' style="color:#1565C0; text-decoration:none; font-size:0.8rem;'
+        f' style="color:#1565C0; text-decoration:none; font-size:0.78rem;'
         f' font-weight:500; margin-left:auto;">'
-        f'🔗 {project.id} in Jira</a>'
+        f'\U0001F517 {project.id} in Jira</a>'
         f'</div>'
+        # Row 2: progress bar
         f'<div style="margin-bottom:1rem;">'
         f'<div style="display:flex; justify-content:space-between; align-items:baseline;'
-        f' margin-bottom:0.35rem;">'
-        f'<span style="font-size:0.75rem; font-weight:600; color:#6C757D;'
+        f' margin-bottom:0.3rem;">'
+        f'<span style="font-size:0.65rem; font-weight:600; color:#6C757D;'
         f' text-transform:uppercase; letter-spacing:0.05em;">Progress</span>'
-        f'<span style="font-size:1.1rem; font-weight:700; color:{NAVY};">{pct_display}</span>'
+        f'<span style="font-size:1rem; font-weight:700; color:{NAVY};">{pct_display}</span>'
         f'</div>'
-        f'<div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">'
+        f'<div style="height:6px; background:#E9ECEF; border-radius:3px; overflow:hidden;">'
         f'<div style="width:{pct*100:.0f}%; height:100%; background:{bar_color};'
-        f' border-radius:4px; transition:width 0.3s;"></div>'
+        f' border-radius:3px; transition:width 0.3s;"></div>'
         f'</div></div>'
-        f'<div style="display:flex; flex-wrap:wrap; gap:1.5rem;">'
-        f'<div>'
-        f'<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
-        f' text-transform:uppercase; letter-spacing:0.05em;">Est Hours</div>'
-        f'<div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{hours_str}</div>'
-        f'</div>'
-        f'<div>'
-        f'<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
-        f' text-transform:uppercase; letter-spacing:0.05em;">Duration</div>'
-        f'<div style="font-size:1.35rem; font-weight:700; color:{NAVY};">{duration_str}</div>'
-        f'</div>'
-        f'</div></div>',
+        # Row 3: metrics
+        f'<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start;">'
+        + _metric.format(label="Est Hours", color=NAVY, value=hours_str)
+        + _metric.format(label="Duration", color=NAVY, value=duration_str)
+        + _metric.format(label="Schedule", color=NAVY, value=date_range)
+        + f'</div></div>',
         unsafe_allow_html=True,
     )
 
 
 def _render_overview_tab(project, data):
-    """Render the Overview tab — details, team assignments, financials."""
+    """Render the Overview tab — details, team, financials in structured cards."""
+
+    # --- Card style helpers ---
+    _card_open = (
+        '<div style="background:#FFFFFF; border-radius:10px; padding:1.15rem 1.35rem;'
+        ' box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:0.75rem;">'
+    )
+    _card_title = (
+        '<div style="font-size:0.7rem; font-weight:700; color:#6C757D;'
+        ' text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem;'
+        ' padding-bottom:0.5rem; border-bottom:1px solid #E9ECEF;">{title}</div>'
+    )
+    _detail_row = (
+        '<div style="display:flex; justify-content:space-between; padding:0.3rem 0;'
+        ' border-bottom:1px solid #F5F5F5;">'
+        '<span style="font-size:0.85rem; color:#6C757D;">{label}</span>'
+        '<span style="font-size:0.85rem; font-weight:600; color:#2C3E50;">{value}</span></div>'
+    )
+    _card_close = '</div>'
 
     # --- Financial KPIs (finance-gated) ---
     if is_finance_user() and (project.budget > 0 or project.actual_cost > 0 or project.forecast_cost > 0):
@@ -705,93 +765,124 @@ def _render_overview_tab(project, data):
         var_color = GREEN if variance and variance >= 0 else RED
         var_str = f"${variance:,.0f}" if variance is not None else "N/A"
 
-        budget_str = f"${project.budget:,.0f}"
-        actual_str = f"${project.actual_cost:,.0f}"
-        forecast_str = f"${project.forecast_cost:,.0f}"
-        _fin_card = (
-            '<div style="flex:1; min-width:140px; background:#FFFFFF; border-radius:12px;'
-            ' padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); border-left:4px solid {border};">'
-            '<div style="font-size:0.7rem; font-weight:600; color:#6C757D;'
+        _fin_metric = (
+            '<div style="flex:1; min-width:120px; text-align:center;">'
+            '<div style="font-size:0.65rem; font-weight:600; color:#6C757D;'
             ' text-transform:uppercase; letter-spacing:0.05em;">{label}</div>'
-            '<div style="font-size:1.5rem; font-weight:700; color:{color};">{value}</div></div>'
+            '<div style="font-size:1.4rem; font-weight:700; color:{color};'
+            ' margin-top:0.15rem;">{value}</div></div>'
         )
         st.markdown(
-            '<div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">'
-            + _fin_card.format(border=NAVY, label="Budget", color=NAVY, value=budget_str)
-            + _fin_card.format(border=NAVY, label="Actual Cost", color=NAVY, value=actual_str)
-            + _fin_card.format(border=NAVY, label="Forecast", color=NAVY, value=forecast_str)
-            + _fin_card.format(border=var_color, label="Variance", color=var_color, value=var_str)
-            + '</div>',
+            _card_open
+            + _card_title.format(title="Financials")
+            + '<div style="display:flex; flex-wrap:wrap; gap:0.5rem;">'
+            + _fin_metric.format(label="Budget", color=NAVY, value=f"${project.budget:,.0f}")
+            + _fin_metric.format(label="Actual", color=NAVY, value=f"${project.actual_cost:,.0f}")
+            + _fin_metric.format(label="Forecast", color=NAVY, value=f"${project.forecast_cost:,.0f}")
+            + _fin_metric.format(label="Variance", color=var_color, value=var_str)
+            + '</div>' + _card_close,
             unsafe_allow_html=True,
         )
 
-    # --- Overview + Assignments ---
+    # --- Two-column: Details + Team ---
     left, right = st.columns(2)
 
     with left:
-        section_header("Overview")
-        info_items = [
+        detail_rows = ""
+        fields = [
             ("Type", project.type),
             ("Portfolio", project.portfolio),
             ("Sponsor", project.sponsor),
             ("T-Shirt Size", project.tshirt_size),
             ("Team", project.team),
+            ("Start", project.start_date.strftime("%b %d, %Y") if project.start_date else "Not scheduled"),
+            ("End", project.end_date.strftime("%b %d, %Y") if project.end_date else "Not scheduled"),
         ]
-        for label, val in info_items:
-            st.markdown(f"**{label}:** {val or 'N/A'}")
+        for label, val in fields:
+            detail_rows += _detail_row.format(label=label, value=val or "—")
 
-        if project.start_date:
-            st.markdown(f"**Start:** {project.start_date.strftime('%b %d, %Y')}")
-        else:
-            st.markdown("**Start:** Not scheduled")
-        if project.end_date:
-            st.markdown(f"**End:** {project.end_date.strftime('%b %d, %Y')}")
-        else:
-            st.markdown("**End:** Not scheduled")
+        st.markdown(
+            _card_open
+            + _card_title.format(title="Project Details")
+            + detail_rows
+            + _card_close,
+            unsafe_allow_html=True,
+        )
 
+        # Notes card (only if notes exist)
         if project.notes:
-            st.markdown(f"**Notes:** {project.notes}")
-
-    with right:
-        section_header("Team Assignments")
-        assignment_fields = [
-            ("Project Manager", project.pm),
-            ("Business Analyst", project.ba),
-            ("Functional Lead", project.functional_lead),
-            ("Technical Lead", project.technical_lead),
-            ("Developer", getattr(project, "developer_lead", None)),
-        ]
-        for label, val in assignment_fields:
-            icon = "●" if val else "○"
-            color = GREEN if val else GRAY
             st.markdown(
-                f'<span style="color: {color}; font-size: 0.9rem;">{icon}</span> '
-                f'**{label}:** {val or "Unassigned"}',
+                _card_open
+                + _card_title.format(title="Notes")
+                + f'<div style="font-size:0.85rem; color:#2C3E50; line-height:1.5;">'
+                + f'{project.notes}</div>'
+                + _card_close,
                 unsafe_allow_html=True,
             )
 
-        # Role Allocations
-        active_roles = {k: v for k, v in project.role_allocations.items() if v > 0}
-        if active_roles:
-            st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
-            st.markdown("**Role Allocations**")
-            role_rows = []
-            for rk in ROLE_ORDER:
-                if rk in active_roles:
-                    role_rows.append({
-                        "Role": ROLE_DISPLAY.get(rk, rk),
-                        "Allocation": round(active_roles[rk] * 100),
-                    })
-            if role_rows:
-                st.dataframe(
-                    pd.DataFrame(role_rows),
-                    column_config={
-                        "Allocation": st.column_config.ProgressColumn(
-                            "Allocation %", min_value=0, max_value=100, format="%d%%"),
-                    },
-                    hide_index=True,
-                    use_container_width=True,
+    with right:
+        # Team assignments with allocations inline
+        assignment_fields = [
+            ("Project Manager", "pm", project.pm),
+            ("Business Analyst", "ba", project.ba),
+            ("Functional Lead", "functional", project.functional_lead),
+            ("Technical Lead", "technical", project.technical_lead),
+            ("Developer", "developer", getattr(project, "developer_lead", None)),
+        ]
+
+        team_rows = ""
+        for label, role_key, person in assignment_fields:
+            alloc = project.role_allocations.get(role_key, 0)
+            alloc_str = f"{alloc:.0%}" if alloc > 0 else ""
+            if person:
+                name_html = f'<span style="font-weight:600; color:#2C3E50;">{person}</span>'
+                dot = f'<span style="color:{GREEN}; margin-right:0.4rem;">●</span>'
+            else:
+                name_html = f'<span style="color:#ADB5BD;">Unassigned</span>'
+                dot = f'<span style="color:#DEE2E6; margin-right:0.4rem;">○</span>'
+
+            alloc_html = ""
+            if alloc_str:
+                alloc_html = (
+                    f'<span style="background:#E8F4FD; color:#1B4F72; padding:0.1rem 0.45rem;'
+                    f' border-radius:10px; font-size:0.72rem; font-weight:600;'
+                    f' margin-left:0.4rem;">{alloc_str}</span>'
                 )
+
+            team_rows += (
+                f'<div style="display:flex; align-items:center; justify-content:space-between;'
+                f' padding:0.4rem 0; border-bottom:1px solid #F5F5F5;">'
+                f'<div>{dot}{name_html}{alloc_html}</div>'
+                f'<span style="font-size:0.75rem; color:#ADB5BD;">{label}</span></div>'
+            )
+
+        # Additional role allocations (roles without lead assignments)
+        extra_roles = {
+            k: v for k, v in project.role_allocations.items()
+            if v > 0 and k not in ("pm", "ba", "functional", "technical", "developer")
+        }
+        for rk in ROLE_ORDER:
+            if rk in extra_roles:
+                alloc_str = f"{extra_roles[rk]:.0%}"
+                team_rows += (
+                    f'<div style="display:flex; align-items:center; justify-content:space-between;'
+                    f' padding:0.4rem 0; border-bottom:1px solid #F5F5F5;">'
+                    f'<div><span style="color:#DEE2E6; margin-right:0.4rem;">○</span>'
+                    f'<span style="color:#ADB5BD;">Unassigned</span>'
+                    f'<span style="background:#E8F4FD; color:#1B4F72; padding:0.1rem 0.45rem;'
+                    f' border-radius:10px; font-size:0.72rem; font-weight:600;'
+                    f' margin-left:0.4rem;">{alloc_str}</span></div>'
+                    f'<span style="font-size:0.75rem; color:#ADB5BD;">'
+                    f'{ROLE_DISPLAY.get(rk, rk)}</span></div>'
+                )
+
+        st.markdown(
+            _card_open
+            + _card_title.format(title="Team & Allocations")
+            + team_rows
+            + _card_close,
+            unsafe_allow_html=True,
+        )
 
 
 # ── Module-level constants for milestones / tasks ──────────────────
