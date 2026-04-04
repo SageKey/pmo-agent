@@ -817,17 +817,6 @@ _MS_STATUS_STYLE = {
     "at_risk":     ("background:#FFF3CD; color:#856404;", "At Risk"),
     "blocked":     ("background:#F8D7DA; color:#721C24;", "Blocked"),
 }
-_PILL_COLORS = {
-    "green": "background:#D4EDDA; color:#155724;",
-    "yellow": "background:#FFF3CD; color:#856404;",
-    "red": "background:#F8D7DA; color:#721C24;",
-    "blue": "background:#D6EAF8; color:#1B4F72;",
-    "gray": "background:#E9ECEF; color:#495057;",
-}
-_GANTT_STATUS_COLOR = {
-    "not_started": GRAY, "in_progress": BLUE,
-    "complete": GREEN, "at_risk": YELLOW, "blocked": RED,
-}
 
 
 # ── Dialog modals ──────────────────────────────────────────────────
@@ -1097,391 +1086,117 @@ def _dlg_enable_plan(project, milestones: list):
 
 
 # ── Helper renderers ───────────────────────────────────────────────
-def _render_milestone_summary(milestones, today):
-    """Render milestone pills + overall progress bar."""
-    n_total = len(milestones)
-    n_complete = sum(1 for m in milestones if m["status"] == "complete")
-    n_in_progress = sum(1 for m in milestones if m["status"] == "in_progress")
-    n_at_risk = sum(1 for m in milestones if m["status"] == "at_risk")
-    n_blocked = sum(1 for m in milestones if m["status"] == "blocked")
-    overall_pct = n_complete / n_total if n_total > 0 else 0
+def _render_milestone_row(m, ms_tasks, project, user, today, has_plan):
+    """Render a milestone as a table row with nested task rows."""
+    mid = m["id"]
+    status = m["status"]
+    icon = _MS_TYPE_ICON.get(m["milestone_type"], "📍")
+    s_style, s_label = _MS_STATUS_STYLE.get(
+        status, ("background:#E9ECEF; color:#495057;", status))
+    owner = m["owner"] or ""
+    progress = m["progress_pct"] or 0
 
-    overdue = [m for m in milestones
-               if m["due_date"] and m["status"] != "complete"
-               and date.fromisoformat(m["due_date"]) < today]
-
-    pills = [
-        {"label": f"{n_complete}/{n_total} Complete", "icon": "✅",
-         "style": _PILL_COLORS["green"]},
-    ]
-    if n_in_progress:
-        pills.append({"label": f"{n_in_progress} In Progress", "icon": "🔄",
-                       "style": _PILL_COLORS["blue"]})
-    if n_at_risk:
-        pills.append({"label": f"{n_at_risk} At Risk", "icon": "🟡",
-                       "style": _PILL_COLORS["yellow"]})
-    if n_blocked:
-        pills.append({"label": f"{n_blocked} Blocked", "icon": "🔴",
-                       "style": _PILL_COLORS["red"]})
-    if overdue:
-        pills.append({"label": f"{len(overdue)} Overdue", "icon": "⚠️",
-                       "style": _PILL_COLORS["red"]})
-
-    st.markdown(
-        '<div style="background:#FFFFFF; border-radius:12px; padding:1rem 1.25rem;'
-        ' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
-        '<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;'
-        ' margin-bottom:0.75rem;">'
-        + ''.join(
-            f'<span style="{p["style"]} display:inline-block; padding:0.2rem 0.6rem;'
-            f' border-radius:16px; font-size:0.75rem; font-weight:600;">'
-            f'{p.get("icon", "")} {p["label"]}</span>'
-            for p in pills
-        )
-        + '</div>'
-        + f'<div style="display:flex; justify-content:space-between; align-items:baseline;'
-          f' margin-bottom:0.3rem;">'
-          f'<span style="font-size:0.7rem; font-weight:600; color:#6C757D;'
-          f' text-transform:uppercase; letter-spacing:0.05em;">Overall Progress</span>'
-          f'<span style="font-size:1rem; font-weight:700; color:{NAVY};">'
-          f'{overall_pct:.0%}</span></div>'
-          f'<div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">'
-          f'<div style="width:{overall_pct*100:.0f}%; height:100%;'
-          f' background:{GREEN}; border-radius:4px;"></div></div>'
-        + '</div>',
-        unsafe_allow_html=True,
-    )
-
-
-def _render_task_summary(tasks):
-    """Render task pills + completion progress bar."""
-    n_tasks = len(tasks)
-    n_done = sum(1 for t in tasks if t["status"] == "complete")
-    n_in_prog = sum(1 for t in tasks if t["status"] == "in_progress")
-    n_blocked = sum(1 for t in tasks if t["status"] == "blocked")
-    total_est = sum(t["est_hours"] or 0 for t in tasks)
-    total_actual = sum(t["actual_hours"] or 0 for t in tasks)
-    task_pct = n_done / n_tasks if n_tasks > 0 else 0
-
-    pills_html = (
-        f'<span style="{_PILL_COLORS["green"]} display:inline-block;'
-        f' padding:0.2rem 0.6rem; border-radius:16px; font-size:0.75rem;'
-        f' font-weight:600;">✅ {n_done}/{n_tasks} Tasks</span>'
-    )
-    if n_in_prog:
-        pills_html += (
-            f' <span style="{_PILL_COLORS["blue"]} display:inline-block;'
-            f' padding:0.2rem 0.6rem; border-radius:16px; font-size:0.75rem;'
-            f' font-weight:600;">🔄 {n_in_prog} In Progress</span>')
-    if n_blocked:
-        pills_html += (
-            f' <span style="{_PILL_COLORS["red"]} display:inline-block;'
-            f' padding:0.2rem 0.6rem; border-radius:16px; font-size:0.75rem;'
-            f' font-weight:600;">🔴 {n_blocked} Blocked</span>')
-
-    st.markdown(
-        '<div style="background:#FFFFFF; border-radius:12px; padding:1rem 1.25rem;'
-        ' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
-        f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;'
-        f' margin-bottom:0.75rem;">{pills_html}'
-        f'<span style="margin-left:auto; font-size:0.8rem; color:#6C757D;">'
-        f'{total_est:,.0f}h estimated · {total_actual:,.0f}h actual</span></div>'
-        f'<div style="display:flex; justify-content:space-between; align-items:baseline;'
-        f' margin-bottom:0.3rem;">'
-        f'<span style="font-size:0.7rem; font-weight:600; color:#6C757D;'
-        f' text-transform:uppercase; letter-spacing:0.05em;">Task Completion</span>'
-        f'<span style="font-size:1rem; font-weight:700; color:{NAVY};">'
-        f'{task_pct:.0%}</span></div>'
-        f'<div style="height:8px; background:#E9ECEF; border-radius:4px; overflow:hidden;">'
-        f'<div style="width:{task_pct*100:.0f}%; height:100%;'
-        f' background:{GREEN}; border-radius:4px;"></div></div></div>',
-        unsafe_allow_html=True,
-    )
-
-
-def _render_milestones_tab(project, milestones, has_plan, user):
-    """Render the Milestones tab — clean timeline cards."""
-    today = date.today()
-
-    if not milestones:
-        st.info("No milestones defined yet. Use the toolbar above to add milestones "
-                "or apply an SDLC template.")
-        return
-
-    _render_milestone_summary(milestones, today)
-
-    for m in milestones:
-        mid = m["id"]
-        title = m["title"]
-        status = m["status"]
-        due = m["due_date"]
-        completed = m["completed_date"]
-        owner = m["owner"] or ""
-        progress = m["progress_pct"] or 0
-        icon = _MS_TYPE_ICON.get(m["milestone_type"], "📍")
-        s_style, s_label = _MS_STATUS_STYLE.get(
-            status, ("background:#E9ECEF; color:#495057;", status))
-
-        # Due date formatting
-        if completed:
-            date_html = (f'<span style="color:{GREEN}; font-size:0.78rem;">'
-                         f'✅ Completed {completed}</span>')
-        elif due:
-            d = date.fromisoformat(due)
-            days_left = (d - today).days
-            if days_left < 0:
-                date_html = (f'<span style="color:#DC3545; font-weight:600;'
-                             f' font-size:0.78rem;">⚠️ {abs(days_left)}d overdue</span>')
-            elif days_left <= 7:
-                date_html = (f'<span style="color:#E67E22; font-size:0.78rem;">'
-                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
-            elif days_left <= 30:
-                date_html = (f'<span style="color:{NAVY}; font-size:0.78rem;">'
-                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
-            else:
-                date_html = (f'<span style="color:#6C757D; font-size:0.78rem;">'
-                             f'Due {d.strftime("%b %d, %Y")}</span>')
-        else:
-            date_html = '<span style="color:#8BA4C4; font-size:0.78rem;">No date set</span>'
-
-        # Owner
-        owner_html = ""
-        if owner:
-            ini = owner[0].upper()
-            owner_html = (
-                f'<span style="display:inline-flex; align-items:center; gap:0.3rem;'
-                f' font-size:0.75rem; color:#5A6A7E;">'
-                f'<span style="width:20px; height:20px; border-radius:50%;'
-                f' background:{NAVY}; color:white; display:inline-flex;'
-                f' align-items:center; justify-content:center;'
-                f' font-size:0.6rem; font-weight:700;">{ini}</span>'
-                f'{owner}</span>')
-
-        # Progress bar
-        prog_pct = progress / 100 if progress > 1 else progress
-        if status == "complete":
-            prog_pct = 1.0
-            bar_c = GREEN
-        elif status == "at_risk":
-            bar_c = YELLOW
-        elif status == "blocked":
-            bar_c = RED
-        else:
-            bar_c = BLUE
-
-        border_left = GREEN if status == "complete" else (
-            YELLOW if status == "at_risk" else (
-                RED if status == "blocked" else "#E8ECF1"))
-
-        # Notes
-        notes = m["notes"] or ""
-        notes_html = ""
-        if notes:
-            notes_html = (f'<div style="font-size:0.75rem; color:#6C757D;'
-                          f' margin-top:0.3rem; font-style:italic;">{notes}</div>')
-
-        card_html = (
-            f'<div style="background:#FFFFFF; border-radius:10px; padding:0.85rem 1rem;'
-            f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-bottom:0.15rem;'
-            f' border-left:4px solid {border_left};">'
-            f'<div style="display:flex; flex-wrap:wrap; align-items:center;'
-            f' gap:0.5rem; margin-bottom:0.4rem;">'
-            f'<span style="font-size:1rem;">{icon}</span>'
-            f'<span style="font-size:0.88rem; font-weight:600; color:{NAVY};">{title}</span>'
-            f'<span style="{s_style} display:inline-block; padding:0.15rem 0.5rem;'
-            f' border-radius:12px; font-size:0.7rem; font-weight:600;">{s_label}</span>'
-            f'{owner_html}'
-            f'<span style="margin-left:auto;">{date_html}</span>'
-            f'</div>'
-            f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
-            f' overflow:hidden;">'
-            f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
-            f' background:{bar_c}; border-radius:3px;"></div></div>'
-            f'{notes_html}</div>'
-        )
-        st.markdown(card_html, unsafe_allow_html=True)
-
-        # Compact action row — just icons, no expanding forms
-        if status != "complete":
-            ac1, ac2, ac3 = st.columns([1, 1, 6])
-            with ac1:
-                if st.button("✅ Complete", key=f"_msd_{mid}",
-                              use_container_width=True):
-                    connector = SQLiteConnector(DB_PATH)
-                    try:
-                        connector.complete_milestone(mid, actor=user)
-                    finally:
-                        connector.close()
-                    st.cache_data.clear()
-                    st.rerun()
-            with ac2:
-                if st.button("✏️ Edit", key=f"_mse_{mid}",
-                              use_container_width=True):
-                    st.session_state["_open_dlg"] = f"edit_ms_{mid}"
-                    st.rerun()
-
-
-def _render_gantt_tab(milestones, tasks):
-    """Render the Gantt chart tab."""
-    today = date.today()
-
-    gantt_rows = []
-    for m in milestones:
-        if m["due_date"]:
-            gantt_rows.append({
-                "Task": f"🚪 {m['title']}",
-                "Start": m["due_date"], "End": m["due_date"],
-                "Type": "Milestone", "Status": m["status"],
-                "Assignee": m.get("owner") or "",
-                "Progress": m["progress_pct"] or 0,
-            })
-    for t in tasks:
-        if t["start_date"] and t["end_date"]:
-            gantt_rows.append({
-                "Task": f"  {t['title']}",
-                "Start": t["start_date"], "End": t["end_date"],
-                "Type": "Task", "Status": t["status"],
-                "Assignee": t.get("assignee") or "",
-                "Progress": t["progress_pct"] or 0,
-            })
-
-    if not gantt_rows:
-        st.info("Add dates to milestones or tasks to see the Gantt chart.")
-        return
-
-    gantt_df = pd.DataFrame(gantt_rows)
-
-    bars = alt.Chart(gantt_df[gantt_df["Type"] == "Task"]).mark_bar(
-        cornerRadiusEnd=3, height=14,
-    ).encode(
-        y=alt.Y("Task:N",
-                sort=list(gantt_df[gantt_df["Type"] == "Task"]["Task"]),
-                title=None,
-                axis=alt.Axis(labelFontSize=10, labelLimit=250)),
-        x=alt.X("Start:T", title=None),
-        x2="End:T",
-        color=alt.Color("Status:N",
-                         scale=alt.Scale(
-                             domain=list(_GANTT_STATUS_COLOR.keys()),
-                             range=list(_GANTT_STATUS_COLOR.values())),
-                         legend=alt.Legend(title=None, orient="top")),
-        tooltip=["Task:N", "Start:T", "End:T", "Assignee:N",
-                 alt.Tooltip("Progress:Q", format=".0f")],
-    )
-
-    diamonds = alt.Chart(gantt_df[gantt_df["Type"] == "Milestone"]).mark_point(
-        shape="diamond", size=120, filled=True,
-    ).encode(
-        y=alt.Y("Task:N", title=None),
-        x=alt.X("Start:T"),
-        color=alt.Color("Status:N",
-                         scale=alt.Scale(
-                             domain=list(_GANTT_STATUS_COLOR.keys()),
-                             range=list(_GANTT_STATUS_COLOR.values())),
-                         legend=None),
-        tooltip=["Task:N", "Start:T", "Assignee:N"],
-    )
-
-    today_rule = alt.Chart(
-        pd.DataFrame([{"today": today.isoformat()}])
-    ).mark_rule(color=RED, strokeDash=[4, 4], strokeWidth=1.5).encode(
-        x="today:T",
-    )
-
-    chart = (bars + diamonds + today_rule).properties(
-        height=max(180, len(gantt_rows) * 22),
-    ).configure_view(strokeWidth=0)
-
-    st.altair_chart(chart, use_container_width=True)
-
-
-def _render_tasks_tab(project, milestones, tasks, user):
-    """Render the Tasks tab — tasks grouped under milestone headers."""
-    today = date.today()
-
-    ms_map = {m["id"]: m for m in milestones}
-    tasks_by_ms = {}
-    unassigned = []
-    for t in tasks:
-        mid = t["milestone_id"]
-        if mid and mid in ms_map:
-            tasks_by_ms.setdefault(mid, []).append(t)
-        else:
-            unassigned.append(t)
-
-    _render_task_summary(tasks)
-
-    for ms in milestones:
-        mid = ms["id"]
-        ms_tasks = tasks_by_ms.get(mid, [])
-        if not ms_tasks:
-            continue
-
+    # If tasks exist, progress = tasks done / total
+    if ms_tasks:
         ms_done = sum(1 for t in ms_tasks if t["status"] == "complete")
         ms_total = len(ms_tasks)
-        ms_pct = ms_done / ms_total if ms_total > 0 else 0
-        icon = _MS_TYPE_ICON.get(ms["milestone_type"], "📍")
-        s_style, s_label = _MS_STATUS_STYLE.get(
-            ms["status"], ("background:#E9ECEF; color:#495057;", ms["status"]))
+        progress = (ms_done / ms_total * 100) if ms_total else 0
 
-        due_html = ""
-        if ms["due_date"]:
-            d = date.fromisoformat(ms["due_date"])
-            days = (d - today).days
-            if ms["status"] == "complete":
-                due_html = f'<span style="color:{GREEN}; font-size:0.75rem;">✅ Done</span>'
-            elif days < 0:
-                due_html = (f'<span style="color:{RED}; font-weight:600;'
-                            f' font-size:0.75rem;">⚠️ {abs(days)}d overdue</span>')
-            else:
-                due_html = (f'<span style="color:{NAVY}; font-size:0.75rem;">'
-                            f'Due {d.strftime("%b %d")} ({days}d)</span>')
+    prog_pct = progress / 100 if progress > 1 else progress
+    if status == "complete":
+        prog_pct = 1.0
+        bar_c = GREEN
+    elif status == "at_risk":
+        bar_c = YELLOW
+    elif status == "blocked":
+        bar_c = RED
+    else:
+        bar_c = BLUE
 
-        border = GREEN if ms["status"] == "complete" else (
-            YELLOW if ms["status"] == "at_risk" else (
-                RED if ms["status"] == "blocked" else NAVY))
+    # Due date
+    due = m["due_date"]
+    if m["completed_date"]:
+        due_html = f'<span style="color:{GREEN}; font-size:0.72rem;">✅ Done</span>'
+    elif due:
+        d = date.fromisoformat(due)
+        days = (d - today).days
+        if days < 0:
+            due_html = (f'<span style="color:#DC3545; font-weight:600;'
+                        f' font-size:0.72rem;">{abs(days)}d late</span>')
+        elif days <= 7:
+            due_html = (f'<span style="color:#E67E22; font-size:0.72rem;">'
+                        f'{d.strftime("%b %d")}</span>')
+        else:
+            due_html = (f'<span style="color:#495057; font-size:0.72rem;">'
+                        f'{d.strftime("%b %d")}</span>')
+    else:
+        due_html = '<span style="color:#ADB5BD; font-size:0.72rem;">—</span>'
 
-        st.markdown(
-            f'<div style="background:#FFFFFF; border-radius:10px; padding:0.75rem 1rem;'
-            f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-top:1rem;'
-            f' margin-bottom:0.25rem; border-left:4px solid {border};">'
-            f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;">'
-            f'<span style="font-size:1rem;">{icon}</span>'
-            f'<span style="font-size:0.9rem; font-weight:700; color:{NAVY};">'
-            f'{ms["title"]}</span>'
-            f'<span style="{s_style} display:inline-block; padding:0.12rem 0.45rem;'
-            f' border-radius:10px; font-size:0.68rem; font-weight:600;">{s_label}</span>'
-            f'<span style="font-size:0.73rem; color:#6C757D;">'
-            f'{ms_done}/{ms_total} tasks</span>'
-            f'<span style="margin-left:auto;">{due_html}</span></div>'
-            f'<div style="height:4px; background:#E9ECEF; border-radius:2px;'
-            f' overflow:hidden; margin-top:0.5rem;">'
-            f'<div style="width:{ms_pct*100:.0f}%; height:100%;'
-            f' background:{GREEN}; border-radius:2px;"></div></div></div>',
-            unsafe_allow_html=True,
-        )
+    # Owner
+    owner_html = f'<span style="font-size:0.72rem; color:#495057;">{owner}</span>' if owner else '<span style="color:#ADB5BD; font-size:0.72rem;">—</span>'
 
-        for t in ms_tasks:
-            _render_task_card(t, project, user)
+    # Task count badge
+    task_badge = ""
+    if has_plan:
+        ms_done_ct = sum(1 for t in ms_tasks if t["status"] == "complete")
+        task_badge = (f'<span style="font-size:0.65rem; color:#6C757D;'
+                      f' margin-left:0.25rem;">{ms_done_ct}/{len(ms_tasks)}</span>')
 
-    # Unassigned tasks
-    if unassigned:
-        st.markdown(
-            f'<div style="background:#FFFFFF; border-radius:10px; padding:0.75rem 1rem;'
-            f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-top:1rem;'
-            f' margin-bottom:0.25rem; border-left:4px solid {GRAY};">'
-            f'<span style="font-size:0.9rem; font-weight:700; color:{NAVY};">'
-            f'📌 Unassigned Tasks</span>'
-            f'<span style="font-size:0.73rem; color:#6C757D; margin-left:0.5rem;">'
-            f'{len(unassigned)} tasks</span></div>',
-            unsafe_allow_html=True,
-        )
-        for t in unassigned:
-            _render_task_card(t, project, user)
+    border_color = GREEN if status == "complete" else (
+        RED if status in ("blocked", "at_risk") else "#DEE2E6")
+
+    # Milestone row
+    st.markdown(
+        f'<div style="display:flex; align-items:center; padding:0.5rem 0.75rem;'
+        f' background:#FFFFFF; border-left:3px solid {border_color};'
+        f' border-bottom:1px solid #E9ECEF; font-size:0.8rem;">'
+        f'<span style="flex:2.5; font-weight:600; color:{NAVY};'
+        f' display:flex; align-items:center; gap:0.35rem;">'
+        f'{icon} {m["title"]}{task_badge}</span>'
+        f'<span style="flex:0.8; text-align:center;">'
+        f'<span style="{s_style} display:inline-block; padding:0.12rem 0.4rem;'
+        f' border-radius:10px; font-size:0.65rem; font-weight:600;">'
+        f'{s_label}</span></span>'
+        f'<span style="flex:0.8; text-align:center;">{owner_html}</span>'
+        f'<span style="flex:0.8; text-align:center;">{due_html}</span>'
+        f'<span style="flex:0.6; text-align:center;">'
+        f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
+        f' overflow:hidden; width:100%;">'
+        f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
+        f' background:{bar_c}; border-radius:3px;"></div></div>'
+        f'<span style="font-size:0.65rem; color:#6C757D;">'
+        f'{prog_pct:.0%}</span></span>'
+        f'<span style="flex:0.5; text-align:right; font-size:0.72rem;">  </span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Action buttons row for milestone (compact)
+    ac1, ac2, ac3 = st.columns([1, 1, 8])
+    with ac1:
+        if status != "complete":
+            if st.button("✅", key=f"_msd_{mid}", help="Complete milestone",
+                          use_container_width=True):
+                connector = SQLiteConnector(DB_PATH)
+                try:
+                    connector.complete_milestone(mid, actor=user)
+                finally:
+                    connector.close()
+                st.cache_data.clear()
+                st.rerun()
+    with ac2:
+        if st.button("✏️", key=f"_mse_{mid}", help="Edit milestone",
+                      use_container_width=True):
+            st.session_state["_open_dlg"] = f"edit_ms_{mid}"
+            st.rerun()
+
+    # Nested task rows
+    for t in ms_tasks:
+        _render_task_row(t, project, user, today)
 
 
-def _render_task_card(t, project, user):
-    """Render a single task card with compact action buttons."""
+def _render_task_row(t, project, user, today):
+    """Render a single task as a compact indented table row."""
     tid = t["id"]
     t_status = t["status"]
     t_s_style, t_s_label = _MS_STATUS_STYLE.get(
@@ -1490,59 +1205,84 @@ def _render_task_card(t, project, user):
     est = t["est_hours"] or 0
     prog = t["progress_pct"] or 0
 
-    assignee_html = ""
-    if assignee:
-        ini = assignee[0].upper()
-        assignee_html = (
-            f'<span style="display:inline-flex; align-items:center; gap:0.2rem;'
-            f' font-size:0.72rem; color:#5A6A7E;">'
-            f'<span style="width:18px; height:18px; border-radius:50%;'
-            f' background:{NAVY}; color:white; display:inline-flex;'
-            f' align-items:center; justify-content:center;'
-            f' font-size:0.55rem; font-weight:700;">{ini}</span>'
-            f'{assignee}</span>')
-
-    hours_html = (f'<span style="font-size:0.72rem; color:#6C757D;">'
-                  f'{est:.0f}h</span>' if est else "")
-
     bar_c = GREEN if t_status == "complete" else (
         BLUE if t_status == "in_progress" else (
             YELLOW if t_status == "at_risk" else (
                 RED if t_status == "blocked" else GRAY)))
     prog_val = 100.0 if t_status == "complete" else prog
 
+    # Due date
+    due = t.get("end_date")
+    if t_status == "complete":
+        due_html = f'<span style="color:{GREEN}; font-size:0.7rem;">✅</span>'
+    elif due:
+        d = date.fromisoformat(due)
+        days = (d - today).days
+        if days < 0:
+            due_html = (f'<span style="color:#DC3545; font-size:0.7rem;">'
+                        f'{abs(days)}d late</span>')
+        else:
+            due_html = (f'<span style="color:#495057; font-size:0.7rem;">'
+                        f'{d.strftime("%b %d")}</span>')
+    else:
+        due_html = '<span style="color:#ADB5BD; font-size:0.7rem;">—</span>'
+
+    assignee_html = (f'<span style="font-size:0.7rem; color:#495057;">'
+                     f'{assignee}</span>' if assignee
+                     else '<span style="color:#ADB5BD; font-size:0.7rem;">—</span>')
+
+    hours_html = (f'<span style="font-size:0.68rem; color:#6C757D;">'
+                  f'{est:.0f}h</span>' if est else "")
+
     st.markdown(
-        f'<div style="background:#FAFBFC; border-radius:8px; padding:0.55rem 0.85rem;'
-        f' margin:0.2rem 0 0.15rem 1.5rem; border:1px solid #E8ECF1;">'
-        f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem;">'
-        f'<span style="font-size:0.82rem; font-weight:500; color:{NAVY};">'
-        f'{t["title"]}</span>'
-        f'<span style="{t_s_style} display:inline-block; padding:0.1rem 0.4rem;'
-        f' border-radius:8px; font-size:0.65rem; font-weight:600;">{t_s_label}</span>'
-        f'{assignee_html} {hours_html}'
-        f'</div>'
+        f'<div style="display:flex; align-items:center; padding:0.35rem 0.75rem'
+        f' 0.35rem 2rem; background:#FAFBFC; border-bottom:1px solid #F1F3F5;'
+        f' font-size:0.76rem;">'
+        f'<span style="flex:2.5; color:{NAVY}; display:flex; align-items:center;'
+        f' gap:0.3rem;">↳ {t["title"]} {hours_html}</span>'
+        f'<span style="flex:0.8; text-align:center;">'
+        f'<span style="{t_s_style} display:inline-block; padding:0.08rem 0.35rem;'
+        f' border-radius:8px; font-size:0.62rem; font-weight:600;">'
+        f'{t_s_label}</span></span>'
+        f'<span style="flex:0.8; text-align:center;">{assignee_html}</span>'
+        f'<span style="flex:0.8; text-align:center;">{due_html}</span>'
+        f'<span style="flex:0.6; text-align:center;">'
         f'<div style="height:3px; background:#E9ECEF; border-radius:2px;'
-        f' overflow:hidden; margin-top:0.35rem;">'
+        f' overflow:hidden; width:100%;">'
         f'<div style="width:{prog_val:.0f}%; height:100%;'
-        f' background:{bar_c}; border-radius:2px;"></div></div></div>',
+        f' background:{bar_c}; border-radius:2px;"></div></div></span>'
+        f'<span style="flex:0.5; text-align:right; font-size:0.7rem;">  </span>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
-    # Compact action row
+    # Compact action buttons
     if t_status != "complete":
-        tc1, tc2, tc3 = st.columns([1, 1, 6])
+        tc1, tc2, tc3 = st.columns([1, 1, 8])
         with tc1:
-            if st.button("✅", key=f"_td_{tid}", help="Complete",
+            if st.button("✅", key=f"_td_{tid}", help="Complete task",
                           use_container_width=True):
+                # Complete task, then check if all sibling tasks are done
                 connector = SQLiteConnector(DB_PATH)
                 try:
                     connector.complete_task(tid, actor=user)
+                    # Auto-complete milestone if all its tasks are done
+                    ms_id = t.get("milestone_id")
+                    if ms_id:
+                        sibling_tasks = connector.get_tasks(project.id)
+                        siblings = [s for s in sibling_tasks
+                                    if s["milestone_id"] == ms_id]
+                        if siblings and all(
+                            s["status"] == "complete" or s["id"] == tid
+                            for s in siblings
+                        ):
+                            connector.complete_milestone(ms_id, actor=user)
                 finally:
                     connector.close()
                 st.cache_data.clear()
                 st.rerun()
         with tc2:
-            if st.button("✏️", key=f"_te_{tid}", help="Edit",
+            if st.button("✏️", key=f"_te_{tid}", help="Edit task",
                           use_container_width=True):
                 st.session_state["_open_dlg"] = f"edit_task_{tid}"
                 st.rerun()
@@ -1583,7 +1323,7 @@ def _dispatch_dialogs(project, milestones):
 
 # ── Main orchestrator ──────────────────────────────────────────────
 def _render_project_plan_section(project):
-    """Render the Project Plan section with clean tab navigation."""
+    """Render the Project Plan section — milestones with nested tasks."""
     connector = SQLiteConnector(DB_PATH)
     try:
         milestones = connector.get_milestones(project.id)
@@ -1593,8 +1333,9 @@ def _render_project_plan_section(project):
 
     has_plan = len(tasks) > 0
     user = st.session_state.get("user_display_name", "Brett Anderson")
+    today = date.today()
 
-    section_header("Project Plan & Milestones")
+    section_header("Project Plan")
 
     # --- Empty state ---
     if not milestones and not has_plan:
@@ -1610,14 +1351,13 @@ def _render_project_plan_section(project):
             unsafe_allow_html=True,
         )
 
-    # --- Toolbar: single row of action buttons ---
+    # --- Toolbar ---
     toolbar_items = []
     toolbar_items.append("add_ms")
     if not milestones:
         toolbar_items.append("sdlc")
     if has_plan:
         toolbar_items.append("add_task")
-        toolbar_items.append("rollup")
     elif milestones:
         toolbar_items.append("enable_plan")
 
@@ -1625,7 +1365,7 @@ def _render_project_plan_section(project):
     for i, btn in enumerate(toolbar_items):
         with btn_cols[i]:
             if btn == "add_ms":
-                if st.button("➕ Add Milestone", key="_tb_add_ms",
+                if st.button("➕ Milestone", key="_tb_add_ms",
                               use_container_width=True):
                     st.session_state["_open_dlg"] = "add_ms"
                     st.rerun()
@@ -1642,65 +1382,91 @@ def _render_project_plan_section(project):
                     st.cache_data.clear()
                     st.rerun()
             elif btn == "add_task":
-                if st.button("➕ Add Task", key="_tb_add_task",
+                if st.button("➕ Task", key="_tb_add_task",
                               use_container_width=True):
                     st.session_state["_open_dlg"] = "add_task"
                     st.rerun()
-            elif btn == "rollup":
-                if st.button("🔄 Rollup Progress", key="_tb_rollup",
-                              use_container_width=True,
-                              help="Recalculate progress from tasks"):
-                    connector = SQLiteConnector(DB_PATH)
-                    try:
-                        connector.rollup_milestone_progress(project.id)
-                        new_pct = connector.rollup_project_progress(project.id)
-                        conn = connector._open()
-                        conn.execute(
-                            "UPDATE projects SET pct_complete=?, updated_at=datetime('now') WHERE id=?",
-                            (new_pct, project.id))
-                        conn.commit()
-                    finally:
-                        connector.close()
-                    st.cache_data.clear()
-                    st.rerun()
             elif btn == "enable_plan":
-                if st.button("📊 Enable Full Plan", key="_tb_enable",
+                if st.button("➕ Enable Tasks", key="_tb_enable",
                               use_container_width=True,
-                              help="Add tasks, Gantt chart & progress rollups"):
+                              help="Add tasks under milestones with progress rollups"):
                     st.session_state["_open_dlg"] = "enable_plan"
                     st.rerun()
 
     # --- Dispatch any open dialog ---
     _dispatch_dialogs(project, milestones)
 
-    # --- Tabs ---
     if not milestones and not has_plan:
         return
 
-    has_dated = (any(m["due_date"] for m in milestones)
-                 or any(t.get("start_date") and t.get("end_date") for t in tasks))
-
-    tab_labels = ["📋 Milestones"]
-    if has_dated:
-        tab_labels.append("📊 Gantt")
+    # --- Summary bar ---
+    n_total = len(milestones)
+    n_complete = sum(1 for m in milestones if m["status"] == "complete")
+    overall_pct = n_complete / n_total if n_total else 0
+    task_info = ""
     if has_plan:
-        tab_labels.append("📝 Tasks")
+        n_tasks = len(tasks)
+        n_tasks_done = sum(1 for t in tasks if t["status"] == "complete")
+        task_info = f" · {n_tasks_done}/{n_tasks} tasks"
 
-    tabs = st.tabs(tab_labels)
-    tab_idx = 0
+    st.markdown(
+        f'<div style="display:flex; align-items:center; gap:0.75rem;'
+        f' padding:0.5rem 0; margin-bottom:0.25rem;">'
+        f'<span style="font-size:0.8rem; font-weight:600; color:{NAVY};">'
+        f'{n_complete}/{n_total} milestones{task_info}</span>'
+        f'<div style="flex:1; height:6px; background:#E9ECEF; border-radius:3px;'
+        f' overflow:hidden;">'
+        f'<div style="width:{overall_pct*100:.0f}%; height:100%;'
+        f' background:{GREEN}; border-radius:3px;"></div></div>'
+        f'<span style="font-size:0.8rem; font-weight:700; color:{NAVY};">'
+        f'{overall_pct:.0%}</span></div>',
+        unsafe_allow_html=True,
+    )
 
-    with tabs[tab_idx]:
-        _render_milestones_tab(project, milestones, has_plan, user)
-    tab_idx += 1
+    # --- Table header ---
+    st.markdown(
+        '<div style="display:flex; align-items:center; padding:0.4rem 0.75rem;'
+        ' background:#F1F3F5; border-radius:6px 6px 0 0; border-bottom:2px solid #DEE2E6;'
+        ' font-size:0.7rem; font-weight:700; color:#495057;'
+        ' text-transform:uppercase; letter-spacing:0.05em;">'
+        '<span style="flex:2.5;">Milestone / Task</span>'
+        '<span style="flex:0.8; text-align:center;">Status</span>'
+        '<span style="flex:0.8; text-align:center;">Owner</span>'
+        '<span style="flex:0.8; text-align:center;">Due</span>'
+        '<span style="flex:0.6; text-align:center;">Progress</span>'
+        '<span style="flex:0.5; text-align:right;">Actions</span>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
-    if has_dated:
-        with tabs[tab_idx]:
-            _render_gantt_tab(milestones, tasks)
-        tab_idx += 1
+    # --- Build task lookup ---
+    tasks_by_ms = {}
+    unassigned = []
+    for t in tasks:
+        mid = t["milestone_id"]
+        if mid:
+            tasks_by_ms.setdefault(mid, []).append(t)
+        else:
+            unassigned.append(t)
 
-    if has_plan:
-        with tabs[tab_idx]:
-            _render_tasks_tab(project, milestones, tasks, user)
+    # --- Milestone rows with nested tasks ---
+    for m in milestones:
+        mid = m["id"]
+        ms_tasks = tasks_by_ms.get(mid, [])
+        _render_milestone_row(m, ms_tasks, project, user, today, has_plan)
+
+    # --- Unassigned tasks ---
+    if unassigned:
+        st.markdown(
+            f'<div style="display:flex; align-items:center; padding:0.45rem 0.75rem;'
+            f' background:#F8F9FA; border-bottom:1px solid #E9ECEF;'
+            f' font-size:0.78rem; font-weight:600; color:#6C757D;">'
+            f'<span style="flex:2.5;">📌 Unassigned ({len(unassigned)})</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        for t in unassigned:
+            _render_task_row(t, project, user, today)
 
 
 @st.dialog("Project Activity", width="large")
