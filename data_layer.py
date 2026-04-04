@@ -27,18 +27,32 @@ SEED_SQL = Path(__file__).parent / "seed_data.sql"
 
 
 def _seed_database_if_missing():
-    """Create the database from seed_data.sql if it doesn't exist."""
-    if os.path.exists(DB_PATH):
-        # DB exists — ensure new tables are populated (migration path)
-        _migrate_vendor_tables()
-        return
+    """Create or re-seed the database from seed_data.sql if empty."""
     if not SEED_SQL.exists():
         return
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        conn.executescript(SEED_SQL.read_text())
-    finally:
-        conn.close()
+
+    need_seed = False
+    if not os.path.exists(DB_PATH):
+        need_seed = True
+    else:
+        # DB file exists — check if it actually has project data
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            row = conn.execute("SELECT COUNT(*) FROM projects").fetchone()
+            if row[0] == 0:
+                need_seed = True
+            conn.close()
+        except Exception:
+            need_seed = True
+
+    if need_seed:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            conn.executescript(SEED_SQL.read_text())
+        finally:
+            conn.close()
+    else:
+        _migrate_vendor_tables()
 
 
 def _migrate_vendor_tables():
