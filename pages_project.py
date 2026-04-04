@@ -1087,7 +1087,7 @@ def _dlg_enable_plan(project, milestones: list):
 
 # ── Helper renderers ───────────────────────────────────────────────
 def _render_milestone_row(m, ms_tasks, project, user, today, has_plan):
-    """Render a milestone as a table row with nested task rows."""
+    """Render a milestone as a single table row using st.columns."""
     mid = m["id"]
     status = m["status"]
     icon = _MS_TYPE_ICON.get(m["milestone_type"], "📍")
@@ -1096,7 +1096,6 @@ def _render_milestone_row(m, ms_tasks, project, user, today, has_plan):
     owner = m["owner"] or ""
     progress = m["progress_pct"] or 0
 
-    # If tasks exist, progress = tasks done / total
     if ms_tasks:
         ms_done = sum(1 for t in ms_tasks if t["status"] == "complete")
         ms_total = len(ms_tasks)
@@ -1113,82 +1112,95 @@ def _render_milestone_row(m, ms_tasks, project, user, today, has_plan):
     else:
         bar_c = BLUE
 
-    # Due date
+    # Due date text
     due = m["due_date"]
     if m["completed_date"]:
-        due_html = f'<span style="color:{GREEN}; font-size:0.72rem;">✅ Done</span>'
+        due_text = "✅ Done"
+        due_color = GREEN
     elif due:
         d = date.fromisoformat(due)
         days = (d - today).days
         if days < 0:
-            due_html = (f'<span style="color:#DC3545; font-weight:600;'
-                        f' font-size:0.72rem;">{abs(days)}d late</span>')
+            due_text = f"{abs(days)}d late"
+            due_color = "#DC3545"
         elif days <= 7:
-            due_html = (f'<span style="color:#E67E22; font-size:0.72rem;">'
-                        f'{d.strftime("%b %d")}</span>')
+            due_text = d.strftime("%b %d")
+            due_color = "#E67E22"
         else:
-            due_html = (f'<span style="color:#495057; font-size:0.72rem;">'
-                        f'{d.strftime("%b %d")}</span>')
+            due_text = d.strftime("%b %d")
+            due_color = "#495057"
     else:
-        due_html = '<span style="color:#ADB5BD; font-size:0.72rem;">—</span>'
+        due_text = "—"
+        due_color = "#ADB5BD"
 
-    # Owner
-    owner_html = f'<span style="font-size:0.72rem; color:#495057;">{owner}</span>' if owner else '<span style="color:#ADB5BD; font-size:0.72rem;">—</span>'
-
-    # Task count badge
-    task_badge = ""
+    task_ct = ""
     if has_plan:
         ms_done_ct = sum(1 for t in ms_tasks if t["status"] == "complete")
-        task_badge = (f'<span style="font-size:0.65rem; color:#6C757D;'
-                      f' margin-left:0.25rem;">{ms_done_ct}/{len(ms_tasks)}</span>')
+        task_ct = f" ({ms_done_ct}/{len(ms_tasks)})"
 
-    border_color = GREEN if status == "complete" else (
-        RED if status in ("blocked", "at_risk") else "#DEE2E6")
-
-    # Milestone row
-    st.markdown(
-        f'<div style="display:flex; align-items:center; padding:0.5rem 0.75rem;'
-        f' background:#FFFFFF; border-left:3px solid {border_color};'
-        f' border-bottom:1px solid #E9ECEF; font-size:0.8rem;">'
-        f'<span style="flex:2.5; font-weight:600; color:{NAVY};'
-        f' display:flex; align-items:center; gap:0.35rem;">'
-        f'{icon} {m["title"]}{task_badge}</span>'
-        f'<span style="flex:0.8; text-align:center;">'
-        f'<span style="{s_style} display:inline-block; padding:0.12rem 0.4rem;'
-        f' border-radius:10px; font-size:0.65rem; font-weight:600;">'
-        f'{s_label}</span></span>'
-        f'<span style="flex:0.8; text-align:center;">{owner_html}</span>'
-        f'<span style="flex:0.8; text-align:center;">{due_html}</span>'
-        f'<span style="flex:0.6; text-align:center;">'
-        f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
-        f' overflow:hidden; width:100%;">'
-        f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
-        f' background:{bar_c}; border-radius:3px;"></div></div>'
-        f'<span style="font-size:0.65rem; color:#6C757D;">'
-        f'{prog_pct:.0%}</span></span>'
-        f'<span style="flex:0.5; text-align:right; font-size:0.72rem;">  </span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Action buttons row for milestone (compact)
-    ac1, ac2, ac3 = st.columns([1, 1, 8])
-    with ac1:
-        if status != "complete":
-            if st.button("✅", key=f"_msd_{mid}", help="Complete milestone",
+    # Single row: Name | Status | Owner | Due | Progress | Actions
+    # Weighted: [4, 1.2, 1.2, 1, 1, 0.8]
+    c_name, c_status, c_owner, c_due, c_prog, c_act = st.columns(
+        [4, 1.2, 1.2, 1, 1, 0.8])
+    with c_name:
+        st.markdown(
+            f'<div style="font-weight:600; font-size:0.82rem; color:{NAVY};'
+            f' padding:0.1rem 0; white-space:nowrap; overflow:hidden;'
+            f' text-overflow:ellipsis;">'
+            f'{icon} {m["title"]}'
+            f'<span style="font-weight:400; font-size:0.68rem; color:#6C757D;">'
+            f'{task_ct}</span></div>',
+            unsafe_allow_html=True)
+    with c_status:
+        st.markdown(
+            f'<div style="text-align:center; padding-top:0.15rem;">'
+            f'<span style="{s_style} display:inline-block; padding:0.1rem 0.4rem;'
+            f' border-radius:10px; font-size:0.65rem; font-weight:600;">'
+            f'{s_label}</span></div>',
+            unsafe_allow_html=True)
+    with c_owner:
+        st.markdown(
+            f'<div style="text-align:center; font-size:0.72rem; color:#495057;'
+            f' padding-top:0.2rem;">{owner or "—"}</div>',
+            unsafe_allow_html=True)
+    with c_due:
+        st.markdown(
+            f'<div style="text-align:center; font-size:0.72rem; color:{due_color};'
+            f' font-weight:{"600" if "late" in due_text else "400"};'
+            f' padding-top:0.2rem;">{due_text}</div>',
+            unsafe_allow_html=True)
+    with c_prog:
+        st.markdown(
+            f'<div style="padding-top:0.25rem;">'
+            f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
+            f' overflow:hidden;">'
+            f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
+            f' background:{bar_c}; border-radius:3px;"></div></div>'
+            f'<div style="text-align:center; font-size:0.62rem; color:#6C757D;'
+            f' margin-top:1px;">{prog_pct:.0%}</div></div>',
+            unsafe_allow_html=True)
+    with c_act:
+        a1, a2 = st.columns(2)
+        with a1:
+            if status != "complete":
+                if st.button("✅", key=f"_msd_{mid}", help="Complete",
+                              use_container_width=True):
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.complete_milestone(mid, actor=user)
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+        with a2:
+            if st.button("✏️", key=f"_mse_{mid}", help="Edit",
                           use_container_width=True):
-                connector = SQLiteConnector(DB_PATH)
-                try:
-                    connector.complete_milestone(mid, actor=user)
-                finally:
-                    connector.close()
-                st.cache_data.clear()
+                st.session_state["_open_dlg"] = f"edit_ms_{mid}"
                 st.rerun()
-    with ac2:
-        if st.button("✏️", key=f"_mse_{mid}", help="Edit milestone",
-                      use_container_width=True):
-            st.session_state["_open_dlg"] = f"edit_ms_{mid}"
-            st.rerun()
+
+    # Divider line
+    st.markdown('<hr style="margin:0; border:none; border-top:1px solid #E9ECEF;">',
+                unsafe_allow_html=True)
 
     # Nested task rows
     for t in ms_tasks:
@@ -1196,7 +1208,7 @@ def _render_milestone_row(m, ms_tasks, project, user, today, has_plan):
 
 
 def _render_task_row(t, project, user, today):
-    """Render a single task as a compact indented table row."""
+    """Render a single task as one compact row using st.columns."""
     tid = t["id"]
     t_status = t["status"]
     t_s_style, t_s_label = _MS_STATUS_STYLE.get(
@@ -1214,78 +1226,87 @@ def _render_task_row(t, project, user, today):
     # Due date
     due = t.get("end_date")
     if t_status == "complete":
-        due_html = f'<span style="color:{GREEN}; font-size:0.7rem;">✅</span>'
+        due_text, due_color = "✅", GREEN
     elif due:
         d = date.fromisoformat(due)
         days = (d - today).days
         if days < 0:
-            due_html = (f'<span style="color:#DC3545; font-size:0.7rem;">'
-                        f'{abs(days)}d late</span>')
+            due_text, due_color = f"{abs(days)}d late", "#DC3545"
         else:
-            due_html = (f'<span style="color:#495057; font-size:0.7rem;">'
-                        f'{d.strftime("%b %d")}</span>')
+            due_text, due_color = d.strftime("%b %d"), "#495057"
     else:
-        due_html = '<span style="color:#ADB5BD; font-size:0.7rem;">—</span>'
+        due_text, due_color = "—", "#ADB5BD"
 
-    assignee_html = (f'<span style="font-size:0.7rem; color:#495057;">'
-                     f'{assignee}</span>' if assignee
-                     else '<span style="color:#ADB5BD; font-size:0.7rem;">—</span>')
+    hours_txt = f" · {est:.0f}h" if est else ""
 
-    hours_html = (f'<span style="font-size:0.68rem; color:#6C757D;">'
-                  f'{est:.0f}h</span>' if est else "")
+    # Single row: Name | Status | Assignee | Due | Progress | Actions
+    c_name, c_status, c_owner, c_due, c_prog, c_act = st.columns(
+        [4, 1.2, 1.2, 1, 1, 0.8])
+    with c_name:
+        st.markdown(
+            f'<div style="font-size:0.78rem; color:{NAVY}; padding:0.1rem 0'
+            f' 0.1rem 1.25rem; white-space:nowrap; overflow:hidden;'
+            f' text-overflow:ellipsis;">↳ {t["title"]}'
+            f'<span style="font-size:0.65rem; color:#6C757D;">{hours_txt}</span>'
+            f'</div>',
+            unsafe_allow_html=True)
+    with c_status:
+        st.markdown(
+            f'<div style="text-align:center; padding-top:0.15rem;">'
+            f'<span style="{t_s_style} display:inline-block; padding:0.08rem 0.35rem;'
+            f' border-radius:8px; font-size:0.62rem; font-weight:600;">'
+            f'{t_s_label}</span></div>',
+            unsafe_allow_html=True)
+    with c_owner:
+        st.markdown(
+            f'<div style="text-align:center; font-size:0.7rem; color:#495057;'
+            f' padding-top:0.2rem;">{assignee or "—"}</div>',
+            unsafe_allow_html=True)
+    with c_due:
+        st.markdown(
+            f'<div style="text-align:center; font-size:0.7rem; color:{due_color};'
+            f' padding-top:0.2rem;">{due_text}</div>',
+            unsafe_allow_html=True)
+    with c_prog:
+        st.markdown(
+            f'<div style="padding-top:0.25rem;">'
+            f'<div style="height:3px; background:#E9ECEF; border-radius:2px;'
+            f' overflow:hidden;">'
+            f'<div style="width:{prog_val:.0f}%; height:100%;'
+            f' background:{bar_c}; border-radius:2px;"></div></div></div>',
+            unsafe_allow_html=True)
+    with c_act:
+        if t_status != "complete":
+            a1, a2 = st.columns(2)
+            with a1:
+                if st.button("✅", key=f"_td_{tid}", help="Complete",
+                              use_container_width=True):
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.complete_task(tid, actor=user)
+                        ms_id = t.get("milestone_id")
+                        if ms_id:
+                            sibling_tasks = connector.get_tasks(project.id)
+                            siblings = [s for s in sibling_tasks
+                                        if s["milestone_id"] == ms_id]
+                            if siblings and all(
+                                s["status"] == "complete" or s["id"] == tid
+                                for s in siblings
+                            ):
+                                connector.complete_milestone(ms_id, actor=user)
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+            with a2:
+                if st.button("✏️", key=f"_te_{tid}", help="Edit",
+                              use_container_width=True):
+                    st.session_state["_open_dlg"] = f"edit_task_{tid}"
+                    st.rerun()
 
-    st.markdown(
-        f'<div style="display:flex; align-items:center; padding:0.35rem 0.75rem'
-        f' 0.35rem 2rem; background:#FAFBFC; border-bottom:1px solid #F1F3F5;'
-        f' font-size:0.76rem;">'
-        f'<span style="flex:2.5; color:{NAVY}; display:flex; align-items:center;'
-        f' gap:0.3rem;">↳ {t["title"]} {hours_html}</span>'
-        f'<span style="flex:0.8; text-align:center;">'
-        f'<span style="{t_s_style} display:inline-block; padding:0.08rem 0.35rem;'
-        f' border-radius:8px; font-size:0.62rem; font-weight:600;">'
-        f'{t_s_label}</span></span>'
-        f'<span style="flex:0.8; text-align:center;">{assignee_html}</span>'
-        f'<span style="flex:0.8; text-align:center;">{due_html}</span>'
-        f'<span style="flex:0.6; text-align:center;">'
-        f'<div style="height:3px; background:#E9ECEF; border-radius:2px;'
-        f' overflow:hidden; width:100%;">'
-        f'<div style="width:{prog_val:.0f}%; height:100%;'
-        f' background:{bar_c}; border-radius:2px;"></div></div></span>'
-        f'<span style="flex:0.5; text-align:right; font-size:0.7rem;">  </span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Compact action buttons
-    if t_status != "complete":
-        tc1, tc2, tc3 = st.columns([1, 1, 8])
-        with tc1:
-            if st.button("✅", key=f"_td_{tid}", help="Complete task",
-                          use_container_width=True):
-                # Complete task, then check if all sibling tasks are done
-                connector = SQLiteConnector(DB_PATH)
-                try:
-                    connector.complete_task(tid, actor=user)
-                    # Auto-complete milestone if all its tasks are done
-                    ms_id = t.get("milestone_id")
-                    if ms_id:
-                        sibling_tasks = connector.get_tasks(project.id)
-                        siblings = [s for s in sibling_tasks
-                                    if s["milestone_id"] == ms_id]
-                        if siblings and all(
-                            s["status"] == "complete" or s["id"] == tid
-                            for s in siblings
-                        ):
-                            connector.complete_milestone(ms_id, actor=user)
-                finally:
-                    connector.close()
-                st.cache_data.clear()
-                st.rerun()
-        with tc2:
-            if st.button("✏️", key=f"_te_{tid}", help="Edit task",
-                          use_container_width=True):
-                st.session_state["_open_dlg"] = f"edit_task_{tid}"
-                st.rerun()
+    # Subtle divider
+    st.markdown('<hr style="margin:0; border:none; border-top:1px solid #F1F3F5;">',
+                unsafe_allow_html=True)
 
 
 # ── Dialog dispatcher ──────────────────────────────────────────────
@@ -1423,21 +1444,35 @@ def _render_project_plan_section(project):
         unsafe_allow_html=True,
     )
 
-    # --- Table header ---
-    st.markdown(
-        '<div style="display:flex; align-items:center; padding:0.4rem 0.75rem;'
-        ' background:#F1F3F5; border-radius:6px 6px 0 0; border-bottom:2px solid #DEE2E6;'
-        ' font-size:0.7rem; font-weight:700; color:#495057;'
-        ' text-transform:uppercase; letter-spacing:0.05em;">'
-        '<span style="flex:2.5;">Milestone / Task</span>'
-        '<span style="flex:0.8; text-align:center;">Status</span>'
-        '<span style="flex:0.8; text-align:center;">Owner</span>'
-        '<span style="flex:0.8; text-align:center;">Due</span>'
-        '<span style="flex:0.6; text-align:center;">Progress</span>'
-        '<span style="flex:0.5; text-align:right;">Actions</span>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    # --- Table header (matches st.columns weights [4, 1.2, 1.2, 1, 1, 0.8]) ---
+    hdr_name, hdr_status, hdr_owner, hdr_due, hdr_prog, hdr_act = st.columns(
+        [4, 1.2, 1.2, 1, 1, 0.8])
+    with hdr_name:
+        st.markdown('<div style="font-size:0.68rem; font-weight:700; color:#495057;'
+                    ' text-transform:uppercase; letter-spacing:0.05em;">Item</div>',
+                    unsafe_allow_html=True)
+    with hdr_status:
+        st.markdown('<div style="text-align:center; font-size:0.68rem; font-weight:700;'
+                    ' color:#495057; text-transform:uppercase;">Status</div>',
+                    unsafe_allow_html=True)
+    with hdr_owner:
+        st.markdown('<div style="text-align:center; font-size:0.68rem; font-weight:700;'
+                    ' color:#495057; text-transform:uppercase;">Owner</div>',
+                    unsafe_allow_html=True)
+    with hdr_due:
+        st.markdown('<div style="text-align:center; font-size:0.68rem; font-weight:700;'
+                    ' color:#495057; text-transform:uppercase;">Due</div>',
+                    unsafe_allow_html=True)
+    with hdr_prog:
+        st.markdown('<div style="text-align:center; font-size:0.68rem; font-weight:700;'
+                    ' color:#495057; text-transform:uppercase;">Progress</div>',
+                    unsafe_allow_html=True)
+    with hdr_act:
+        st.markdown('<div style="text-align:center; font-size:0.68rem; font-weight:700;'
+                    ' color:#495057; text-transform:uppercase;"></div>',
+                    unsafe_allow_html=True)
+    st.markdown('<hr style="margin:0 0 0.25rem 0; border:none; border-top:2px solid #DEE2E6;">',
+                unsafe_allow_html=True)
 
     # --- Build task lookup ---
     tasks_by_ms = {}
@@ -1458,11 +1493,8 @@ def _render_project_plan_section(project):
     # --- Unassigned tasks ---
     if unassigned:
         st.markdown(
-            f'<div style="display:flex; align-items:center; padding:0.45rem 0.75rem;'
-            f' background:#F8F9FA; border-bottom:1px solid #E9ECEF;'
-            f' font-size:0.78rem; font-weight:600; color:#6C757D;">'
-            f'<span style="flex:2.5;">📌 Unassigned ({len(unassigned)})</span>'
-            f'</div>',
+            f'<div style="font-size:0.78rem; font-weight:600; color:#6C757D;'
+            f' padding:0.5rem 0 0.25rem 0;">📌 Unassigned ({len(unassigned)})</div>',
             unsafe_allow_html=True,
         )
         for t in unassigned:
