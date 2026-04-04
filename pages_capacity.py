@@ -205,7 +205,7 @@ def render(data: dict, utilization: dict, person_demand: list):
     # Tab 1: Portfolio Schedule (Q5, Q7, Q4)
     # ------------------------------------------------------------------
     with tab_schedule:
-        _render_schedule(schedule, recommendation)
+        _render_schedule(schedule, recommendation, availability, data)
 
     # ------------------------------------------------------------------
     # Tab 2: Team Availability (Q6)
@@ -223,8 +223,9 @@ def render(data: dict, utilization: dict, person_demand: list):
 # ======================================================================
 # Tab: Portfolio Schedule
 # ======================================================================
-def _render_schedule(schedule: list, recommendation: dict):
-    """Suggested start dates for all unstarted projects + what-if."""
+def _render_schedule(schedule: list, recommendation: dict,
+                     availability: list = None, data: dict = None):
+    """Suggested start dates for all unstarted projects + what-if + resource readiness."""
 
     if not schedule:
         st.info("No unstarted projects to schedule.")
@@ -319,6 +320,106 @@ def _render_schedule(schedule: list, recommendation: dict):
                 st.caption("No impact — removing these projects doesn't shift the schedule.")
         else:
             st.caption("No remaining plannable projects.")
+
+    # --- Resource Readiness ---
+    if availability and data:
+        st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
+        section_header("Resource Readiness")
+        st.caption("Select a project to see which roles are required and who's available to fill them.")
+
+        project_options = [f"{s['project_id']} — {s['project_name']}" for s in schedule]
+        selected_proj = st.selectbox(
+            "Select project",
+            [""] + project_options,
+            label_visibility="collapsed",
+            placeholder="Select a project...",
+            key="resource_readiness_project",
+        )
+
+        if selected_proj:
+            proj_id = selected_proj.split(" — ")[0]
+            proj = next((p for p in data["portfolio"] if p.id == proj_id), None)
+            sched_item = next((s for s in schedule if s["project_id"] == proj_id), None)
+
+            if proj and sched_item:
+                # Build person lookup by role_key
+                by_role = {}
+                for a in availability:
+                    by_role.setdefault(a["role_key"], []).append(a)
+
+                roles_needed = {k: v for k, v in proj.role_allocations.items() if v > 0}
+
+                readiness_rows = []
+                all_ready = True
+                for role_key in sorted(roles_needed.keys()):
+                    people = by_role.get(role_key, [])
+                    avail_people = [p for p in people if p["available_now"]]
+                    busy_people = [p for p in people if not p["available_now"]]
+
+                    if avail_people:
+                        # Sort by lowest utilization (most available capacity)
+                        avail_people.sort(key=lambda p: p["current_utilization"])
+                        best = avail_people[0]
+                        names = ", ".join(
+                            f"{p['name']} ({p['current_utilization']:.0%})"
+                            for p in avail_people
+                        )
+                        readiness_rows.append({
+                            "Role": ROLE_DISPLAY.get(role_key, role_key),
+                            "Status": "✓ Available",
+                            "Best Candidate": f"{best['name']} ({best['current_utilization']:.0%})",
+                            "All Options": names,
+                            "Available Date": "Now",
+                        })
+                    else:
+                        all_ready = False
+                        # Find soonest available
+                        with_dates = [p for p in busy_people if p["available_date"]]
+                        if with_dates:
+                            soonest = min(with_dates, key=lambda p: p["available_date"])
+                            readiness_rows.append({
+                                "Role": ROLE_DISPLAY.get(role_key, role_key),
+                                "Status": "✗ Waiting",
+                                "Best Candidate": soonest["name"],
+                                "All Options": f"{soonest['name']} — available {soonest['available_date']}",
+                                "Available Date": soonest["available_date"],
+                            })
+                        elif people:
+                            readiness_rows.append({
+                                "Role": ROLE_DISPLAY.get(role_key, role_key),
+                                "Status": "✗ No availability",
+                                "Best Candidate": "—",
+                                "All Options": ", ".join(p["name"] for p in people),
+                                "Available Date": "Unknown",
+                            })
+                        else:
+                            readiness_rows.append({
+                                "Role": ROLE_DISPLAY.get(role_key, role_key),
+                                "Status": "✗ No staff",
+                                "Best Candidate": "—",
+                                "All Options": "No one in this role",
+                                "Available Date": "—",
+                            })
+
+                if all_ready:
+                    st.success(
+                        f"All {len(roles_needed)} roles are staffed and available. "
+                        f"**{proj_id}** can start as planned.",
+                        icon="✓",
+                    )
+                else:
+                    waiting = sum(1 for r in readiness_rows if "✗" in r["Status"])
+                    st.warning(
+                        f"{waiting} of {len(roles_needed)} roles are not yet available. "
+                        f"See details below.",
+                        icon="⚠️",
+                    )
+
+                st.dataframe(
+                    pd.DataFrame(readiness_rows),
+                    hide_index=True,
+                    use_container_width=True,
+                )
 
 
 # ======================================================================
