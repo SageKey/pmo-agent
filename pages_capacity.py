@@ -275,52 +275,6 @@ def _render_schedule(schedule: list, recommendation: dict,
         f"{no_fit} beyond horizon"
     )
 
-    # --- What-If ---
-    st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
-    section_header("What-If Analysis")
-    st.caption("Remove projects to see how the schedule shifts — "
-               "answers \"what happens if we add or remove a project?\"")
-
-    all_plannable = [s["project_id"] for s in schedule]
-    excluded = st.multiselect(
-        "Exclude from simulation",
-        all_plannable,
-        label_visibility="collapsed",
-        placeholder="Select projects to exclude...",
-    )
-    if excluded:
-        from data_layer import _build_engine
-        engine = _build_engine()
-        try:
-            alt_schedule = engine.simulate_portfolio_schedule(exclude_ids=excluded)
-        finally:
-            engine.connector.close()
-
-        if alt_schedule:
-            # Show changes
-            original_starts = {s["project_id"]: s["suggested_start"] for s in schedule}
-            changes = []
-            for s in alt_schedule:
-                orig = original_starts.get(s["project_id"])
-                if orig != s["suggested_start"]:
-                    old = orig or "Does not fit"
-                    new = s["suggested_start"] or "Does not fit"
-                    direction = "earlier" if (s["suggested_start"] and (not orig or s["suggested_start"] < orig)) else "later"
-                    changes.append({
-                        "Project": s["project_id"],
-                        "Name": s["project_name"],
-                        "Before": old,
-                        "After": new,
-                        "Impact": f"Moved {direction}",
-                    })
-
-            if changes:
-                st.dataframe(pd.DataFrame(changes), hide_index=True, use_container_width=True)
-            else:
-                st.caption("No impact — removing these projects doesn't shift the schedule.")
-        else:
-            st.caption("No remaining plannable projects.")
-
     # --- Resource Readiness ---
     if availability and data:
         st.markdown("<div style='height: 0.75rem'></div>", unsafe_allow_html=True)
