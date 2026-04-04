@@ -146,6 +146,32 @@ def render(data: dict, utilization: dict, person_demand: list):
     ])
 
     # ==================================================================
+    # TIER 1.5 — Resource Utilization + Health Distribution (visual context)
+    # ==================================================================
+    left, right = st.columns([3, 2])
+
+    with left:
+        section_header("Resource Utilization")
+        chart = utilization_bar_chart(utilization)
+        if chart:
+            st.altair_chart(chart, use_container_width=True)
+
+    with right:
+        section_header("Health Distribution")
+        chart = health_donut(active)
+        if chart:
+            selection = st.altair_chart(chart, use_container_width=False,
+                                        on_select="rerun", key="health_donut")
+            sel_data = selection.get("selection", {}) if selection else {}
+            points = sel_data.get("param_1", [])
+            if points and "Health" in points[0]:
+                clicked_health = points[0]["Health"]
+                st.session_state["portfolio_health_filter"] = clicked_health
+                st.session_state["selected_project_id"] = None
+                st.session_state["_pending_nav"] = "Portfolio"
+                st.rerun()
+
+    # ==================================================================
     # TIER 2 — What Needs Attention (10-second scan)
     # ==================================================================
 
@@ -239,31 +265,6 @@ def render(data: dict, utilization: dict, person_demand: list):
     # ==================================================================
     # TIER 3 — Detail Drill-Down
     # ==================================================================
-
-    # --- Utilization Overview + Health Distribution ---
-    st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-    left, right = st.columns([3, 2])
-
-    with left:
-        section_header("Resource Utilization")
-        chart = utilization_bar_chart(utilization)
-        if chart:
-            st.altair_chart(chart, use_container_width=True)
-
-    with right:
-        section_header("Health Distribution")
-        chart = health_donut(active)
-        if chart:
-            selection = st.altair_chart(chart, use_container_width=False,
-                                        on_select="rerun", key="health_donut")
-            sel_data = selection.get("selection", {}) if selection else {}
-            points = sel_data.get("param_1", [])
-            if points and "Health" in points[0]:
-                clicked_health = points[0]["Health"]
-                st.session_state["portfolio_health_filter"] = clicked_health
-                st.session_state["selected_project_id"] = None
-                st.session_state["_pending_nav"] = "Portfolio"
-                st.rerun()
 
     # --- Projects Ending Soon ---
     _render_projects_ending_soon(active, today)
