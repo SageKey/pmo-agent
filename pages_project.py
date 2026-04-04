@@ -738,8 +738,8 @@ def _render_summary_card(project):
     )
 
 
-def _render_overview_tab(project, data):
-    """Render the Overview tab — details, team, financials in structured cards."""
+def _render_overview_tab(project, data, comments=None, audit_log=None):
+    """Render the Overview tab — details, team, financials, recent activity."""
 
     # --- Card style helpers ---
     _card_open = (
@@ -883,6 +883,134 @@ def _render_overview_tab(project, data):
             + _card_close,
             unsafe_allow_html=True,
         )
+
+    # --- Recent Activity (full width, below the two columns) ---
+    _render_recent_activity(comments, audit_log)
+
+
+def _render_recent_activity(comments, audit_log, max_items=5):
+    """Render a compact recent activity feed on the Overview tab."""
+    # Merge comments and audit entries into a unified timeline
+    items = []
+
+    for c in (comments or []):
+        ctype = c.get("comment_type", "comment")
+        if ctype == "status_update":
+            icon = "🔄"
+            label = "Status Update"
+        else:
+            icon = "💬"
+            label = "Comment"
+        items.append({
+            "icon": icon,
+            "label": label,
+            "author": c.get("author", ""),
+            "body": c.get("body", ""),
+            "timestamp": c.get("created_at", ""),
+        })
+
+    for a in (audit_log or []):
+        action = a.get("action", "")
+        # Skip audit entries that duplicate comments we already have
+        if action in ("comment_added",):
+            continue
+        icon_map = {
+            "status_change": "🔄",
+            "project_created": "✨",
+            "project_updated": "📝",
+            "milestone_added": "🎯",
+            "milestone_updated": "🎯",
+            "task_added": "✅",
+            "task_updated": "✅",
+            "file_uploaded": "📎",
+        }
+        icon = icon_map.get(action, "📋")
+        # Build a readable description
+        if a.get("field_changed") and a.get("old_value") and a.get("new_value"):
+            body = f"Changed **{a['field_changed']}** from {a['old_value']} to {a['new_value']}"
+        elif a.get("details"):
+            body = a["details"]
+        else:
+            body = action.replace("_", " ").title()
+
+        items.append({
+            "icon": icon,
+            "label": action.replace("_", " ").title(),
+            "author": a.get("actor", ""),
+            "body": body,
+            "timestamp": a.get("created_at", ""),
+        })
+
+    # Sort by timestamp descending, take most recent
+    items.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    items = items[:max_items]
+
+    if not items:
+        return
+
+    # Build the card
+    _card_open = (
+        '<div style="background:#FFFFFF; border-radius:10px; padding:1.15rem 1.35rem;'
+        ' box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-top:0.75rem;">'
+    )
+    _card_title = (
+        '<div style="font-size:0.7rem; font-weight:700; color:#6C757D;'
+        ' text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem;'
+        ' padding-bottom:0.5rem; border-bottom:1px solid #E9ECEF;">Recent Activity</div>'
+    )
+
+    activity_html = ""
+    for item in items:
+        # Relative time
+        time_str = ""
+        if item["timestamp"]:
+            try:
+                dt = datetime.fromisoformat(item["timestamp"])
+                now = datetime.now()
+                delta = now - dt
+                if delta.days > 30:
+                    time_str = dt.strftime("%b %d")
+                elif delta.days > 0:
+                    time_str = f"{delta.days}d ago"
+                elif delta.seconds > 3600:
+                    time_str = f"{delta.seconds // 3600}h ago"
+                elif delta.seconds > 60:
+                    time_str = f"{delta.seconds // 60}m ago"
+                else:
+                    time_str = "just now"
+            except Exception:
+                time_str = item["timestamp"][:10]
+
+        # Truncate long bodies
+        body = item["body"]
+        if len(body) > 120:
+            body = body[:117] + "..."
+
+        author = item["author"]
+        initial = author[0].upper() if author else "?"
+
+        activity_html += (
+            f'<div style="display:flex; gap:0.75rem; padding:0.5rem 0;'
+            f' border-bottom:1px solid #F5F5F5; align-items:flex-start;">'
+            # Avatar
+            f'<div style="width:28px; height:28px; border-radius:50%; background:{NAVY};'
+            f' color:#FFF; display:flex; align-items:center; justify-content:center;'
+            f' font-size:0.7rem; font-weight:700; flex-shrink:0; margin-top:2px;">{initial}</div>'
+            # Content
+            f'<div style="flex:1; min-width:0;">'
+            f'<div style="display:flex; justify-content:space-between; align-items:baseline;">'
+            f'<span style="font-size:0.82rem; font-weight:600; color:#2C3E50;">{author}</span>'
+            f'<span style="font-size:0.72rem; color:#ADB5BD; flex-shrink:0; margin-left:0.5rem;">{time_str}</span>'
+            f'</div>'
+            f'<div style="font-size:0.8rem; color:#5A6A7E; margin-top:0.15rem;">'
+            f'{item["icon"]} {body}</div>'
+            f'</div></div>'
+        )
+
+    st.markdown(
+        _card_open + _card_title + activity_html + '</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ── Module-level constants for milestones / tasks ──────────────────
@@ -1718,6 +1846,15 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
     st.session_state["selected_project_id"] = project.id
 
     # --- Header with panel toggle ---
+    # Get activity count for the badge
+    _hdr_connector = SQLiteConnector(DB_PATH)
+    try:
+        _hdr_comments = _hdr_connector.get_comments(project.id)
+        _hdr_audit = _hdr_connector.get_audit_log(project.id)
+    finally:
+        _hdr_connector.close()
+    _activity_count = len(_hdr_comments) + len(_hdr_audit)
+
     hdr_col, btn_col = st.columns([6, 1])
     with hdr_col:
         st.markdown(f"""
@@ -1728,7 +1865,8 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
         </div>
         """, unsafe_allow_html=True)
     with btn_col:
-        if st.button("💬 Activity", key="_toggle_panel", use_container_width=True):
+        _btn_label = f"Activity ({_activity_count})" if _activity_count > 0 else "Activity"
+        if st.button(_btn_label, key="_toggle_panel", use_container_width=True):
             _render_project_panel(project.id, project.name)
 
     # --- Edit mode takes over the full page ---
@@ -1743,7 +1881,7 @@ def render_project_detail(project, data: dict, utilization: dict, person_demand:
     tab_overview, tab_plan, tab_analysis = st.tabs(["Overview", "Plan", "Analysis"])
 
     with tab_overview:
-        _render_overview_tab(project, data)
+        _render_overview_tab(project, data, _hdr_comments, _hdr_audit)
 
     with tab_plan:
         _render_project_plan_section(project)
