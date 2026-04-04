@@ -22,7 +22,6 @@ import pages_portfolio
 import pages_capacity
 import pages_timeline
 import pages_assistant
-import pages_editor
 import pages_roster
 import pages_financials
 import pages_timesheets

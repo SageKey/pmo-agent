@@ -56,6 +56,50 @@ ROSTER_ROLE_MAP = {
 ROLE_KEYS = ["pm", "ba", "functional", "technical", "developer",
              "infrastructure", "dba", "wms"]
 
+# ---------------------------------------------------------------------------
+# Form / Display Constants
+# ---------------------------------------------------------------------------
+
+HEALTH_OPTIONS = [
+    "🟢 ON TRACK", "🟡 AT RISK", "🔴 NEEDS HELP",
+    "⚪ NOT STARTED", "🔵 NEEDS FUNCTIONAL SPEC", "🔵 NEEDS TECHNICAL SPEC",
+    "✅ COMPLETE", "⏸️ POSTPONED",
+]
+
+PRIORITY_OPTIONS = ["Highest", "High", "Medium", "Low"]
+
+TSHIRT_OPTIONS = [
+    "XS (< 40 hrs)", "S (40-80 hrs)", "M (80-200 hrs)",
+    "L (200-500 hrs)", "XL (500-1000 hrs)", "XXL (1000+ hrs)",
+]
+
+TYPE_OPTIONS = ["Key Initiative", "Enhancement", "Support", "Infrastructure", "Research"]
+
+HEALTH_EMOJI_MAP = {
+    "NOT STARTED":           "⚪ NOT STARTED",
+    "NEEDS FUNCTIONAL SPEC": "🔵 NEEDS FUNCTIONAL SPEC",
+    "NEEDS TECHNICAL SPEC":  "🔵 NEEDS TECHNICAL SPEC",
+    "ON TRACK":              "🟢 ON TRACK",
+    "AT RISK":               "🟡 AT RISK",
+    "NEEDS HELP":            "🔴 NEEDS HELP",
+    "COMPLETE":              "✅ COMPLETE",
+    "POSTPONED":             "⏸️ POSTPONED",
+}
+
+
+def clean_health(health: str) -> str:
+    """Ensure health values have emoji prefixes for visual display."""
+    if not health:
+        return ""
+    h = health.strip()
+    if h and not h[0].isascii():
+        return h
+    h_upper = h.upper()
+    for key, val in HEALTH_EMOJI_MAP.items():
+        if key in h_upper:
+            return val
+    return h
+
 
 # ---------------------------------------------------------------------------
 # Data Classes

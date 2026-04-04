@@ -17,7 +17,10 @@ from components import (
 from data_layer import _build_engine, get_file_mtime, DB_PATH
 from capacity_engine import SDLC_PHASES
 from sqlite_connector import SQLiteConnector
-from models import ROSTER_ROLE_MAP
+from models import (
+    ROSTER_ROLE_MAP, HEALTH_OPTIONS, PRIORITY_OPTIONS,
+    TSHIRT_OPTIONS, TYPE_OPTIONS,
+)
 
 
 PHASE_DISPLAY = {
@@ -43,18 +46,8 @@ HEALTH_KPI_COLOR = {
     "Unknown": "navy",
 }
 
-# --- Editor constants ---
-HEALTH_OPTIONS = [
-    "🟢 ON TRACK", "🟡 AT RISK", "🔴 NEEDS HELP",
-    "NEEDS TECHNICAL SPEC", "NEEDS FUNCTIONAL SPEC",
-    "NOT STARTED", "COMPLETE", "POSTPONED",
-]
-PRIORITY_OPTIONS = ["Highest", "High", "Medium", "Low"]
-TSHIRT_OPTIONS = [
-    "XS: < 40 Hours", "S: 40-80 Hours", "M: 80-160 Hours",
-    "L: 160-320 Hours", "XL: 320-640 Hours", "XXL: > 640 Hours",
-]
-TYPE_OPTIONS = ["Key Initiative", "Enhancement", "Support", "Infrastructure", "Research"]
+# HEALTH_OPTIONS, PRIORITY_OPTIONS, TSHIRT_OPTIONS, TYPE_OPTIONS
+# imported from models.py
 
 
 def _get_people_by_role(roster: list) -> dict:

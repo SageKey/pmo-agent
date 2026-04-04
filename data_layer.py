@@ -15,7 +15,7 @@ import streamlit as st
 
 from sqlite_connector import SQLiteConnector, DEFAULT_DB
 from capacity_engine import CapacityEngine
-from models import SDLC_PHASES
+from models import SDLC_PHASES, clean_health as _clean_health
 
 
 DB_PATH = os.environ.get(
@@ -267,33 +267,6 @@ def _fix_team_classifications(conn):
     """)
     conn.commit()
 
-
-HEALTH_EMOJI_MAP = {
-    "NOT STARTED":           "⚪ NOT STARTED",
-    "NEEDS FUNCTIONAL SPEC": "🔵 NEEDS FUNCTIONAL SPEC",
-    "NEEDS TECHNICAL SPEC":  "🔵 NEEDS TECHNICAL SPEC",
-    "ON TRACK":              "🟢 ON TRACK",
-    "AT RISK":               "🟡 AT RISK",
-    "NEEDS HELP":            "🔴 NEEDS HELP",
-    "COMPLETE":              "✅ COMPLETE",
-    "POSTPONED":             "⏸️ POSTPONED",
-}
-
-
-def _clean_health(health: str) -> str:
-    """Ensure health values have emoji prefixes for visual display."""
-    if not health:
-        return ""
-    h = health.strip()
-    # Already has emoji — return as-is
-    if h and not h[0].isascii():
-        return h
-    # Try to add emoji based on the text
-    h_upper = h.upper()
-    for key, val in HEALTH_EMOJI_MAP.items():
-        if key in h_upper:
-            return val
-    return h
 
 
 def get_file_mtime() -> float:

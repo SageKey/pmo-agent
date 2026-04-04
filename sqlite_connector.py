@@ -1,6 +1,6 @@
 """
 SQLite Connector for ETE IT PMO Resource Planning.
-Drop-in replacement for ExcelConnector with the same public API.
+SQLite data access layer for ETE IT PMO Resource Planning.
 """
 
 import os
@@ -299,7 +299,7 @@ def _compute_est_cost(est_hours: float, rate: float = 65.0) -> Optional[float]:
 
 
 class SQLiteConnector:
-    """SQLite-backed data connector with the same API as ExcelConnector."""
+    """SQLite-backed data connector for the PMO dashboard."""
 
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
@@ -519,7 +519,7 @@ class SQLiteConnector:
             ]
 
     # ------------------------------------------------------------------
-    # Load All (matches ExcelConnector.load_all())
+    # Load All
     # ------------------------------------------------------------------
     def load_all(self) -> dict:
         portfolio = self.read_portfolio()
