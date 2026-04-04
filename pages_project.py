@@ -805,153 +805,300 @@ def _render_view_mode(project, data, utilization, person_demand):
                 )
 
     # --- Milestones & Project Plan ---
-    _render_milestones(project)
+    _render_project_plan_section(project)
 
 
-def _render_milestones(project):
-    """Render the milestones section for a project, with optional full plan."""
-    from datetime import date as dt_date
+# ── Module-level constants for milestones / tasks ──────────────────
+_MS_TYPE_ICON = {"gate": "🚪", "deliverable": "📦", "go_live": "🚀", "checkpoint": "📍"}
+_MS_STATUS_STYLE = {
+    "not_started": ("background:#E9ECEF; color:#495057;", "Not Started"),
+    "in_progress": ("background:#D6EAF8; color:#1B4F72;", "In Progress"),
+    "complete":    ("background:#D4EDDA; color:#155724;", "Complete"),
+    "at_risk":     ("background:#FFF3CD; color:#856404;", "At Risk"),
+    "blocked":     ("background:#F8D7DA; color:#721C24;", "Blocked"),
+}
+_PILL_COLORS = {
+    "green": "background:#D4EDDA; color:#155724;",
+    "yellow": "background:#FFF3CD; color:#856404;",
+    "red": "background:#F8D7DA; color:#721C24;",
+    "blue": "background:#D6EAF8; color:#1B4F72;",
+    "gray": "background:#E9ECEF; color:#495057;",
+}
+_GANTT_STATUS_COLOR = {
+    "not_started": GRAY, "in_progress": BLUE,
+    "complete": GREEN, "at_risk": YELLOW, "blocked": RED,
+}
 
-    connector = SQLiteConnector(DB_PATH)
-    try:
-        milestones = connector.get_milestones(project.id)
-        tasks = connector.get_tasks(project.id)
-        has_plan = len(tasks) > 0
-    finally:
-        connector.close()
 
+# ── Dialog modals ──────────────────────────────────────────────────
+@st.dialog("Add Milestone", width="large")
+def _dlg_add_milestone(project):
     user = st.session_state.get("user_display_name", "Brett Anderson")
+    with st.form("dlg_add_ms_form", clear_on_submit=True):
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            ms_title = st.text_input("Title", placeholder="e.g., UAT Sign-off")
+            ms_type = st.selectbox("Type",
+                ["gate", "deliverable", "go_live", "checkpoint"],
+                format_func=lambda x: {"gate": "🚪 Gate Review",
+                    "deliverable": "📦 Deliverable", "go_live": "🚀 Go-Live",
+                    "checkpoint": "📍 Checkpoint"}.get(x, x))
+        with mc2:
+            ms_due = st.date_input("Due Date", value=None)
+            ms_owner = st.text_input("Owner", value=project.pm or "")
+        ms_notes = st.text_input("Notes (optional)")
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if st.form_submit_button("Save Milestone", type="primary",
+                                      use_container_width=True):
+                if ms_title and ms_title.strip():
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        existing = connector.get_milestones(project.id)
+                        connector.save_milestone(
+                            project_id=project.id, title=ms_title.strip(),
+                            milestone_type=ms_type,
+                            due_date=ms_due.isoformat() if ms_due else None,
+                            owner=ms_owner or None, notes=ms_notes or None,
+                            sort_order=len(existing), actor=user,
+                        )
+                    finally:
+                        connector.close()
+                    st.session_state.pop("_open_dlg", None)
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.error("Title is required.")
+        with bc2:
+            if st.form_submit_button("Cancel", use_container_width=True):
+                st.session_state.pop("_open_dlg", None)
+                st.rerun()
 
-    # --- Header with actions ---
-    section_header("Project Plan & Milestones")
 
-    # --- Full Project Plan: Gantt + Task Table (if tasks exist) ---
-    if has_plan:
-        _render_project_plan(project, milestones, tasks, user)
-        return
+@st.dialog("Edit Milestone", width="large")
+def _dlg_edit_milestone(project, milestone: dict):
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+    mid = milestone["id"]
+    with st.form(f"dlg_edit_ms_{mid}"):
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            e_title = st.text_input("Title", value=milestone["title"])
+            e_type = st.selectbox("Type",
+                ["gate", "deliverable", "go_live", "checkpoint"],
+                index=["gate", "deliverable", "go_live", "checkpoint"].index(
+                    milestone["milestone_type"])
+                if milestone["milestone_type"] in ["gate", "deliverable", "go_live", "checkpoint"] else 1,
+                format_func=lambda x: {"gate": "🚪 Gate Review",
+                    "deliverable": "📦 Deliverable", "go_live": "🚀 Go-Live",
+                    "checkpoint": "📍 Checkpoint"}.get(x, x))
+            e_status = st.selectbox("Status",
+                ["not_started", "in_progress", "complete", "at_risk", "blocked"],
+                index=["not_started", "in_progress", "complete",
+                       "at_risk", "blocked"].index(milestone["status"])
+                if milestone["status"] in ["not_started", "in_progress", "complete",
+                                            "at_risk", "blocked"] else 0)
+        with ec2:
+            e_due = st.date_input("Due Date",
+                value=date.fromisoformat(milestone["due_date"])
+                if milestone["due_date"] else None)
+            e_owner = st.text_input("Owner", value=milestone["owner"] or "")
+            e_progress = st.slider("Progress %", 0, 100,
+                                    int(milestone["progress_pct"] or 0))
+        e_notes = st.text_input("Notes", value=milestone["notes"] or "")
 
-    if not milestones:
-        st.markdown(
-            '<div style="background:#FFFFFF; border-radius:12px; padding:1.5rem;'
-            ' box-shadow:0 1px 3px rgba(0,0,0,0.08); text-align:center;'
-            ' color:#8BA4C4; margin-bottom:1rem;">'
-            '<div style="font-size:2rem; margin-bottom:0.5rem;">📋</div>'
-            '<div style="font-size:0.9rem; font-weight:500;">No milestones defined yet</div>'
-            '<div style="font-size:0.8rem; margin-top:0.25rem;">'
-            'Add milestones to track key deliverables and gate reviews.</div>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-    btn_c1, btn_c2, btn_c3 = st.columns(3)
-    with btn_c1:
-        if not milestones and st.button("📋 Apply SDLC Template", key="_seed_ms",
-                                         use_container_width=True, type="primary"):
-            connector = SQLiteConnector(DB_PATH)
-            try:
-                sd = project.start_date.isoformat() if project.start_date else None
-                ed = project.end_date.isoformat() if project.end_date else None
-                connector.seed_sdlc_milestones(project.id, sd, ed, actor=user)
-            finally:
-                connector.close()
-            st.cache_data.clear()
-            st.rerun()
-    with btn_c2:
-        add_clicked = st.button("➕ Add Milestone", key="_add_ms",
-                                 use_container_width=True)
-    with btn_c3:
-        if milestones and st.button("📊 Enable Full Plan", key="_enable_plan",
-                                     use_container_width=True,
-                                     help="Add tasks under milestones with Gantt chart, "
-                                          "resource assignments, and progress rollups"):
-            st.session_state["_plan_enabling"] = True
-
-    # --- Enable Full Plan confirmation ---
-    if st.session_state.get("_plan_enabling"):
-        st.info("This will enable full project planning with tasks under each milestone, "
-                "Gantt chart, resource assignments, and automatic progress rollups.")
-        pc1, pc2 = st.columns(2)
-        with pc1:
-            if st.button("✅ Yes, Enable", key="_plan_confirm", type="primary",
-                          use_container_width=True):
-                # Seed one starter task per milestone
+        bc1, bc2, bc3 = st.columns([2, 2, 1])
+        with bc1:
+            if st.form_submit_button("Save", type="primary",
+                                      use_container_width=True):
                 connector = SQLiteConnector(DB_PATH)
                 try:
-                    for ms in milestones:
-                        connector.save_task(
-                            project_id=project.id,
-                            title=f"{ms['title']} — Planning",
-                            milestone_id=ms["id"],
-                            est_hours=0,
-                            sort_order=0,
-                            actor=user,
-                        )
+                    connector.save_milestone(
+                        project_id=project.id, title=e_title.strip(),
+                        milestone_type=e_type,
+                        due_date=e_due.isoformat() if e_due else None,
+                        status=e_status, owner=e_owner or None,
+                        progress_pct=float(e_progress),
+                        notes=e_notes or None, milestone_id=mid,
+                        sort_order=milestone["sort_order"], actor=user,
+                    )
                 finally:
                     connector.close()
-                st.session_state.pop("_plan_enabling", None)
+                st.session_state.pop("_open_dlg", None)
                 st.cache_data.clear()
                 st.rerun()
-        with pc2:
-            if st.button("Cancel", key="_plan_cancel", use_container_width=True):
-                st.session_state.pop("_plan_enabling", None)
+        with bc2:
+            if st.form_submit_button("Cancel", use_container_width=True):
+                st.session_state.pop("_open_dlg", None)
+                st.rerun()
+        with bc3:
+            if st.form_submit_button("🗑️ Delete", use_container_width=True):
+                connector = SQLiteConnector(DB_PATH)
+                try:
+                    connector.delete_milestone(mid, actor=user)
+                finally:
+                    connector.close()
+                st.session_state.pop("_open_dlg", None)
+                st.cache_data.clear()
                 st.rerun()
 
-    # --- Add Milestone Form ---
-    if add_clicked:
-        st.session_state["_ms_adding"] = True
 
-    if st.session_state.get("_ms_adding"):
-        with st.form("add_milestone_form", clear_on_submit=True):
-            st.markdown("**New Milestone**")
-            mc1, mc2 = st.columns(2)
-            with mc1:
-                ms_title = st.text_input("Title", placeholder="e.g., UAT Sign-off")
-                ms_type = st.selectbox("Type",
-                    ["gate", "deliverable", "go_live", "checkpoint"],
-                    format_func=lambda x: {
-                        "gate": "🚪 Gate Review",
-                        "deliverable": "📦 Deliverable",
-                        "go_live": "🚀 Go-Live",
-                        "checkpoint": "📍 Checkpoint",
-                    }.get(x, x))
-            with mc2:
-                ms_due = st.date_input("Due Date", value=None)
-                ms_owner = st.text_input("Owner", value=project.pm or "")
-            ms_notes = st.text_input("Notes (optional)", placeholder="Additional context...")
-
-            sc1, sc2 = st.columns(2)
-            with sc1:
-                if st.form_submit_button("Save Milestone", type="primary",
-                                          use_container_width=True):
-                    if ms_title and ms_title.strip():
-                        connector = SQLiteConnector(DB_PATH)
-                        try:
-                            connector.save_milestone(
-                                project_id=project.id,
-                                title=ms_title.strip(),
-                                milestone_type=ms_type,
-                                due_date=ms_due.isoformat() if ms_due else None,
-                                owner=ms_owner or None,
-                                notes=ms_notes or None,
-                                sort_order=len(milestones),
-                                actor=user,
-                            )
-                        finally:
-                            connector.close()
-                        st.session_state.pop("_ms_adding", None)
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error("Title is required.")
-            with sc2:
-                if st.form_submit_button("Cancel", use_container_width=True):
-                    st.session_state.pop("_ms_adding", None)
+@st.dialog("Add Task", width="large")
+def _dlg_add_task(project, milestones: list):
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+    with st.form("dlg_add_task_form", clear_on_submit=True):
+        tc1, tc2 = st.columns(2)
+        with tc1:
+            t_title = st.text_input("Title", placeholder="e.g., Build login screen")
+            ms_options = {0: "(No Milestone)"}
+            ms_options.update({m["id"]: m["title"] for m in milestones})
+            t_ms = st.selectbox("Milestone", list(ms_options.keys()),
+                                 format_func=lambda x: ms_options[x])
+            t_assignee = st.text_input("Assignee", placeholder="Person name")
+        with tc2:
+            t_start = st.date_input("Start Date", value=None)
+            t_end = st.date_input("End Date", value=None)
+            t_hours = st.number_input("Est Hours", min_value=0.0, step=4.0)
+        t_role = st.selectbox("Role",
+            ["pm", "ba", "functional", "technical", "developer",
+             "infrastructure", "dba", "wms"],
+            format_func=lambda x: ROLE_DISPLAY.get(x, x))
+        t_desc = st.text_input("Description (optional)")
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if st.form_submit_button("Save Task", type="primary",
+                                      use_container_width=True):
+                if t_title and t_title.strip():
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        existing = connector.get_tasks(project.id)
+                        connector.save_task(
+                            project_id=project.id, title=t_title.strip(),
+                            milestone_id=t_ms if t_ms else None,
+                            assignee=t_assignee or None, role_key=t_role,
+                            start_date=t_start.isoformat() if t_start else None,
+                            end_date=t_end.isoformat() if t_end else None,
+                            est_hours=t_hours, description=t_desc or None,
+                            sort_order=len(existing), actor=user,
+                        )
+                    finally:
+                        connector.close()
+                    st.session_state.pop("_open_dlg", None)
+                    st.cache_data.clear()
                     st.rerun()
+                else:
+                    st.error("Title is required.")
+        with bc2:
+            if st.form_submit_button("Cancel", use_container_width=True):
+                st.session_state.pop("_open_dlg", None)
+                st.rerun()
 
-    if not milestones:
-        return
 
-    # --- Milestone Summary Banner ---
+@st.dialog("Edit Task", width="large")
+def _dlg_edit_task(project, task: dict, milestones: list):
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+    tid = task["id"]
+    with st.form(f"dlg_edit_task_{tid}"):
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            et_title = st.text_input("Title", value=task["title"])
+            ms_options = {0: "(No Milestone)"}
+            ms_options.update({m["id"]: m["title"] for m in milestones})
+            cur_ms = task["milestone_id"] or 0
+            ms_keys = list(ms_options.keys())
+            et_ms = st.selectbox("Milestone", ms_keys,
+                                  index=ms_keys.index(cur_ms) if cur_ms in ms_keys else 0,
+                                  format_func=lambda x: ms_options[x])
+            et_assignee = st.text_input("Assignee", value=task.get("assignee") or "")
+            et_status = st.selectbox("Status",
+                ["not_started", "in_progress", "complete", "at_risk", "blocked"],
+                index=["not_started", "in_progress", "complete",
+                       "at_risk", "blocked"].index(task["status"])
+                if task["status"] in ["not_started", "in_progress", "complete",
+                                       "at_risk", "blocked"] else 0)
+        with ec2:
+            et_start = st.date_input("Start",
+                value=date.fromisoformat(task["start_date"])
+                if task["start_date"] else None)
+            et_end = st.date_input("End",
+                value=date.fromisoformat(task["end_date"])
+                if task["end_date"] else None)
+            et_hours = st.number_input("Est Hours",
+                value=float(task["est_hours"] or 0),
+                min_value=0.0, step=4.0)
+        et_progress = st.slider("Progress %", 0, 100,
+                                 int(task["progress_pct"] or 0))
+        bc1, bc2, bc3 = st.columns([2, 2, 1])
+        with bc1:
+            if st.form_submit_button("Save", type="primary",
+                                      use_container_width=True):
+                connector = SQLiteConnector(DB_PATH)
+                try:
+                    connector.save_task(
+                        project_id=project.id, title=et_title.strip(),
+                        milestone_id=et_ms if et_ms else None,
+                        assignee=et_assignee or None,
+                        start_date=et_start.isoformat() if et_start else None,
+                        end_date=et_end.isoformat() if et_end else None,
+                        est_hours=et_hours, status=et_status,
+                        progress_pct=float(et_progress),
+                        task_id=tid, actor=user,
+                    )
+                finally:
+                    connector.close()
+                st.session_state.pop("_open_dlg", None)
+                st.cache_data.clear()
+                st.rerun()
+        with bc2:
+            if st.form_submit_button("Cancel", use_container_width=True):
+                st.session_state.pop("_open_dlg", None)
+                st.rerun()
+        with bc3:
+            if st.form_submit_button("🗑️", use_container_width=True):
+                connector = SQLiteConnector(DB_PATH)
+                try:
+                    connector.delete_task(tid, actor=user)
+                finally:
+                    connector.close()
+                st.session_state.pop("_open_dlg", None)
+                st.cache_data.clear()
+                st.rerun()
+
+
+@st.dialog("Enable Full Project Plan")
+def _dlg_enable_plan(project, milestones: list):
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+    st.markdown(
+        "This will enable full project planning with **tasks under each milestone**, "
+        "a **Gantt chart**, resource assignments, and automatic progress rollups."
+    )
+    st.markdown(f"**{len(milestones)} milestones** will each get a starter task.")
+    bc1, bc2 = st.columns(2)
+    with bc1:
+        if st.button("✅ Yes, Enable", type="primary", use_container_width=True,
+                      key="_dlg_plan_yes"):
+            connector = SQLiteConnector(DB_PATH)
+            try:
+                for ms in milestones:
+                    connector.save_task(
+                        project_id=project.id,
+                        title=f"{ms['title']} — Planning",
+                        milestone_id=ms["id"],
+                        est_hours=0, sort_order=0, actor=user,
+                    )
+            finally:
+                connector.close()
+            st.session_state.pop("_open_dlg", None)
+            st.cache_data.clear()
+            st.rerun()
+    with bc2:
+        if st.button("Cancel", use_container_width=True, key="_dlg_plan_no"):
+            st.session_state.pop("_open_dlg", None)
+            st.rerun()
+
+
+# ── Helper renderers ───────────────────────────────────────────────
+def _render_milestone_summary(milestones, today):
+    """Render milestone pills + overall progress bar."""
     n_total = len(milestones)
     n_complete = sum(1 for m in milestones if m["status"] == "complete")
     n_in_progress = sum(1 for m in milestones if m["status"] == "in_progress")
@@ -959,37 +1106,27 @@ def _render_milestones(project):
     n_blocked = sum(1 for m in milestones if m["status"] == "blocked")
     overall_pct = n_complete / n_total if n_total > 0 else 0
 
-    today = dt_date.today()
     overdue = [m for m in milestones
-               if m["due_date"] and m["status"] not in ("complete",)
-               and dt_date.fromisoformat(m["due_date"]) < today]
-
-    _PILL = {
-        "green": "background:#D4EDDA; color:#155724;",
-        "yellow": "background:#FFF3CD; color:#856404;",
-        "red": "background:#F8D7DA; color:#721C24;",
-        "blue": "background:#D6EAF8; color:#1B4F72;",
-        "gray": "background:#E9ECEF; color:#495057;",
-    }
+               if m["due_date"] and m["status"] != "complete"
+               and date.fromisoformat(m["due_date"]) < today]
 
     pills = [
         {"label": f"{n_complete}/{n_total} Complete", "icon": "✅",
-         "style": _PILL["green"]},
+         "style": _PILL_COLORS["green"]},
     ]
-    if n_in_progress > 0:
+    if n_in_progress:
         pills.append({"label": f"{n_in_progress} In Progress", "icon": "🔄",
-                       "style": _PILL["blue"]})
-    if n_at_risk > 0:
+                       "style": _PILL_COLORS["blue"]})
+    if n_at_risk:
         pills.append({"label": f"{n_at_risk} At Risk", "icon": "🟡",
-                       "style": _PILL["yellow"]})
-    if n_blocked > 0:
+                       "style": _PILL_COLORS["yellow"]})
+    if n_blocked:
         pills.append({"label": f"{n_blocked} Blocked", "icon": "🔴",
-                       "style": _PILL["red"]})
+                       "style": _PILL_COLORS["red"]})
     if overdue:
         pills.append({"label": f"{len(overdue)} Overdue", "icon": "⚠️",
-                       "style": _PILL["red"]})
+                       "style": _PILL_COLORS["red"]})
 
-    # Overall progress bar
     st.markdown(
         '<div style="background:#FFFFFF; border-radius:12px; padding:1rem 1.25rem;'
         ' box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1rem;">'
@@ -1015,218 +1152,9 @@ def _render_milestones(project):
         unsafe_allow_html=True,
     )
 
-    # --- Milestone Timeline (visual) ---
-    _TYPE_ICON = {
-        "gate": "🚪", "deliverable": "📦",
-        "go_live": "🚀", "checkpoint": "📍",
-    }
-    _STATUS_STYLE = {
-        "not_started": ("background:#E9ECEF; color:#495057;", "Not Started"),
-        "in_progress": ("background:#D6EAF8; color:#1B4F72;", "In Progress"),
-        "complete":    ("background:#D4EDDA; color:#155724;", "Complete"),
-        "at_risk":     ("background:#FFF3CD; color:#856404;", "At Risk"),
-        "blocked":     ("background:#F8D7DA; color:#721C24;", "Blocked"),
-    }
 
-    for m in milestones:
-        mid = m["id"]
-        title = m["title"]
-        mtype = m["milestone_type"]
-        status = m["status"]
-        due = m["due_date"]
-        completed = m["completed_date"]
-        owner = m["owner"] or ""
-        progress = m["progress_pct"] or 0
-        notes = m["notes"] or ""
-        icon = _TYPE_ICON.get(mtype, "📍")
-        s_style, s_label = _STATUS_STYLE.get(status, ("background:#E9ECEF; color:#495057;", status))
-
-        # Due date formatting
-        if completed:
-            date_html = (f'<span style="color:{GREEN}; font-size:0.78rem;">'
-                         f'✅ Completed {completed}</span>')
-        elif due:
-            d = dt_date.fromisoformat(due)
-            days_left = (d - today).days
-            if days_left < 0:
-                date_html = (f'<span style="color:#DC3545; font-weight:600;'
-                             f' font-size:0.78rem;">⚠️ {abs(days_left)}d overdue</span>')
-            elif days_left <= 7:
-                date_html = (f'<span style="color:#E67E22; font-size:0.78rem;">'
-                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
-            elif days_left <= 30:
-                date_html = (f'<span style="color:{NAVY}; font-size:0.78rem;">'
-                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
-            else:
-                date_html = (f'<span style="color:#6C757D; font-size:0.78rem;">'
-                             f'Due {d.strftime("%b %d, %Y")}</span>')
-        else:
-            date_html = '<span style="color:#8BA4C4; font-size:0.78rem;">No date set</span>'
-
-        # Owner
-        owner_html = ""
-        if owner:
-            initial = owner[0].upper()
-            owner_html = (
-                f'<span style="display:inline-flex; align-items:center; gap:0.3rem;'
-                f' font-size:0.75rem; color:#5A6A7E;">'
-                f'<span style="width:20px; height:20px; border-radius:50%;'
-                f' background:{NAVY}; color:white; display:inline-flex;'
-                f' align-items:center; justify-content:center;'
-                f' font-size:0.6rem; font-weight:700;">{initial}</span>'
-                f'{owner}</span>'
-            )
-
-        # Progress bar
-        prog_pct = progress / 100 if progress > 1 else progress
-        if status == "complete":
-            prog_pct = 1.0
-            bar_c = GREEN
-        elif status == "at_risk":
-            bar_c = YELLOW
-        elif status == "blocked":
-            bar_c = RED
-        else:
-            bar_c = BLUE
-
-        # Notes
-        notes_html = ""
-        if notes:
-            notes_html = (f'<div style="font-size:0.75rem; color:#6C757D;'
-                          f' margin-top:0.3rem; font-style:italic;">{notes}</div>')
-
-        # Card
-        border_left = GREEN if status == "complete" else (
-            YELLOW if status == "at_risk" else (
-                RED if status == "blocked" else "#E8ECF1"))
-
-        st.markdown(
-            f'<div style="background:#FFFFFF; border-radius:10px; padding:0.85rem 1rem;'
-            f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-bottom:0.5rem;'
-            f' border-left:4px solid {border_left};">'
-            f'<div style="display:flex; flex-wrap:wrap; align-items:center;'
-            f' gap:0.5rem; margin-bottom:0.4rem;">'
-            f'<span style="font-size:1rem;">{icon}</span>'
-            f'<span style="font-size:0.88rem; font-weight:600; color:{NAVY};">{title}</span>'
-            f'<span style="{s_style} display:inline-block; padding:0.15rem 0.5rem;'
-            f' border-radius:12px; font-size:0.7rem; font-weight:600;">{s_label}</span>'
-            f'{owner_html}'
-            f'<span style="margin-left:auto;">{date_html}</span>'
-            f'</div>'
-            f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
-            f' overflow:hidden;">'
-            f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
-            f' background:{bar_c}; border-radius:3px;"></div></div>'
-            f'{notes_html}</div>',
-            unsafe_allow_html=True,
-        )
-
-        # Action buttons (inline)
-        if status != "complete":
-            ac1, ac2, ac3 = st.columns([1, 1, 4])
-            with ac1:
-                if st.button("✅ Complete", key=f"_ms_done_{mid}",
-                              use_container_width=True):
-                    connector = SQLiteConnector(DB_PATH)
-                    try:
-                        connector.complete_milestone(mid, actor=user)
-                    finally:
-                        connector.close()
-                    st.cache_data.clear()
-                    st.rerun()
-            with ac2:
-                if st.button("✏️ Edit", key=f"_ms_edit_{mid}",
-                              use_container_width=True):
-                    st.session_state[f"_ms_editing_{mid}"] = True
-                    st.rerun()
-
-        # Inline edit form
-        if st.session_state.get(f"_ms_editing_{mid}"):
-            with st.form(f"edit_ms_{mid}"):
-                ec1, ec2 = st.columns(2)
-                with ec1:
-                    e_title = st.text_input("Title", value=title, key=f"_mse_t_{mid}")
-                    e_type = st.selectbox("Type",
-                        ["gate", "deliverable", "go_live", "checkpoint"],
-                        index=["gate", "deliverable", "go_live", "checkpoint"].index(mtype)
-                        if mtype in ["gate", "deliverable", "go_live", "checkpoint"] else 1,
-                        format_func=lambda x: {
-                            "gate": "🚪 Gate Review", "deliverable": "📦 Deliverable",
-                            "go_live": "🚀 Go-Live", "checkpoint": "📍 Checkpoint",
-                        }.get(x, x), key=f"_mse_ty_{mid}")
-                    e_status = st.selectbox("Status",
-                        ["not_started", "in_progress", "complete", "at_risk", "blocked"],
-                        index=["not_started", "in_progress", "complete", "at_risk", "blocked"].index(status)
-                        if status in ["not_started", "in_progress", "complete", "at_risk", "blocked"] else 0,
-                        key=f"_mse_s_{mid}")
-                with ec2:
-                    e_due = st.date_input("Due Date",
-                        value=dt_date.fromisoformat(due) if due else None,
-                        key=f"_mse_d_{mid}")
-                    e_owner = st.text_input("Owner", value=owner, key=f"_mse_o_{mid}")
-                    e_progress = st.slider("Progress %", 0, 100, int(progress),
-                                            key=f"_mse_p_{mid}")
-                e_notes = st.text_input("Notes", value=notes, key=f"_mse_n_{mid}")
-
-                ebc1, ebc2, ebc3 = st.columns([2, 2, 1])
-                with ebc1:
-                    if st.form_submit_button("Save", type="primary",
-                                              use_container_width=True):
-                        connector = SQLiteConnector(DB_PATH)
-                        try:
-                            connector.save_milestone(
-                                project_id=project.id,
-                                title=e_title.strip(),
-                                milestone_type=e_type,
-                                due_date=e_due.isoformat() if e_due else None,
-                                status=e_status,
-                                owner=e_owner or None,
-                                progress_pct=float(e_progress),
-                                notes=e_notes or None,
-                                milestone_id=mid,
-                                sort_order=m["sort_order"],
-                                actor=user,
-                            )
-                        finally:
-                            connector.close()
-                        st.session_state.pop(f"_ms_editing_{mid}", None)
-                        st.cache_data.clear()
-                        st.rerun()
-                with ebc2:
-                    if st.form_submit_button("Cancel", use_container_width=True):
-                        st.session_state.pop(f"_ms_editing_{mid}", None)
-                        st.rerun()
-                with ebc3:
-                    if st.form_submit_button("🗑️ Delete", use_container_width=True):
-                        connector = SQLiteConnector(DB_PATH)
-                        try:
-                            connector.delete_milestone(mid, actor=user)
-                        finally:
-                            connector.close()
-                        st.session_state.pop(f"_ms_editing_{mid}", None)
-                        st.cache_data.clear()
-                        st.rerun()
-
-
-def _render_project_plan(project, milestones: list, tasks: list, user: str):
-    """Render the full project plan with Gantt, task table, and rollups."""
-    from datetime import date as dt_date
-    import altair as alt
-
-    today = dt_date.today()
-
-    # Build lookup structures
-    ms_map = {m["id"]: m for m in milestones}
-    tasks_by_ms = {}
-    unassigned_tasks = []
-    for t in tasks:
-        mid = t["milestone_id"]
-        if mid and mid in ms_map:
-            tasks_by_ms.setdefault(mid, []).append(t)
-        else:
-            unassigned_tasks.append(t)
-
-    # --- Summary Banner ---
+def _render_task_summary(tasks):
+    """Render task pills + completion progress bar."""
     n_tasks = len(tasks)
     n_done = sum(1 for t in tasks if t["status"] == "complete")
     n_in_prog = sum(1 for t in tasks if t["status"] == "in_progress")
@@ -1235,29 +1163,21 @@ def _render_project_plan(project, milestones: list, tasks: list, user: str):
     total_actual = sum(t["actual_hours"] or 0 for t in tasks)
     task_pct = n_done / n_tasks if n_tasks > 0 else 0
 
-    _PILL = {
-        "green": "background:#D4EDDA; color:#155724;",
-        "yellow": "background:#FFF3CD; color:#856404;",
-        "red": "background:#F8D7DA; color:#721C24;",
-        "blue": "background:#D6EAF8; color:#1B4F72;",
-        "gray": "background:#E9ECEF; color:#495057;",
-    }
-
     pills_html = (
-        f'<span style="{_PILL["green"]} display:inline-block; padding:0.2rem 0.6rem;'
-        f' border-radius:16px; font-size:0.75rem; font-weight:600;">'
-        f'✅ {n_done}/{n_tasks} Tasks</span>'
+        f'<span style="{_PILL_COLORS["green"]} display:inline-block;'
+        f' padding:0.2rem 0.6rem; border-radius:16px; font-size:0.75rem;'
+        f' font-weight:600;">✅ {n_done}/{n_tasks} Tasks</span>'
     )
     if n_in_prog:
         pills_html += (
-            f' <span style="{_PILL["blue"]} display:inline-block; padding:0.2rem 0.6rem;'
-            f' border-radius:16px; font-size:0.75rem; font-weight:600;">'
-            f'🔄 {n_in_prog} In Progress</span>')
+            f' <span style="{_PILL_COLORS["blue"]} display:inline-block;'
+            f' padding:0.2rem 0.6rem; border-radius:16px; font-size:0.75rem;'
+            f' font-weight:600;">🔄 {n_in_prog} In Progress</span>')
     if n_blocked:
         pills_html += (
-            f' <span style="{_PILL["red"]} display:inline-block; padding:0.2rem 0.6rem;'
-            f' border-radius:16px; font-size:0.75rem; font-weight:600;">'
-            f'🔴 {n_blocked} Blocked</span>')
+            f' <span style="{_PILL_COLORS["red"]} display:inline-block;'
+            f' padding:0.2rem 0.6rem; border-radius:16px; font-size:0.75rem;'
+            f' font-weight:600;">🔴 {n_blocked} Blocked</span>')
 
     st.markdown(
         '<div style="background:#FFFFFF; border-radius:12px; padding:1rem 1.25rem;'
@@ -1278,227 +1198,235 @@ def _render_project_plan(project, milestones: list, tasks: list, user: str):
         unsafe_allow_html=True,
     )
 
-    # --- Gantt Chart ---
+
+def _render_milestones_tab(project, milestones, has_plan, user):
+    """Render the Milestones tab — clean timeline cards."""
+    today = date.today()
+
+    if not milestones:
+        st.info("No milestones defined yet. Use the toolbar above to add milestones "
+                "or apply an SDLC template.")
+        return
+
+    _render_milestone_summary(milestones, today)
+
+    for m in milestones:
+        mid = m["id"]
+        title = m["title"]
+        status = m["status"]
+        due = m["due_date"]
+        completed = m["completed_date"]
+        owner = m["owner"] or ""
+        progress = m["progress_pct"] or 0
+        icon = _MS_TYPE_ICON.get(m["milestone_type"], "📍")
+        s_style, s_label = _MS_STATUS_STYLE.get(
+            status, ("background:#E9ECEF; color:#495057;", status))
+
+        # Due date formatting
+        if completed:
+            date_html = (f'<span style="color:{GREEN}; font-size:0.78rem;">'
+                         f'✅ Completed {completed}</span>')
+        elif due:
+            d = date.fromisoformat(due)
+            days_left = (d - today).days
+            if days_left < 0:
+                date_html = (f'<span style="color:#DC3545; font-weight:600;'
+                             f' font-size:0.78rem;">⚠️ {abs(days_left)}d overdue</span>')
+            elif days_left <= 7:
+                date_html = (f'<span style="color:#E67E22; font-size:0.78rem;">'
+                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
+            elif days_left <= 30:
+                date_html = (f'<span style="color:{NAVY}; font-size:0.78rem;">'
+                             f'Due {d.strftime("%b %d")} ({days_left}d)</span>')
+            else:
+                date_html = (f'<span style="color:#6C757D; font-size:0.78rem;">'
+                             f'Due {d.strftime("%b %d, %Y")}</span>')
+        else:
+            date_html = '<span style="color:#8BA4C4; font-size:0.78rem;">No date set</span>'
+
+        # Owner
+        owner_html = ""
+        if owner:
+            ini = owner[0].upper()
+            owner_html = (
+                f'<span style="display:inline-flex; align-items:center; gap:0.3rem;'
+                f' font-size:0.75rem; color:#5A6A7E;">'
+                f'<span style="width:20px; height:20px; border-radius:50%;'
+                f' background:{NAVY}; color:white; display:inline-flex;'
+                f' align-items:center; justify-content:center;'
+                f' font-size:0.6rem; font-weight:700;">{ini}</span>'
+                f'{owner}</span>')
+
+        # Progress bar
+        prog_pct = progress / 100 if progress > 1 else progress
+        if status == "complete":
+            prog_pct = 1.0
+            bar_c = GREEN
+        elif status == "at_risk":
+            bar_c = YELLOW
+        elif status == "blocked":
+            bar_c = RED
+        else:
+            bar_c = BLUE
+
+        border_left = GREEN if status == "complete" else (
+            YELLOW if status == "at_risk" else (
+                RED if status == "blocked" else "#E8ECF1"))
+
+        # Notes
+        notes = m["notes"] or ""
+        notes_html = ""
+        if notes:
+            notes_html = (f'<div style="font-size:0.75rem; color:#6C757D;'
+                          f' margin-top:0.3rem; font-style:italic;">{notes}</div>')
+
+        card_html = (
+            f'<div style="background:#FFFFFF; border-radius:10px; padding:0.85rem 1rem;'
+            f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-bottom:0.15rem;'
+            f' border-left:4px solid {border_left};">'
+            f'<div style="display:flex; flex-wrap:wrap; align-items:center;'
+            f' gap:0.5rem; margin-bottom:0.4rem;">'
+            f'<span style="font-size:1rem;">{icon}</span>'
+            f'<span style="font-size:0.88rem; font-weight:600; color:{NAVY};">{title}</span>'
+            f'<span style="{s_style} display:inline-block; padding:0.15rem 0.5rem;'
+            f' border-radius:12px; font-size:0.7rem; font-weight:600;">{s_label}</span>'
+            f'{owner_html}'
+            f'<span style="margin-left:auto;">{date_html}</span>'
+            f'</div>'
+            f'<div style="height:5px; background:#E9ECEF; border-radius:3px;'
+            f' overflow:hidden;">'
+            f'<div style="width:{prog_pct*100:.0f}%; height:100%;'
+            f' background:{bar_c}; border-radius:3px;"></div></div>'
+            f'{notes_html}</div>'
+        )
+        st.markdown(card_html, unsafe_allow_html=True)
+
+        # Compact action row — just icons, no expanding forms
+        if status != "complete":
+            ac1, ac2, ac3 = st.columns([1, 1, 6])
+            with ac1:
+                if st.button("✅ Complete", key=f"_msd_{mid}",
+                              use_container_width=True):
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.complete_milestone(mid, actor=user)
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+            with ac2:
+                if st.button("✏️ Edit", key=f"_mse_{mid}",
+                              use_container_width=True):
+                    st.session_state["_open_dlg"] = f"edit_ms_{mid}"
+                    st.rerun()
+
+
+def _render_gantt_tab(milestones, tasks):
+    """Render the Gantt chart tab."""
+    today = date.today()
+
     gantt_rows = []
-    # Add milestone markers
     for m in milestones:
         if m["due_date"]:
             gantt_rows.append({
                 "Task": f"🚪 {m['title']}",
-                "Start": m["due_date"],
-                "End": m["due_date"],
-                "Type": "Milestone",
-                "Status": m["status"],
+                "Start": m["due_date"], "End": m["due_date"],
+                "Type": "Milestone", "Status": m["status"],
                 "Assignee": m.get("owner") or "",
                 "Progress": m["progress_pct"] or 0,
             })
-    # Add task bars
     for t in tasks:
         if t["start_date"] and t["end_date"]:
             gantt_rows.append({
                 "Task": f"  {t['title']}",
-                "Start": t["start_date"],
-                "End": t["end_date"],
-                "Type": "Task",
-                "Status": t["status"],
+                "Start": t["start_date"], "End": t["end_date"],
+                "Type": "Task", "Status": t["status"],
                 "Assignee": t.get("assignee") or "",
                 "Progress": t["progress_pct"] or 0,
             })
 
-    if gantt_rows:
-        gantt_df = pd.DataFrame(gantt_rows)
+    if not gantt_rows:
+        st.info("Add dates to milestones or tasks to see the Gantt chart.")
+        return
 
-        _STATUS_COLOR = {
-            "not_started": GRAY, "in_progress": BLUE,
-            "complete": GREEN, "at_risk": YELLOW, "blocked": RED,
-        }
+    gantt_df = pd.DataFrame(gantt_rows)
 
-        bars = alt.Chart(gantt_df[gantt_df["Type"] == "Task"]).mark_bar(
-            cornerRadiusEnd=3, height=14,
-        ).encode(
-            y=alt.Y("Task:N", sort=list(gantt_df[gantt_df["Type"] == "Task"]["Task"]),
-                    title=None, axis=alt.Axis(labelFontSize=10, labelLimit=250)),
-            x=alt.X("Start:T", title=None),
-            x2="End:T",
-            color=alt.Color("Status:N",
-                            scale=alt.Scale(
-                                domain=list(_STATUS_COLOR.keys()),
-                                range=list(_STATUS_COLOR.values())),
-                            legend=alt.Legend(title=None, orient="top")),
-            tooltip=["Task:N", "Start:T", "End:T", "Assignee:N",
-                     alt.Tooltip("Progress:Q", format=".0f")],
-        )
+    bars = alt.Chart(gantt_df[gantt_df["Type"] == "Task"]).mark_bar(
+        cornerRadiusEnd=3, height=14,
+    ).encode(
+        y=alt.Y("Task:N",
+                sort=list(gantt_df[gantt_df["Type"] == "Task"]["Task"]),
+                title=None,
+                axis=alt.Axis(labelFontSize=10, labelLimit=250)),
+        x=alt.X("Start:T", title=None),
+        x2="End:T",
+        color=alt.Color("Status:N",
+                         scale=alt.Scale(
+                             domain=list(_GANTT_STATUS_COLOR.keys()),
+                             range=list(_GANTT_STATUS_COLOR.values())),
+                         legend=alt.Legend(title=None, orient="top")),
+        tooltip=["Task:N", "Start:T", "End:T", "Assignee:N",
+                 alt.Tooltip("Progress:Q", format=".0f")],
+    )
 
-        diamonds = alt.Chart(gantt_df[gantt_df["Type"] == "Milestone"]).mark_point(
-            shape="diamond", size=120, filled=True,
-        ).encode(
-            y=alt.Y("Task:N", title=None),
-            x=alt.X("Start:T"),
-            color=alt.Color("Status:N",
-                            scale=alt.Scale(
-                                domain=list(_STATUS_COLOR.keys()),
-                                range=list(_STATUS_COLOR.values())),
-                            legend=None),
-            tooltip=["Task:N", "Start:T", "Assignee:N"],
-        )
+    diamonds = alt.Chart(gantt_df[gantt_df["Type"] == "Milestone"]).mark_point(
+        shape="diamond", size=120, filled=True,
+    ).encode(
+        y=alt.Y("Task:N", title=None),
+        x=alt.X("Start:T"),
+        color=alt.Color("Status:N",
+                         scale=alt.Scale(
+                             domain=list(_GANTT_STATUS_COLOR.keys()),
+                             range=list(_GANTT_STATUS_COLOR.values())),
+                         legend=None),
+        tooltip=["Task:N", "Start:T", "Assignee:N"],
+    )
 
-        # Today line
-        today_rule = alt.Chart(
-            pd.DataFrame([{"today": today.isoformat()}])
-        ).mark_rule(color=RED, strokeDash=[4, 4], strokeWidth=1.5).encode(
-            x="today:T",
-        )
+    today_rule = alt.Chart(
+        pd.DataFrame([{"today": today.isoformat()}])
+    ).mark_rule(color=RED, strokeDash=[4, 4], strokeWidth=1.5).encode(
+        x="today:T",
+    )
 
-        chart = (bars + diamonds + today_rule).properties(
-            height=max(180, len(gantt_rows) * 22),
-        ).configure_view(strokeWidth=0)
+    chart = (bars + diamonds + today_rule).properties(
+        height=max(180, len(gantt_rows) * 22),
+    ).configure_view(strokeWidth=0)
 
-        st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, use_container_width=True)
 
-    # --- Action Buttons ---
-    ab1, ab2, ab3 = st.columns(3)
-    with ab1:
-        if st.button("➕ Add Task", key="_plan_add_task", use_container_width=True):
-            st.session_state["_plan_adding_task"] = True
-    with ab2:
-        if st.button("🔄 Rollup Progress", key="_plan_rollup", use_container_width=True,
-                      help="Recalculate milestone & project progress from tasks"):
-            connector = SQLiteConnector(DB_PATH)
-            try:
-                changes = connector.rollup_milestone_progress(project.id)
-                new_pct = connector.rollup_project_progress(project.id)
-                conn = connector._open()
-                conn.execute(
-                    "UPDATE projects SET pct_complete=?, updated_at=datetime('now') WHERE id=?",
-                    (new_pct, project.id),
-                )
-                conn.commit()
-            finally:
-                connector.close()
-            st.cache_data.clear()
-            st.success(f"Rolled up: project now {new_pct:.0%} complete"
-                       + (f", {len(changes)} milestones updated" if changes else ""))
-            st.rerun()
-    with ab3:
-        if st.button("➕ Add Milestone", key="_plan_add_ms", use_container_width=True):
-            st.session_state["_ms_adding"] = True
 
-    # --- Add Task Form ---
-    if st.session_state.get("_plan_adding_task"):
-        with st.form("add_task_form", clear_on_submit=True):
-            st.markdown("**New Task**")
-            tc1, tc2 = st.columns(2)
-            with tc1:
-                t_title = st.text_input("Title", placeholder="e.g., Build login screen")
-                ms_options = {0: "(No Milestone)"} | {m["id"]: m["title"] for m in milestones}
-                t_ms = st.selectbox("Milestone", list(ms_options.keys()),
-                                     format_func=lambda x: ms_options[x])
-                t_assignee = st.text_input("Assignee", placeholder="Person name")
-            with tc2:
-                t_start = st.date_input("Start Date", value=None)
-                t_end = st.date_input("End Date", value=None)
-                t_hours = st.number_input("Est Hours", min_value=0.0, step=4.0)
-            t_role = st.selectbox("Role",
-                ["pm", "ba", "functional", "technical", "developer", "infrastructure", "dba", "wms"],
-                format_func=lambda x: ROLE_DISPLAY.get(x, x))
-            t_desc = st.text_input("Description (optional)")
+def _render_tasks_tab(project, milestones, tasks, user):
+    """Render the Tasks tab — tasks grouped under milestone headers."""
+    today = date.today()
 
-            tfc1, tfc2 = st.columns(2)
-            with tfc1:
-                if st.form_submit_button("Save Task", type="primary",
-                                          use_container_width=True):
-                    if t_title and t_title.strip():
-                        connector = SQLiteConnector(DB_PATH)
-                        try:
-                            connector.save_task(
-                                project_id=project.id,
-                                title=t_title.strip(),
-                                milestone_id=t_ms if t_ms else None,
-                                assignee=t_assignee or None,
-                                role_key=t_role,
-                                start_date=t_start.isoformat() if t_start else None,
-                                end_date=t_end.isoformat() if t_end else None,
-                                est_hours=t_hours,
-                                description=t_desc or None,
-                                sort_order=len(tasks),
-                                actor=user,
-                            )
-                        finally:
-                            connector.close()
-                        st.session_state.pop("_plan_adding_task", None)
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error("Title is required.")
-            with tfc2:
-                if st.form_submit_button("Cancel", use_container_width=True):
-                    st.session_state.pop("_plan_adding_task", None)
-                    st.rerun()
+    ms_map = {m["id"]: m for m in milestones}
+    tasks_by_ms = {}
+    unassigned = []
+    for t in tasks:
+        mid = t["milestone_id"]
+        if mid and mid in ms_map:
+            tasks_by_ms.setdefault(mid, []).append(t)
+        else:
+            unassigned.append(t)
 
-    # --- Add milestone form (reuse session state) ---
-    if st.session_state.get("_ms_adding"):
-        with st.form("add_ms_plan_form", clear_on_submit=True):
-            st.markdown("**New Milestone**")
-            mc1, mc2 = st.columns(2)
-            with mc1:
-                ms_title = st.text_input("Title", placeholder="e.g., UAT Sign-off",
-                                          key="_pms_title")
-                ms_type = st.selectbox("Type",
-                    ["gate", "deliverable", "go_live", "checkpoint"],
-                    format_func=lambda x: {"gate": "🚪 Gate Review",
-                        "deliverable": "📦 Deliverable", "go_live": "🚀 Go-Live",
-                        "checkpoint": "📍 Checkpoint"}.get(x, x), key="_pms_type")
-            with mc2:
-                ms_due = st.date_input("Due Date", value=None, key="_pms_due")
-                ms_owner = st.text_input("Owner", value=project.pm or "", key="_pms_owner")
-            msc1, msc2 = st.columns(2)
-            with msc1:
-                if st.form_submit_button("Save Milestone", type="primary",
-                                          use_container_width=True):
-                    if ms_title and ms_title.strip():
-                        connector = SQLiteConnector(DB_PATH)
-                        try:
-                            connector.save_milestone(
-                                project_id=project.id, title=ms_title.strip(),
-                                milestone_type=ms_type,
-                                due_date=ms_due.isoformat() if ms_due else None,
-                                owner=ms_owner or None,
-                                sort_order=len(milestones), actor=user,
-                            )
-                        finally:
-                            connector.close()
-                        st.session_state.pop("_ms_adding", None)
-                        st.cache_data.clear()
-                        st.rerun()
-            with msc2:
-                if st.form_submit_button("Cancel", use_container_width=True):
-                    st.session_state.pop("_ms_adding", None)
-                    st.rerun()
-
-    # --- Tasks grouped by Milestone ---
-    _STATUS_STYLE = {
-        "not_started": ("background:#E9ECEF; color:#495057;", "Not Started"),
-        "in_progress": ("background:#D6EAF8; color:#1B4F72;", "In Progress"),
-        "complete":    ("background:#D4EDDA; color:#155724;", "Complete"),
-        "at_risk":     ("background:#FFF3CD; color:#856404;", "At Risk"),
-        "blocked":     ("background:#F8D7DA; color:#721C24;", "Blocked"),
-    }
-    _TYPE_ICON = {"gate": "🚪", "deliverable": "📦", "go_live": "🚀", "checkpoint": "📍"}
+    _render_task_summary(tasks)
 
     for ms in milestones:
         mid = ms["id"]
         ms_tasks = tasks_by_ms.get(mid, [])
+        if not ms_tasks:
+            continue
+
         ms_done = sum(1 for t in ms_tasks if t["status"] == "complete")
         ms_total = len(ms_tasks)
         ms_pct = ms_done / ms_total if ms_total > 0 else 0
-        icon = _TYPE_ICON.get(ms["milestone_type"], "📍")
-        s_style, s_label = _STATUS_STYLE.get(ms["status"],
-            ("background:#E9ECEF; color:#495057;", ms["status"]))
+        icon = _MS_TYPE_ICON.get(ms["milestone_type"], "📍")
+        s_style, s_label = _MS_STATUS_STYLE.get(
+            ms["status"], ("background:#E9ECEF; color:#495057;", ms["status"]))
 
-        # Due date
         due_html = ""
         if ms["due_date"]:
-            d = dt_date.fromisoformat(ms["due_date"])
+            d = date.fromisoformat(ms["due_date"])
             days = (d - today).days
             if ms["status"] == "complete":
                 due_html = f'<span style="color:{GREEN}; font-size:0.75rem;">✅ Done</span>'
@@ -1509,7 +1437,6 @@ def _render_project_plan(project, milestones: list, tasks: list, user: str):
                 due_html = (f'<span style="color:{NAVY}; font-size:0.75rem;">'
                             f'Due {d.strftime("%b %d")} ({days}d)</span>')
 
-        # Milestone header card
         border = GREEN if ms["status"] == "complete" else (
             YELLOW if ms["status"] == "at_risk" else (
                 RED if ms["status"] == "blocked" else NAVY))
@@ -1520,7 +1447,8 @@ def _render_project_plan(project, milestones: list, tasks: list, user: str):
             f' margin-bottom:0.25rem; border-left:4px solid {border};">'
             f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem;">'
             f'<span style="font-size:1rem;">{icon}</span>'
-            f'<span style="font-size:0.9rem; font-weight:700; color:{NAVY};">{ms["title"]}</span>'
+            f'<span style="font-size:0.9rem; font-weight:700; color:{NAVY};">'
+            f'{ms["title"]}</span>'
             f'<span style="{s_style} display:inline-block; padding:0.12rem 0.45rem;'
             f' border-radius:10px; font-size:0.68rem; font-weight:600;">{s_label}</span>'
             f'<span style="font-size:0.73rem; color:#6C757D;">'
@@ -1533,138 +1461,11 @@ def _render_project_plan(project, milestones: list, tasks: list, user: str):
             unsafe_allow_html=True,
         )
 
-        # Tasks under this milestone
         for t in ms_tasks:
-            tid = t["id"]
-            t_status = t["status"]
-            t_s_style, t_s_label = _STATUS_STYLE.get(t_status,
-                ("background:#E9ECEF; color:#495057;", t_status))
-            assignee = t.get("assignee") or ""
-            est = t["est_hours"] or 0
-            prog = t["progress_pct"] or 0
+            _render_task_card(t, project, user)
 
-            assignee_html = ""
-            if assignee:
-                ini = assignee[0].upper()
-                assignee_html = (
-                    f'<span style="display:inline-flex; align-items:center; gap:0.2rem;'
-                    f' font-size:0.72rem; color:#5A6A7E;">'
-                    f'<span style="width:18px; height:18px; border-radius:50%;'
-                    f' background:{NAVY}; color:white; display:inline-flex;'
-                    f' align-items:center; justify-content:center;'
-                    f' font-size:0.55rem; font-weight:700;">{ini}</span>'
-                    f'{assignee}</span>')
-
-            hours_html = f'<span style="font-size:0.72rem; color:#6C757D;">{est:.0f}h</span>' if est else ""
-
-            bar_c = GREEN if t_status == "complete" else (
-                BLUE if t_status == "in_progress" else (
-                    YELLOW if t_status == "at_risk" else (
-                        RED if t_status == "blocked" else GRAY)))
-            prog_val = 100.0 if t_status == "complete" else prog
-
-            st.markdown(
-                f'<div style="background:#FAFBFC; border-radius:8px; padding:0.55rem 0.85rem;'
-                f' margin:0.2rem 0 0.2rem 1.5rem; border:1px solid #E8ECF1;">'
-                f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem;">'
-                f'<span style="font-size:0.82rem; font-weight:500; color:{NAVY};">'
-                f'{t["title"]}</span>'
-                f'<span style="{t_s_style} display:inline-block; padding:0.1rem 0.4rem;'
-                f' border-radius:8px; font-size:0.65rem; font-weight:600;">{t_s_label}</span>'
-                f'{assignee_html} {hours_html}'
-                f'</div>'
-                f'<div style="height:3px; background:#E9ECEF; border-radius:2px;'
-                f' overflow:hidden; margin-top:0.35rem;">'
-                f'<div style="width:{prog_val:.0f}%; height:100%;'
-                f' background:{bar_c}; border-radius:2px;"></div></div></div>',
-                unsafe_allow_html=True,
-            )
-
-            # Task action buttons
-            if t_status != "complete":
-                tac1, tac2, tac3 = st.columns([1, 1, 4])
-                with tac1:
-                    if st.button("✅", key=f"_td_{tid}", use_container_width=True,
-                                  help="Mark complete"):
-                        connector = SQLiteConnector(DB_PATH)
-                        try:
-                            connector.complete_task(tid, actor=user)
-                        finally:
-                            connector.close()
-                        st.cache_data.clear()
-                        st.rerun()
-                with tac2:
-                    if st.button("✏️", key=f"_te_{tid}", use_container_width=True,
-                                  help="Edit task"):
-                        st.session_state[f"_task_editing_{tid}"] = True
-                        st.rerun()
-
-            # Task edit form
-            if st.session_state.get(f"_task_editing_{tid}"):
-                with st.form(f"edit_task_{tid}"):
-                    etc1, etc2 = st.columns(2)
-                    with etc1:
-                        et_title = st.text_input("Title", value=t["title"],
-                                                  key=f"_et_t_{tid}")
-                        et_assignee = st.text_input("Assignee", value=assignee,
-                                                     key=f"_et_a_{tid}")
-                        et_status = st.selectbox("Status",
-                            ["not_started", "in_progress", "complete", "at_risk", "blocked"],
-                            index=["not_started", "in_progress", "complete",
-                                   "at_risk", "blocked"].index(t_status)
-                            if t_status in ["not_started", "in_progress", "complete",
-                                            "at_risk", "blocked"] else 0,
-                            key=f"_et_s_{tid}")
-                    with etc2:
-                        et_start = st.date_input("Start",
-                            value=dt_date.fromisoformat(t["start_date"]) if t["start_date"] else None,
-                            key=f"_et_sd_{tid}")
-                        et_end = st.date_input("End",
-                            value=dt_date.fromisoformat(t["end_date"]) if t["end_date"] else None,
-                            key=f"_et_ed_{tid}")
-                        et_hours = st.number_input("Est Hours", value=float(est),
-                                                    min_value=0.0, step=4.0,
-                                                    key=f"_et_h_{tid}")
-                    et_progress = st.slider("Progress %", 0, 100, int(prog),
-                                             key=f"_et_p_{tid}")
-
-                    efc1, efc2, efc3 = st.columns([2, 2, 1])
-                    with efc1:
-                        if st.form_submit_button("Save", type="primary",
-                                                  use_container_width=True):
-                            connector = SQLiteConnector(DB_PATH)
-                            try:
-                                connector.save_task(
-                                    project_id=project.id, title=et_title.strip(),
-                                    milestone_id=mid, assignee=et_assignee or None,
-                                    start_date=et_start.isoformat() if et_start else None,
-                                    end_date=et_end.isoformat() if et_end else None,
-                                    est_hours=et_hours, status=et_status,
-                                    progress_pct=float(et_progress),
-                                    task_id=tid, actor=user,
-                                )
-                            finally:
-                                connector.close()
-                            st.session_state.pop(f"_task_editing_{tid}", None)
-                            st.cache_data.clear()
-                            st.rerun()
-                    with efc2:
-                        if st.form_submit_button("Cancel", use_container_width=True):
-                            st.session_state.pop(f"_task_editing_{tid}", None)
-                            st.rerun()
-                    with efc3:
-                        if st.form_submit_button("🗑️", use_container_width=True):
-                            connector = SQLiteConnector(DB_PATH)
-                            try:
-                                connector.delete_task(tid, actor=user)
-                            finally:
-                                connector.close()
-                            st.session_state.pop(f"_task_editing_{tid}", None)
-                            st.cache_data.clear()
-                            st.rerun()
-
-    # Unassigned tasks (no milestone)
-    if unassigned_tasks:
+    # Unassigned tasks
+    if unassigned:
         st.markdown(
             f'<div style="background:#FFFFFF; border-radius:10px; padding:0.75rem 1rem;'
             f' box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-top:1rem;'
@@ -1672,22 +1473,234 @@ def _render_project_plan(project, milestones: list, tasks: list, user: str):
             f'<span style="font-size:0.9rem; font-weight:700; color:{NAVY};">'
             f'📌 Unassigned Tasks</span>'
             f'<span style="font-size:0.73rem; color:#6C757D; margin-left:0.5rem;">'
-            f'{len(unassigned_tasks)} tasks</span></div>',
+            f'{len(unassigned)} tasks</span></div>',
             unsafe_allow_html=True,
         )
-        for t in unassigned_tasks:
-            t_s_style, t_s_label = _STATUS_STYLE.get(t["status"],
-                ("background:#E9ECEF; color:#495057;", t["status"]))
-            st.markdown(
-                f'<div style="background:#FAFBFC; border-radius:8px; padding:0.55rem 0.85rem;'
-                f' margin:0.2rem 0 0.2rem 1.5rem; border:1px solid #E8ECF1;">'
-                f'<span style="font-size:0.82rem; font-weight:500; color:{NAVY};">'
-                f'{t["title"]}</span>'
-                f' <span style="{t_s_style} display:inline-block; padding:0.1rem 0.4rem;'
-                f' border-radius:8px; font-size:0.65rem; font-weight:600;">{t_s_label}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+        for t in unassigned:
+            _render_task_card(t, project, user)
+
+
+def _render_task_card(t, project, user):
+    """Render a single task card with compact action buttons."""
+    tid = t["id"]
+    t_status = t["status"]
+    t_s_style, t_s_label = _MS_STATUS_STYLE.get(
+        t_status, ("background:#E9ECEF; color:#495057;", t_status))
+    assignee = t.get("assignee") or ""
+    est = t["est_hours"] or 0
+    prog = t["progress_pct"] or 0
+
+    assignee_html = ""
+    if assignee:
+        ini = assignee[0].upper()
+        assignee_html = (
+            f'<span style="display:inline-flex; align-items:center; gap:0.2rem;'
+            f' font-size:0.72rem; color:#5A6A7E;">'
+            f'<span style="width:18px; height:18px; border-radius:50%;'
+            f' background:{NAVY}; color:white; display:inline-flex;'
+            f' align-items:center; justify-content:center;'
+            f' font-size:0.55rem; font-weight:700;">{ini}</span>'
+            f'{assignee}</span>')
+
+    hours_html = (f'<span style="font-size:0.72rem; color:#6C757D;">'
+                  f'{est:.0f}h</span>' if est else "")
+
+    bar_c = GREEN if t_status == "complete" else (
+        BLUE if t_status == "in_progress" else (
+            YELLOW if t_status == "at_risk" else (
+                RED if t_status == "blocked" else GRAY)))
+    prog_val = 100.0 if t_status == "complete" else prog
+
+    st.markdown(
+        f'<div style="background:#FAFBFC; border-radius:8px; padding:0.55rem 0.85rem;'
+        f' margin:0.2rem 0 0.15rem 1.5rem; border:1px solid #E8ECF1;">'
+        f'<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem;">'
+        f'<span style="font-size:0.82rem; font-weight:500; color:{NAVY};">'
+        f'{t["title"]}</span>'
+        f'<span style="{t_s_style} display:inline-block; padding:0.1rem 0.4rem;'
+        f' border-radius:8px; font-size:0.65rem; font-weight:600;">{t_s_label}</span>'
+        f'{assignee_html} {hours_html}'
+        f'</div>'
+        f'<div style="height:3px; background:#E9ECEF; border-radius:2px;'
+        f' overflow:hidden; margin-top:0.35rem;">'
+        f'<div style="width:{prog_val:.0f}%; height:100%;'
+        f' background:{bar_c}; border-radius:2px;"></div></div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Compact action row
+    if t_status != "complete":
+        tc1, tc2, tc3 = st.columns([1, 1, 6])
+        with tc1:
+            if st.button("✅", key=f"_td_{tid}", help="Complete",
+                          use_container_width=True):
+                connector = SQLiteConnector(DB_PATH)
+                try:
+                    connector.complete_task(tid, actor=user)
+                finally:
+                    connector.close()
+                st.cache_data.clear()
+                st.rerun()
+        with tc2:
+            if st.button("✏️", key=f"_te_{tid}", help="Edit",
+                          use_container_width=True):
+                st.session_state["_open_dlg"] = f"edit_task_{tid}"
+                st.rerun()
+
+
+# ── Dialog dispatcher ──────────────────────────────────────────────
+def _dispatch_dialogs(project, milestones):
+    """Route session state to the appropriate dialog modal."""
+    dlg = st.session_state.get("_open_dlg")
+    if not dlg:
+        return
+    if dlg == "add_ms":
+        _dlg_add_milestone(project)
+    elif dlg == "add_task":
+        _dlg_add_task(project, milestones)
+    elif dlg == "enable_plan":
+        _dlg_enable_plan(project, milestones)
+    elif dlg.startswith("edit_ms_"):
+        mid = int(dlg.split("_")[-1])
+        ms = next((m for m in milestones if m["id"] == mid), None)
+        if ms:
+            _dlg_edit_milestone(project, ms)
+        else:
+            st.session_state.pop("_open_dlg", None)
+    elif dlg.startswith("edit_task_"):
+        tid = int(dlg.split("_")[-1])
+        connector = SQLiteConnector(DB_PATH)
+        try:
+            tasks = connector.get_tasks(project.id)
+        finally:
+            connector.close()
+        task = next((t for t in tasks if t["id"] == tid), None)
+        if task:
+            _dlg_edit_task(project, task, milestones)
+        else:
+            st.session_state.pop("_open_dlg", None)
+
+
+# ── Main orchestrator ──────────────────────────────────────────────
+def _render_project_plan_section(project):
+    """Render the Project Plan section with clean tab navigation."""
+    connector = SQLiteConnector(DB_PATH)
+    try:
+        milestones = connector.get_milestones(project.id)
+        tasks = connector.get_tasks(project.id)
+    finally:
+        connector.close()
+
+    has_plan = len(tasks) > 0
+    user = st.session_state.get("user_display_name", "Brett Anderson")
+
+    section_header("Project Plan & Milestones")
+
+    # --- Empty state ---
+    if not milestones and not has_plan:
+        st.markdown(
+            '<div style="background:#FFFFFF; border-radius:12px; padding:1.5rem;'
+            ' box-shadow:0 1px 3px rgba(0,0,0,0.08); text-align:center;'
+            ' color:#8BA4C4; margin-bottom:1rem;">'
+            '<div style="font-size:2rem; margin-bottom:0.5rem;">📋</div>'
+            '<div style="font-size:0.9rem; font-weight:500;">No milestones defined yet</div>'
+            '<div style="font-size:0.8rem; margin-top:0.25rem;">'
+            'Add milestones to track key deliverables and gate reviews.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    # --- Toolbar: single row of action buttons ---
+    toolbar_items = []
+    toolbar_items.append("add_ms")
+    if not milestones:
+        toolbar_items.append("sdlc")
+    if has_plan:
+        toolbar_items.append("add_task")
+        toolbar_items.append("rollup")
+    elif milestones:
+        toolbar_items.append("enable_plan")
+
+    btn_cols = st.columns(len(toolbar_items)) if toolbar_items else []
+    for i, btn in enumerate(toolbar_items):
+        with btn_cols[i]:
+            if btn == "add_ms":
+                if st.button("➕ Add Milestone", key="_tb_add_ms",
+                              use_container_width=True):
+                    st.session_state["_open_dlg"] = "add_ms"
+                    st.rerun()
+            elif btn == "sdlc":
+                if st.button("📋 SDLC Template", key="_tb_sdlc",
+                              use_container_width=True, type="primary"):
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        sd = project.start_date.isoformat() if project.start_date else None
+                        ed = project.end_date.isoformat() if project.end_date else None
+                        connector.seed_sdlc_milestones(project.id, sd, ed, actor=user)
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+            elif btn == "add_task":
+                if st.button("➕ Add Task", key="_tb_add_task",
+                              use_container_width=True):
+                    st.session_state["_open_dlg"] = "add_task"
+                    st.rerun()
+            elif btn == "rollup":
+                if st.button("🔄 Rollup Progress", key="_tb_rollup",
+                              use_container_width=True,
+                              help="Recalculate progress from tasks"):
+                    connector = SQLiteConnector(DB_PATH)
+                    try:
+                        connector.rollup_milestone_progress(project.id)
+                        new_pct = connector.rollup_project_progress(project.id)
+                        conn = connector._open()
+                        conn.execute(
+                            "UPDATE projects SET pct_complete=?, updated_at=datetime('now') WHERE id=?",
+                            (new_pct, project.id))
+                        conn.commit()
+                    finally:
+                        connector.close()
+                    st.cache_data.clear()
+                    st.rerun()
+            elif btn == "enable_plan":
+                if st.button("📊 Enable Full Plan", key="_tb_enable",
+                              use_container_width=True,
+                              help="Add tasks, Gantt chart & progress rollups"):
+                    st.session_state["_open_dlg"] = "enable_plan"
+                    st.rerun()
+
+    # --- Dispatch any open dialog ---
+    _dispatch_dialogs(project, milestones)
+
+    # --- Tabs ---
+    if not milestones and not has_plan:
+        return
+
+    has_dated = (any(m["due_date"] for m in milestones)
+                 or any(t.get("start_date") and t.get("end_date") for t in tasks))
+
+    tab_labels = ["📋 Milestones"]
+    if has_dated:
+        tab_labels.append("📊 Gantt")
+    if has_plan:
+        tab_labels.append("📝 Tasks")
+
+    tabs = st.tabs(tab_labels)
+    tab_idx = 0
+
+    with tabs[tab_idx]:
+        _render_milestones_tab(project, milestones, has_plan, user)
+    tab_idx += 1
+
+    if has_dated:
+        with tabs[tab_idx]:
+            _render_gantt_tab(milestones, tasks)
+        tab_idx += 1
+
+    if has_plan:
+        with tabs[tab_idx]:
+            _render_tasks_tab(project, milestones, tasks, user)
 
 
 @st.dialog("Project Activity", width="large")
