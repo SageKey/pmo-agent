@@ -108,11 +108,18 @@ def render(data: dict, utilization: dict, person_demand: list):
     on_track = health_counts.get("On Track", 0)
     needs_help = health_counts.get("Needs Help", 0)
     at_risk_h = health_counts.get("At Risk", 0)
+    not_started = health_counts.get("Not Started", 0)
+    needs_spec = (health_counts.get("Needs Func Spec", 0)
+                  + health_counts.get("Needs Tech Spec", 0)
+                  + health_counts.get("Needs Spec", 0))
+    # "in progress" = active projects that aren't on track, at risk, needs help,
+    # not started, or needs spec — they're moving but haven't been flagged
+    in_progress = n_active - on_track - needs_help - at_risk_h - not_started - needs_spec
 
     # Health signal for KPI colors
     if needs_help > 0:
         health_signal = "red"
-    elif at_risk_h > 0 or (n_active > 0 and on_track / n_active < 0.5):
+    elif at_risk_h > 0:
         health_signal = "yellow"
     else:
         health_signal = "green"
@@ -126,32 +133,33 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     capacity_signal = "red" if roles_over > 0 else ("yellow" if roles_warning > 0 else "green")
 
-    # Portfolio completion — weighted average by estimated hours
-    total_est = sum(p.est_hours for p in active if p.est_hours > 0)
-    if total_est > 0:
-        portfolio_pct = sum(p.pct_complete * p.est_hours for p in active
-                            if p.est_hours > 0) / total_est
-    else:
-        portfolio_pct = sum(p.pct_complete for p in active) / n_active if n_active else 0
+    # Build health breakdown string — only mention non-zero categories
+    health_parts = []
+    if needs_help > 0:
+        health_parts.append(f"{needs_help} needs help")
+    if at_risk_h > 0:
+        health_parts.append(f"{at_risk_h} at risk")
+    if needs_spec > 0:
+        health_parts.append(f"{needs_spec} awaiting spec")
+    if not_started > 0:
+        health_parts.append(f"{not_started} not started")
+    if in_progress > 0:
+        health_parts.append(f"{in_progress} in progress")
+    health_delta = " · ".join(health_parts) if health_parts else "All projects on track"
 
-    if portfolio_pct >= 0.7:
-        completion_signal = "green"
-    elif portfolio_pct >= 0.4:
-        completion_signal = "navy"
-    else:
-        completion_signal = "navy"
+    # Total projects across all statuses
+    n_total = n_active + n_complete + n_postponed
 
     # ==================================================================
     # TIER 1 — Portfolio Health KPIs (2-second scan)
     # ==================================================================
     kpi_row([
-        {"label": "Portfolio Health", "value": f"{on_track}/{n_active} On Track",
+        {"label": "Portfolio Health", "value": f"{on_track} On Track",
          "color": health_signal,
-         "delta": (f"{needs_help} needs help · {at_risk_h} at risk"
-                   if needs_help + at_risk_h > 0 else "All projects healthy")},
-        {"label": "Portfolio Completion", "value": f"{portfolio_pct:.0%}",
-         "color": completion_signal,
-         "delta": f"{n_active} active · {n_complete} complete"},
+         "delta": health_delta},
+        {"label": "Total Projects", "value": n_total,
+         "color": "navy",
+         "delta": f"{n_active} active · {n_complete} complete · {n_postponed} postponed"},
         {"label": "Avg Utilization", "value": f"{avg_util:.0%}",
          "color": util_signal,
          "delta": f"{len(roster)} team members"},
