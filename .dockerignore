@@ -1,0 +1,60 @@
+# ----------------------------------------------------------------------------
+# Railway/Docker build context exclusions.
+#
+# Keep this small — the build context is sent to the buildkit worker on every
+# deploy. Anything not needed by backend/Dockerfile should be excluded here.
+# ----------------------------------------------------------------------------
+
+# Version control
+.git/
+.gitignore
+.github/
+
+# Frontend — never needed inside the backend image
+frontend/
+
+# Local Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.python-version
+
+# Databases (will be seeded on first boot from seed_data.sql instead)
+*.db
+*.db-shm
+*.db-wal
+
+# Local env files (env vars are set via Railway UI)
+.env
+backend/.env
+backend/.env.example
+
+# Excel / docs / misc that the backend doesn't need
+*.xlsx
+*.rtf
+README.md
+DEPLOY.md
+ai\ agent\ spec.rtf
+
+# Streamlit-only code that the backend doesn't load
+app.py
+start_streamlit.sh
+pages_*.py
+excel_dashboard.py
+data_layer.py
+components.py
+import_synnergie.py
+migrate_excel_to_sqlite.py
+test_*.py
+tests/
+
+# IDE + OS cruft
+.vscode/
+.idea/
+.DS_Store
+.claude/
+
+# Plans / attachments
+attachments/
