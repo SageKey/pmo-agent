@@ -8,13 +8,11 @@ import {
   XCircle,
   Loader2,
   Activity,
-  ChevronRight,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { pct } from "@/lib/format";
 import { useSchedulePortfolio } from "@/hooks/useScenario";
 import type { ScenarioModification, InFlightProject } from "@/types/scenario";
 
