@@ -1,0 +1,14 @@
+[project]
+name = "pmo-agent-backend"
+version = "0.1.0"
+description = "FastAPI layer over the ETE PMO Python engines (sqlite_connector, capacity_engine, schedule_optimizer, pmo_agent)."
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.4",
+]
+
+[tool.uvicorn]
+app = "app.main:app"

@@ -7,3 +7,13 @@ __pycache__/
 .claude/
 attachments/
 ETE PMO Resource Planner.xlsx
+
+# Frontend (React / Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.node/
+frontend/.env
+
+# Backend (FastAPI)
+backend/.env
+backend/.venv/
