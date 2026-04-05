@@ -249,3 +249,78 @@ class TestUnknownModificationType:
         # Pydantic discriminated union rejects with 422 before it reaches
         # the engine's ValueError path — either is acceptable
         assert r.status_code in (400, 422)
+
+
+# ===========================================================================
+# POST /scenarios/schedule-portfolio — auto-scheduler
+# ===========================================================================
+
+class TestSchedulePortfolio:
+    def test_returns_scheduled_projects(self, api_client):
+        r = api_client.post(f"{API}/schedule-portfolio", json={})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert "projects" in body
+        assert isinstance(body["projects"], list)
+        assert "can_start_now_count" in body
+        assert "waiting_count" in body
+        assert "infeasible_count" in body
+        assert "bottleneck_roles" in body
+        assert "max_util_pct" in body
+        assert "horizon_weeks" in body
+
+    def test_projects_have_required_shape(self, api_client):
+        body = api_client.post(f"{API}/schedule-portfolio", json={}).json()
+        for p in body["projects"]:
+            for key in ("project_id", "project_name", "priority", "est_hours",
+                        "suggested_start", "duration_weeks", "can_start_now"):
+                assert key in p, f"project missing {key}"
+
+    def test_counts_add_up(self, api_client):
+        body = api_client.post(f"{API}/schedule-portfolio", json={}).json()
+        total = (
+            body["can_start_now_count"]
+            + body["waiting_count"]
+            + body["infeasible_count"]
+        )
+        assert total == len(body["projects"])
+
+    def test_custom_horizon(self, api_client):
+        body = api_client.post(
+            f"{API}/schedule-portfolio",
+            json={"horizon_weeks": 12},
+        ).json()
+        assert body["horizon_weeks"] == 12
+
+    def test_custom_threshold(self, api_client):
+        body = api_client.post(
+            f"{API}/schedule-portfolio",
+            json={"max_util_pct": 0.5},
+        ).json()
+        assert body["max_util_pct"] == 0.5
+
+    def test_exclude_ids(self, api_client):
+        # Get baseline count
+        full = api_client.post(f"{API}/schedule-portfolio", json={}).json()
+        if not full["projects"]:
+            pytest.skip("No plannable projects in seed")
+
+        excluded_id = full["projects"][0]["project_id"]
+        reduced = api_client.post(
+            f"{API}/schedule-portfolio",
+            json={"exclude_ids": [excluded_id]},
+        ).json()
+        excluded_ids = {p["project_id"] for p in reduced["projects"]}
+        assert excluded_id not in excluded_ids
+
+    def test_respects_admin_threshold(self, api_client):
+        """When max_util_pct is omitted, the scheduler should use the admin
+        util_stretched_max value from app_settings."""
+        # Set a very tight threshold via admin
+        api_client.put("/api/v1/settings/util_stretched_max", json={"value": "0.30"})
+
+        body = api_client.post(f"{API}/schedule-portfolio", json={}).json()
+        assert body["max_util_pct"] == pytest.approx(0.30)
+
+        # Reset to normal
+        api_client.put("/api/v1/settings/util_stretched_max", json={"value": "1.00"})

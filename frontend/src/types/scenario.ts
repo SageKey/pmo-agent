@@ -80,3 +80,37 @@ export interface ScenarioEvaluateResponse {
   deltas: ScenarioDelta[];
   summary: ScenarioSummary;
 }
+
+// ---------------------------------------------------------------------------
+// Auto-scheduler — project placement
+// ---------------------------------------------------------------------------
+
+export interface SchedulePortfolioRequest {
+  max_util_pct?: number;
+  horizon_weeks?: number;
+  exclude_ids?: string[];
+}
+
+export interface ScheduledProject {
+  project_id: string;
+  project_name: string;
+  priority: string;
+  est_hours: number;
+  health: string;
+  suggested_start: string | null;
+  suggested_end: string | null;
+  duration_weeks: number;
+  wait_weeks: number | null;
+  bottleneck_role: string | null;
+  can_start_now: boolean;
+}
+
+export interface SchedulePortfolioResponse {
+  max_util_pct: number;
+  horizon_weeks: number;
+  projects: ScheduledProject[];
+  can_start_now_count: number;
+  waiting_count: number;
+  infeasible_count: number;
+  bottleneck_roles: Record<string, number>;
+}

@@ -116,3 +116,59 @@ class ScenarioEvaluateResponse(BaseModel):
     scenario: UtilizationSide
     deltas: List[ScenarioDelta]
     summary: ScenarioSummary
+
+
+# ---------------------------------------------------------------------------
+# Auto-scheduling — "when can plannable projects start?"
+# ---------------------------------------------------------------------------
+
+class SchedulePortfolioRequest(BaseModel):
+    """Request body for POST /scenarios/schedule-portfolio.
+
+    Wraps CapacityEngine.simulate_portfolio_schedule. All fields optional;
+    defaults use the admin utilization threshold from app_settings if set,
+    otherwise 0.85.
+    """
+    max_util_pct: Optional[float] = Field(
+        None,
+        ge=0.1,
+        le=2.0,
+        description="Max utilization allowed for a week to count as feasible. Defaults to admin util_stretched_max.",
+    )
+    horizon_weeks: int = Field(
+        52,
+        ge=4,
+        le=156,
+        description="How many weeks forward to scan for open slots.",
+    )
+    exclude_ids: List[str] = Field(
+        default_factory=list,
+        description="Project IDs to skip in the schedule (e.g. already committed out-of-band).",
+    )
+
+
+class ScheduledProject(BaseModel):
+    project_id: str
+    project_name: str
+    priority: str
+    est_hours: float
+    health: str
+    suggested_start: Optional[str] = None  # ISO date, None = infeasible in horizon
+    suggested_end: Optional[str] = None
+    duration_weeks: float
+    wait_weeks: Optional[int] = None
+    bottleneck_role: Optional[str] = None
+    can_start_now: bool
+
+
+class SchedulePortfolioResponse(BaseModel):
+    """Response from the auto-scheduler. `summary` gives at-a-glance stats;
+    `projects` is the per-project placement sorted by suggested_start."""
+    max_util_pct: float              # the value actually used (resolved from admin if omitted)
+    horizon_weeks: int
+    projects: List[ScheduledProject]
+    # Counts for the UI summary banner
+    can_start_now_count: int
+    waiting_count: int
+    infeasible_count: int
+    bottleneck_roles: Dict[str, int]  # role_key → how many projects blocked by it

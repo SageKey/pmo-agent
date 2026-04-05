@@ -14,14 +14,17 @@ from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..deps import get_capacity
-from ..engines import CapacityEngine
+from ..deps import get_capacity, get_connector
+from ..engines import CapacityEngine, SQLiteConnector
 from ..schemas.scenario import (
     RoleUtilSnapshot,
     ScenarioDelta,
     ScenarioEvaluateRequest,
     ScenarioEvaluateResponse,
     ScenarioSummary,
+    ScheduledProject,
+    SchedulePortfolioRequest,
+    SchedulePortfolioResponse,
     UtilizationSide,
 )
 
@@ -178,4 +181,56 @@ def evaluate_scenario(
         scenario=UtilizationSide(roles=scenario_roles),
         deltas=deltas,
         summary=summary,
+    )
+
+
+@router.post("/schedule-portfolio", response_model=SchedulePortfolioResponse)
+def schedule_portfolio(
+    payload: SchedulePortfolioRequest,
+    engine: CapacityEngine = Depends(get_capacity),
+    conn: SQLiteConnector = Depends(get_connector),
+) -> SchedulePortfolioResponse:
+    """Auto-schedule plannable projects using the capacity engine's greedy
+    scheduler. Returns suggested start/end dates for each project that
+    isn't already in-development, sorted by suggested_start.
+
+    Respects the admin utilization threshold if no override is provided.
+    """
+    # Resolve max_util_pct: request value > admin threshold > hardcoded 0.85
+    max_util = payload.max_util_pct
+    if max_util is None:
+        try:
+            thresholds = conn.read_utilization_thresholds()
+            max_util = thresholds.get("stretched", {}).get("max", 0.85)
+        except Exception:
+            max_util = 0.85
+
+    results = engine.simulate_portfolio_schedule(
+        max_util_pct=max_util,
+        horizon_weeks=payload.horizon_weeks,
+        exclude_ids=payload.exclude_ids,
+    )
+
+    projects = [ScheduledProject(**r) for r in results]
+
+    can_now = sum(1 for p in projects if p.can_start_now)
+    waiting = sum(1 for p in projects if p.suggested_start and not p.can_start_now)
+    infeasible = sum(1 for p in projects if not p.suggested_start)
+
+    # Count which roles are the bottleneck and how often
+    bottleneck_counts: Dict[str, int] = {}
+    for p in projects:
+        if p.bottleneck_role and not p.can_start_now:
+            bottleneck_counts[p.bottleneck_role] = (
+                bottleneck_counts.get(p.bottleneck_role, 0) + 1
+            )
+
+    return SchedulePortfolioResponse(
+        max_util_pct=max_util,
+        horizon_weeks=payload.horizon_weeks,
+        projects=projects,
+        can_start_now_count=can_now,
+        waiting_count=waiting,
+        infeasible_count=infeasible,
+        bottleneck_roles=bottleneck_counts,
     )
