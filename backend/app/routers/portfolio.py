@@ -1,6 +1,7 @@
 """Portfolio (projects) router."""
 
-from typing import List
+from datetime import date
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -14,6 +15,8 @@ from ..schemas.project_detail import (
     ProjectTimelineResponse,
     ProjectTimelineWeek,
 )
+from ..schemas.project_create import ProjectCreate
+from ..schemas.project_update import ProjectUpdate
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -32,6 +35,38 @@ def list_projects(
 ) -> List[ProjectOut]:
     projects = conn.read_active_portfolio() if active_only else conn.read_portfolio()
     return [ProjectOut.from_dataclass(p) for p in projects]
+
+
+@router.post("/", response_model=ProjectOut, status_code=201)
+def create_project(
+    payload: ProjectCreate,
+    conn: SQLiteConnector = Depends(get_connector),
+) -> ProjectOut:
+    # Check for duplicate ID
+    if any(p.id == payload.id for p in conn.read_portfolio()):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project {payload.id} already exists.",
+        )
+
+    data = payload.model_dump(exclude_unset=True)
+    fields: Dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "role_allocations":
+            if value:
+                for role_key, alloc in value.items():
+                    fields[f"alloc_{role_key}"] = alloc
+            continue
+        if isinstance(value, date):
+            fields[key] = value.isoformat()
+        else:
+            fields[key] = value
+
+    err = conn.save_project(fields, is_new=True)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    return ProjectOut.from_dataclass(_find_project(conn, payload.id))
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -67,6 +102,38 @@ def project_demand(
         total_est_hours=project.est_hours or 0.0,
         roles=roles,
     )
+
+
+@router.patch("/{project_id}", response_model=ProjectOut)
+def update_project(
+    project_id: str,
+    patch: ProjectUpdate,
+    conn: SQLiteConnector = Depends(get_connector),
+) -> ProjectOut:
+    """Partial update. Only supplied fields are written."""
+    # Confirm the project exists first so we can surface a clean 404.
+    _find_project(conn, project_id)
+
+    # Build the fields dict save_project expects: flat column names, plus
+    # "alloc_{role}" keys for role allocations. Dates are ISO strings.
+    payload = patch.model_dump(exclude_unset=True)
+    fields: Dict[str, Any] = {"id": project_id}
+    for key, value in payload.items():
+        if key == "role_allocations":
+            if value:
+                for role_key, alloc in value.items():
+                    fields[f"alloc_{role_key}"] = alloc
+            continue
+        if isinstance(value, date):
+            fields[key] = value.isoformat()
+        else:
+            fields[key] = value
+
+    err = conn.save_project(fields, is_new=False)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    return ProjectOut.from_dataclass(_find_project(conn, project_id))
 
 
 @router.get("/{project_id}/timeline", response_model=ProjectTimelineResponse)

@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
+import { Button } from "@/components/ui/button";
 import { type SortState } from "@/components/portfolio/ProjectTable";
 import { ProjectGroup } from "@/components/portfolio/ProjectGroup";
+import { NewProjectDialog } from "@/components/portfolio/NewProjectDialog";
 import {
   PortfolioToolbar,
   type PortfolioFilters,
@@ -96,6 +99,7 @@ export function Portfolio() {
   const [sort, setSort] = useState<SortState>({ key: "priority", dir: "asc" });
   const [archiveManualExpanded, setArchiveManualExpanded] = useState(false);
   const [inFlightExpanded, setInFlightExpanded] = useState(true);
+  const [newOpen, setNewOpen] = useState(false);
 
   // Always fetch the full portfolio; grouping happens client-side.
   const { data, isLoading, isError, error } = usePortfolio(false);
@@ -199,6 +203,13 @@ export function Portfolio() {
         subtitle="Everything in flight, with archived work one click away."
       />
       <div className="space-y-5 p-8">
+        <div className="flex items-center justify-between">
+          <div />
+          <Button onClick={() => setNewOpen(true)}>
+            <Plus className="h-4 w-4" />
+            New project
+          </Button>
+        </div>
         <PortfolioToolbar
           filters={filters}
           onChange={setFilters}
@@ -248,6 +259,8 @@ export function Portfolio() {
           </div>
         )}
       </div>
+
+      <NewProjectDialog open={newOpen} onOpenChange={setNewOpen} />
     </>
   );
 }

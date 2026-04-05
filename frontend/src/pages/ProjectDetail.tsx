@@ -44,8 +44,12 @@ export function ProjectDetail() {
       {demand.data && <RoleDemandCard demand={demand.data} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {milestones.data && <MilestonesPanel milestones={milestones.data} />}
-        {comments.data && <CommentsPanel comments={comments.data} />}
+        {milestones.data && projectId && (
+          <MilestonesPanel projectId={projectId} milestones={milestones.data} />
+        )}
+        {comments.data && projectId && (
+          <CommentsPanel projectId={projectId} comments={comments.data} />
+        )}
       </div>
     </div>
   );

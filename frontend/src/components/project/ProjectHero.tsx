@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import type { Project } from "@/types/project";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { HealthBadge } from "@/components/portfolio/HealthBadge";
 import { PriorityPill } from "@/components/portfolio/PriorityPill";
+import { EditProjectDialog } from "@/components/project/EditProjectDialog";
 import { avatarTone, initials, pct, relativeDate, shortDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -18,6 +21,7 @@ const RELATIVE_TONE: Record<string, string> = {
 export function ProjectHero({ project }: { project: Project }) {
   const rel = relativeDate(project.end_date);
   const completion = Math.min(Math.max(project.pct_complete, 0), 1);
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <motion.div
@@ -27,13 +31,19 @@ export function ProjectHero({ project }: { project: Project }) {
     >
       <Card className="ring-1 ring-inset ring-slate-200">
         <div className="p-6">
-          <Link
-            to="/portfolio"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Portfolio
-          </Link>
+          <div className="flex items-center justify-between">
+            <Link
+              to="/portfolio"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Portfolio
+            </Link>
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </Button>
+          </div>
 
           <div className="mt-3 flex items-start gap-5">
             <div
@@ -107,6 +117,11 @@ export function ProjectHero({ project }: { project: Project }) {
           </div>
         </div>
       </Card>
+      <EditProjectDialog
+        project={project}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
     </motion.div>
   );
 }
