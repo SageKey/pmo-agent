@@ -769,13 +769,23 @@ def gantt_chart(
     else:
         x_scale = alt.Undefined
 
+    # Row sizing — taller bars + generous row spacing for readability
+    bar_height = 26
+    row_step = 42  # total px per row (bar + padding)
+    total_height = max(420, len(df) * row_step + 80)
+
     y_enc = alt.Y(
         "RowLabel:N",
         sort=row_order,
         title=None,
-        axis=alt.Axis(labelFontSize=10, labelLimit=320, ticks=False,
-                      domain=False, grid=True, gridOpacity=0.3),
+        scale=alt.Scale(paddingInner=0.35, paddingOuter=0.25),
+        axis=alt.Axis(
+            labelFontSize=12, labelLimit=380, labelPadding=8,
+            ticks=False, domain=False, grid=True, gridOpacity=0.3,
+            labelColor="#1B3A5C", labelFontWeight=500,
+        ),
     )
+    # Bottom x-axis (month labels)
     x_enc = alt.X(
         "Start:T",
         title=None,
@@ -783,40 +793,65 @@ def gantt_chart(
         axis=alt.Axis(
             labelFontSize=11, format="%b %Y",
             tickCount="month", grid=True, gridOpacity=0.4,
-            domain=False,
+            domain=False, labelPadding=6, orient="bottom",
+        ),
+    )
+    # Top x-axis (mirror of bottom, so users always see month refs)
+    x_enc_top = alt.X(
+        "Start:T",
+        title=None,
+        scale=x_scale,
+        axis=alt.Axis(
+            labelFontSize=11, format="%b %Y",
+            tickCount="month", grid=False,
+            domain=False, labelPadding=6, orient="top",
         ),
     )
 
-    bar_height = 18
-    total_height = max(280, len(df) * (bar_height + 10) + 60)
+    layers = []
+
+    # Zebra-stripe background — alternating row tint for readability
+    stripe_df = df.copy()
+    stripe_df["_stripe"] = [i % 2 for i in range(len(stripe_df))]
+    stripes = alt.Chart(stripe_df[stripe_df["_stripe"] == 0]).mark_rect(
+        color="#F4F6F9", opacity=0.7,
+    ).encode(
+        y=alt.Y("RowLabel:N", sort=row_order,
+                scale=alt.Scale(paddingInner=0.0, paddingOuter=0.0)),
+    )
+    layers.append(stripes)
 
     # Background bar = full duration, muted
     bars_bg = alt.Chart(df).mark_bar(
-        cornerRadius=4, height=bar_height, opacity=0.28,
+        cornerRadius=5, height=bar_height, opacity=0.32, clip=True,
     ).encode(
         y=y_enc, x=x_enc, x2="End:T",
         color=color_enc,
         href=alt.Href("URL:N"),
         tooltip=tooltip,
     )
+    layers.append(bars_bg)
 
     # Progress overlay = start → progress_end, full opacity
-    bars_progress = alt.Chart(df).mark_bar(
-        cornerRadius=4, height=bar_height,
-    ).encode(
-        y=y_enc, x=x_enc, x2="ProgressEnd:T",
-        color=color_enc,
-        href=alt.Href("URL:N"),
-        tooltip=tooltip,
-    )
+    progress_df = df[df["PctComplete"] > 0]
+    if not progress_df.empty:
+        bars_progress = alt.Chart(progress_df).mark_bar(
+            cornerRadius=5, height=bar_height, clip=True,
+        ).encode(
+            y=alt.Y("RowLabel:N", sort=row_order),
+            x="Start:T", x2="ProgressEnd:T",
+            color=color_enc,
+            href=alt.Href("URL:N"),
+            tooltip=tooltip,
+        )
+        layers.append(bars_progress)
 
-    # Overdue outline (red stroke on bars past their end date and not complete)
+    # Overdue outline (red stroke on bars past end date & not complete)
     overdue_df = df[df["Overdue"]]
-    layers = [bars_bg, bars_progress]
     if not overdue_df.empty:
         overdue_outline = alt.Chart(overdue_df).mark_bar(
-            cornerRadius=4, height=bar_height,
-            fillOpacity=0, stroke=RED, strokeWidth=2,
+            cornerRadius=5, height=bar_height, clip=True,
+            fillOpacity=0, stroke=RED, strokeWidth=2.5,
         ).encode(
             y=alt.Y("RowLabel:N", sort=row_order),
             x="Start:T", x2="End:T",
@@ -827,14 +862,16 @@ def gantt_chart(
 
     # Start & End milestone diamonds
     start_points = alt.Chart(df).mark_point(
-        shape="diamond", size=70, filled=True, color=NAVY, opacity=0.85,
+        shape="diamond", size=95, filled=True, color=NAVY,
+        opacity=0.9, clip=True,
     ).encode(
         y=alt.Y("RowLabel:N", sort=row_order),
         x="Start:T",
         tooltip=tooltip,
     )
     end_points = alt.Chart(df).mark_point(
-        shape="diamond", size=70, filled=True, color=NAVY, opacity=0.85,
+        shape="diamond", size=95, filled=True, color=NAVY,
+        opacity=0.9, clip=True,
     ).encode(
         y=alt.Y("RowLabel:N", sort=row_order),
         x="End:T",
@@ -842,28 +879,36 @@ def gantt_chart(
     )
     layers += [start_points, end_points]
 
-    # % Complete text label at end of each bar
-    pct_labels = alt.Chart(df).mark_text(
-        align="left", baseline="middle", dx=8, fontSize=10,
-        fontWeight="bold", color=NAVY,
-    ).encode(
-        y=alt.Y("RowLabel:N", sort=row_order),
-        x="End:T",
-        text="PctLabel:N",
-    )
-    layers.append(pct_labels)
+    # % Complete text — only shown when > 0, positioned at end of bar
+    pct_df = df[df["PctComplete"] > 0]
+    if not pct_df.empty:
+        pct_labels = alt.Chart(pct_df).mark_text(
+            align="left", baseline="middle", dx=10, fontSize=11,
+            fontWeight="bold", color=NAVY, clip=True,
+        ).encode(
+            y=alt.Y("RowLabel:N", sort=row_order),
+            x="End:T",
+            text="PctLabel:N",
+        )
+        layers.append(pct_labels)
 
-    # Today line
+    # Today line + label
     today_df = pd.DataFrame({"date": [pd.to_datetime(today)],
                              "label": ["TODAY"]})
     today_rule = alt.Chart(today_df).mark_rule(
-        color=RED, strokeWidth=2, strokeDash=[5, 4],
-    ).encode(x="date:T")
+        color=RED, strokeWidth=2.5, strokeDash=[6, 4],
+    ).encode(x=alt.X("date:T", scale=x_scale))
     today_label = alt.Chart(today_df).mark_text(
-        text="TODAY", align="left", dx=5, dy=-5,
-        fontSize=10, fontWeight="bold", color=RED,
-    ).encode(x="date:T", y=alt.value(0))
+        text="TODAY", align="center", dy=-6,
+        fontSize=11, fontWeight="bold", color=RED,
+    ).encode(x=alt.X("date:T", scale=x_scale), y=alt.value(0))
     layers += [today_rule, today_label]
+
+    # Invisible helper layer providing the top (mirrored) month axis
+    top_axis_helper = alt.Chart(df.head(1)).mark_rule(opacity=0).encode(
+        x=x_enc_top,
+    )
+    layers.append(top_axis_helper)
 
     chart = alt.layer(*layers).properties(height=total_height)
 
