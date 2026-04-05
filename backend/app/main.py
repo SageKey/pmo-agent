@@ -21,10 +21,12 @@ from .routers import (
     capacity,
     comments,
     financials,
+    jira,
     meta,
     milestones,
     portfolio,
     roster,
+    snapshots,
     tasks,
     timesheets,
 )
@@ -59,6 +61,8 @@ def create_app() -> FastAPI:
     app.include_router(assignments.router, prefix=settings.api_prefix)
     app.include_router(financials.router, prefix=settings.api_prefix)
     app.include_router(timesheets.router, prefix=settings.api_prefix)
+    app.include_router(jira.router, prefix=settings.api_prefix)
+    app.include_router(snapshots.router, prefix=settings.api_prefix)
     app.include_router(agent.router, prefix=settings.api_prefix)
 
     return app

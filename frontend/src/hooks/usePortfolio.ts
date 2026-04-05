@@ -101,3 +101,18 @@ export function useCreateProject() {
     },
   });
 }
+
+export function useDeleteProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (projectId: string) => {
+      await api.delete(`/portfolio/${projectId}`);
+      return projectId;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: portfolioKeys.all });
+      qc.invalidateQueries({ queryKey: ["capacity"] });
+      qc.invalidateQueries({ queryKey: ["assignments"] });
+    },
+  });
+}

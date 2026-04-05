@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Archive, Loader2, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import type { Project } from "@/types/project";
 import {
   Dialog,
@@ -10,7 +11,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useUpdateProject, type ProjectPatch } from "@/hooks/usePortfolio";
+import {
+  useDeleteProject,
+  useUpdateProject,
+  type ProjectPatch,
+} from "@/hooks/usePortfolio";
 import { cn } from "@/lib/cn";
 
 const PRIORITY_OPTIONS = ["Highest", "High", "Medium", "Low"] as const;
@@ -101,6 +106,8 @@ export function EditProjectDialog({ project, open, onOpenChange }: Props) {
     allocsToForm(project),
   );
   const mutation = useUpdateProject(project.id);
+  const deleteMutation = useDeleteProject();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (open) {
@@ -117,6 +124,37 @@ export function EditProjectDialog({ project, open, onOpenChange }: Props) {
 
   const setAlloc = (roleKey: string, pct: string) => {
     setAllocs((a) => ({ ...a, [roleKey]: pct }));
+  };
+
+  const handleArchive = async () => {
+    if (
+      !confirm(
+        `Archive "${project.name}"? It will be marked POSTPONED and moved to the Archive group.`,
+      )
+    )
+      return;
+    try {
+      await mutation.mutateAsync({ health: "⏸️ POSTPONED" });
+      onOpenChange(false);
+    } catch {
+      /* error surfaces via mutation.error */
+    }
+  };
+
+  const handleDelete = async () => {
+    if (
+      !confirm(
+        `Permanently delete "${project.name}" (${project.id})? This removes all milestones, comments, assignments, and audit history. Cannot be undone.`,
+      )
+    )
+      return;
+    try {
+      await deleteMutation.mutateAsync(project.id);
+      onOpenChange(false);
+      navigate("/portfolio");
+    } catch {
+      /* error surfaces via mutation.error */
+    }
   };
 
   const handleSave = async () => {
@@ -304,18 +342,45 @@ export function EditProjectDialog({ project, open, onOpenChange }: Props) {
           </div>
         )}
 
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={mutation.isPending}
-          >
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={mutation.isPending}>
-            {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Save changes
-          </Button>
+        <DialogFooter className="!justify-between">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleArchive}
+              disabled={mutation.isPending || deleteMutation.isPending}
+              title="Mark project as postponed"
+            >
+              <Archive className="h-4 w-4" />
+              Archive
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleDelete}
+              disabled={mutation.isPending || deleteMutation.isPending}
+              className="text-red-700 hover:bg-red-50"
+              title="Permanently delete"
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={mutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={mutation.isPending}>
+              {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Save changes
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -8,6 +8,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { KpiCard } from "@/components/exec/KpiCard";
 import { ResourceHealthHero } from "@/components/exec/ResourceHealthHero";
 import { PriorityProjectRow } from "@/components/exec/PriorityProjectRow";
+import { ChangesCard } from "@/components/exec/ChangesCard";
 
 const PRIORITY_ORDER: Record<string, number> = {
   Highest: 0,
@@ -114,6 +115,9 @@ export function ExecutiveSummary() {
 
         {/* Hero: Resource health at a glance */}
         {util.data && <ResourceHealthHero roles={roles} delay={0.2} />}
+
+        {/* What changed since last snapshot */}
+        <ChangesCard delay={0.22} />
 
         {/* Top-priority projects list */}
         <motion.div

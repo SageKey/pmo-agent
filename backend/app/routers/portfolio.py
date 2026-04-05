@@ -136,6 +136,19 @@ def update_project(
     return ProjectOut.from_dataclass(_find_project(conn, project_id))
 
 
+@router.delete("/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    conn: SQLiteConnector = Depends(get_connector),
+) -> None:
+    """Hard delete a project and its allocations/assignments (cascades via FK)."""
+    _find_project(conn, project_id)
+    err = conn.delete_project(project_id)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return None
+
+
 @router.get("/{project_id}/timeline", response_model=ProjectTimelineResponse)
 def project_timeline(
     project_id: str,
