@@ -641,56 +641,235 @@ def supply_demand_chart(utilization: dict) -> alt.Chart:
     return chart.configure_view(strokeWidth=0)
 
 
-def gantt_chart(projects: list, color_by: str = "priority") -> alt.Chart:
-    """Horizontal bar Gantt chart of project timelines."""
+def gantt_chart(
+    projects: list,
+    color_by: str = "priority",
+    group_by: str = "none",
+    sort_by: str = "start",
+    date_range: tuple = None,
+) -> alt.Chart:
+    """World-class Gantt chart with today line, progress overlay, milestones,
+    grouping, and clickable bars.
+
+    Args:
+        projects: list of Project objects with start_date/end_date set.
+        color_by: "priority" | "health" | "portfolio"
+        group_by: "none" | "portfolio" | "pm" | "priority" | "health"
+        sort_by:  "start" | "end" | "priority" | "name"
+        date_range: optional (start_date, end_date) tuple to constrain x-axis.
+    """
+    from datetime import date, timedelta
+
+    priority_weight = {"Highest": 0, "High": 1, "Medium": 2, "Low": 3}
+
+    def _group_value(p):
+        if group_by == "portfolio":
+            return getattr(p, "portfolio", None) or "Unassigned"
+        if group_by == "pm":
+            return p.pm or "Unassigned"
+        if group_by == "priority":
+            return p.priority or "Unknown"
+        if group_by == "health":
+            return (p.health or "Unknown").title()
+        return ""
+
+    today = date.today()
     rows = []
     for p in projects:
         if not p.start_date or not p.end_date:
             continue
+        pct = p.pct_complete or 0.0
+        duration = (p.end_date - p.start_date).days or 1
+        progress_days = int(duration * max(0.0, min(1.0, pct)))
+        progress_end = p.start_date + timedelta(days=progress_days)
+        overdue = (p.end_date < today and pct < 1.0)
+        group = _group_value(p)
+        label = f"{p.id}: {p.name}"
         rows.append({
-            "Project": f"{p.id}: {p.name}",
-            "Start": p.start_date.isoformat(),
-            "End": p.end_date.isoformat(),
+            "ID": p.id,
+            "Project": label,
+            "Group": group,
+            "Start": pd.to_datetime(p.start_date),
+            "End": pd.to_datetime(p.end_date),
+            "ProgressEnd": pd.to_datetime(progress_end),
             "Priority": p.priority or "Unknown",
-            "Health": p.health or "Unknown",
-            "% Complete": f"{p.pct_complete:.0%}",
-            "PM": p.pm or "",
+            "Health": (p.health or "Unknown").title(),
+            "Portfolio": getattr(p, "portfolio", None) or "Unassigned",
+            "PM": p.pm or "—",
+            "PctComplete": pct,
+            "PctLabel": f"{pct:.0%}",
+            "Overdue": overdue,
+            "URL": f"?project={p.id}",
+            "_priority_rank": priority_weight.get(p.priority, 4),
         })
 
     df = pd.DataFrame(rows)
     if df.empty:
         return None
 
-    # Sort by priority weight then start date
-    priority_weight = {"Highest": 0, "High": 1, "Medium": 2, "Low": 3}
-    df["_sort"] = df["Priority"].map(lambda x: priority_weight.get(x, 4))
-    df = df.sort_values(["_sort", "Start"]).drop(columns=["_sort"])
+    # Sort: group first (if any), then by chosen sort
+    sort_cols = []
+    if group_by != "none":
+        sort_cols.append("Group")
+    if sort_by == "start":
+        sort_cols.append("Start")
+    elif sort_by == "end":
+        sort_cols.append("End")
+    elif sort_by == "priority":
+        sort_cols += ["_priority_rank", "Start"]
+    elif sort_by == "name":
+        sort_cols.append("Project")
+    df = df.sort_values(sort_cols).reset_index(drop=True)
 
-    if color_by == "priority":
-        color_enc = alt.Color("Priority:N",
-                              scale=alt.Scale(
-                                  domain=["Highest", "High", "Medium", "Low"],
-                                  range=[RED, "#E67E22", BLUE, GRAY]),
-                              legend=alt.Legend(title=None, orient="top"))
+    # Build ordered y-axis labels (prepend group when grouping)
+    if group_by != "none":
+        df["RowLabel"] = df["Group"] + "  •  " + df["Project"]
     else:
-        color_enc = alt.Color("Health:N",
-                              scale=alt.Scale(
-                                  domain=["GREEN", "YELLOW", "RED"],
-                                  range=[GREEN, YELLOW, RED]),
-                              legend=alt.Legend(title=None, orient="top"))
+        df["RowLabel"] = df["Project"]
+    row_order = list(df["RowLabel"])
 
-    chart = alt.Chart(df).mark_bar(cornerRadiusEnd=4, height=14).encode(
-        y=alt.Y("Project:N", sort=list(df["Project"]),
-                title=None,
-                axis=alt.Axis(labelFontSize=10, labelLimit=250)),
-        x=alt.X("Start:T", title=None, axis=alt.Axis(labelFontSize=10)),
-        x2="End:T",
+    # Color encoding
+    if color_by == "priority":
+        color_enc = alt.Color(
+            "Priority:N",
+            scale=alt.Scale(
+                domain=["Highest", "High", "Medium", "Low", "Unknown"],
+                range=[RED, "#E67E22", BLUE, GRAY, LIGHT_GRAY]),
+            legend=alt.Legend(title=None, orient="top", labelFontSize=11))
+    elif color_by == "health":
+        color_enc = alt.Color(
+            "Health:N",
+            scale=alt.Scale(
+                domain=["Green", "Yellow", "Red", "Unknown"],
+                range=[GREEN, YELLOW, RED, GRAY]),
+            legend=alt.Legend(title=None, orient="top", labelFontSize=11))
+    else:  # portfolio
+        color_enc = alt.Color(
+            "Portfolio:N",
+            legend=alt.Legend(title=None, orient="top", labelFontSize=11))
+
+    # Shared tooltip
+    tooltip = [
+        alt.Tooltip("Project:N", title="Project"),
+        alt.Tooltip("Portfolio:N", title="Portfolio"),
+        alt.Tooltip("Priority:N"),
+        alt.Tooltip("Health:N"),
+        alt.Tooltip("PM:N", title="PM"),
+        alt.Tooltip("Start:T", title="Start", format="%b %d, %Y"),
+        alt.Tooltip("End:T", title="End", format="%b %d, %Y"),
+        alt.Tooltip("PctLabel:N", title="% Complete"),
+    ]
+
+    # X-axis domain (time range filter)
+    if date_range:
+        x_scale = alt.Scale(domain=[
+            pd.to_datetime(date_range[0]).isoformat(),
+            pd.to_datetime(date_range[1]).isoformat(),
+        ])
+    else:
+        x_scale = alt.Undefined
+
+    y_enc = alt.Y(
+        "RowLabel:N",
+        sort=row_order,
+        title=None,
+        axis=alt.Axis(labelFontSize=10, labelLimit=320, ticks=False,
+                      domain=False, grid=True, gridOpacity=0.3),
+    )
+    x_enc = alt.X(
+        "Start:T",
+        title=None,
+        scale=x_scale,
+        axis=alt.Axis(
+            labelFontSize=11, format="%b %Y",
+            tickCount="month", grid=True, gridOpacity=0.4,
+            domain=False,
+        ),
+    )
+
+    bar_height = 18
+    total_height = max(280, len(df) * (bar_height + 10) + 60)
+
+    # Background bar = full duration, muted
+    bars_bg = alt.Chart(df).mark_bar(
+        cornerRadius=4, height=bar_height, opacity=0.28,
+    ).encode(
+        y=y_enc, x=x_enc, x2="End:T",
         color=color_enc,
-        tooltip=["Project:N", "Priority:N", "Health:N", "Start:T", "End:T",
-                 "% Complete:N", "PM:N"],
-    ).properties(height=max(250, len(rows) * 22))
+        href=alt.Href("URL:N"),
+        tooltip=tooltip,
+    )
 
-    return chart.configure_view(strokeWidth=0)
+    # Progress overlay = start → progress_end, full opacity
+    bars_progress = alt.Chart(df).mark_bar(
+        cornerRadius=4, height=bar_height,
+    ).encode(
+        y=y_enc, x=x_enc, x2="ProgressEnd:T",
+        color=color_enc,
+        href=alt.Href("URL:N"),
+        tooltip=tooltip,
+    )
+
+    # Overdue outline (red stroke on bars past their end date and not complete)
+    overdue_df = df[df["Overdue"]]
+    layers = [bars_bg, bars_progress]
+    if not overdue_df.empty:
+        overdue_outline = alt.Chart(overdue_df).mark_bar(
+            cornerRadius=4, height=bar_height,
+            fillOpacity=0, stroke=RED, strokeWidth=2,
+        ).encode(
+            y=alt.Y("RowLabel:N", sort=row_order),
+            x="Start:T", x2="End:T",
+            tooltip=tooltip,
+            href=alt.Href("URL:N"),
+        )
+        layers.append(overdue_outline)
+
+    # Start & End milestone diamonds
+    start_points = alt.Chart(df).mark_point(
+        shape="diamond", size=70, filled=True, color=NAVY, opacity=0.85,
+    ).encode(
+        y=alt.Y("RowLabel:N", sort=row_order),
+        x="Start:T",
+        tooltip=tooltip,
+    )
+    end_points = alt.Chart(df).mark_point(
+        shape="diamond", size=70, filled=True, color=NAVY, opacity=0.85,
+    ).encode(
+        y=alt.Y("RowLabel:N", sort=row_order),
+        x="End:T",
+        tooltip=tooltip,
+    )
+    layers += [start_points, end_points]
+
+    # % Complete text label at end of each bar
+    pct_labels = alt.Chart(df).mark_text(
+        align="left", baseline="middle", dx=8, fontSize=10,
+        fontWeight="bold", color=NAVY,
+    ).encode(
+        y=alt.Y("RowLabel:N", sort=row_order),
+        x="End:T",
+        text="PctLabel:N",
+    )
+    layers.append(pct_labels)
+
+    # Today line
+    today_df = pd.DataFrame({"date": [pd.to_datetime(today)],
+                             "label": ["TODAY"]})
+    today_rule = alt.Chart(today_df).mark_rule(
+        color=RED, strokeWidth=2, strokeDash=[5, 4],
+    ).encode(x="date:T")
+    today_label = alt.Chart(today_df).mark_text(
+        text="TODAY", align="left", dx=5, dy=-5,
+        fontSize=10, fontWeight="bold", color=RED,
+    ).encode(x="date:T", y=alt.value(0))
+    layers += [today_rule, today_label]
+
+    chart = alt.layer(*layers).properties(height=total_height)
+
+    return chart.configure_view(strokeWidth=0).configure_axis(
+        labelColor="#4A5A6E", titleColor=NAVY,
+    )
 
 
 def capacity_heatmap(heatmap_df: pd.DataFrame) -> alt.Chart:
