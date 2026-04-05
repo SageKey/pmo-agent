@@ -90,9 +90,13 @@ export function TeamRoster() {
     return counts;
   }, [data]);
 
-  // Topline: who's red, who's most available?
-  const redPeople = (data ?? []).filter((p) => p.status === "RED");
-  const greenPeople = (data ?? [])
+  // Topline: who's red, who's most available? Only counted members — the
+  // excluded ones are shown on the roster but explicitly don't participate
+  // in capacity math, so they shouldn't affect overload/availability stats.
+  const countedPeople = (data ?? []).filter((p) => p.include_in_capacity);
+  const excludedCount = (data ?? []).length - countedPeople.length;
+  const redPeople = countedPeople.filter((p) => p.status === "RED");
+  const greenPeople = countedPeople
     .filter((p) => p.status === "GREEN")
     .sort((a, b) => a.utilization_pct - b.utilization_pct)
     .slice(0, 5);
@@ -210,6 +214,11 @@ export function TeamRoster() {
             <div className="ml-auto text-xs text-slate-500 tabular-nums">
               <span className="font-semibold text-slate-900">{filtered.length}</span>{" "}
               of {data?.length ?? 0} team members
+              {excludedCount > 0 && (
+                <span className="ml-2 text-slate-400">
+                  ({excludedCount} not counted)
+                </span>
+              )}
             </div>
           </div>
 

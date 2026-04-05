@@ -10,6 +10,7 @@ export interface TeamMember {
   support_reserve_pct: number;
   project_capacity_pct: number;
   project_capacity_hrs: number;
+  include_in_capacity: boolean;
 }
 
 export interface PersonProjectDemand {
@@ -32,4 +33,5 @@ export interface PersonDemand {
   status: RoleStatus;
   project_count: number;
   projects: PersonProjectDemand[];
+  include_in_capacity: boolean;
 }

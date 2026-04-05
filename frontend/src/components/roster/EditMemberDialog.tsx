@@ -43,6 +43,7 @@ type FormState = {
   rate_per_hour: string;
   weekly_hrs_available: string;
   support_reserve_pct: string;
+  include_in_capacity: boolean;
 };
 
 function blank(): FormState {
@@ -55,6 +56,7 @@ function blank(): FormState {
     rate_per_hour: "0",
     weekly_hrs_available: "40",
     support_reserve_pct: "0",
+    include_in_capacity: true,
   };
 }
 
@@ -69,6 +71,7 @@ function fromMember(m: TeamMember): FormState {
     weekly_hrs_available: m.weekly_hrs_available.toString(),
     // support_reserve_pct is 0..1 in DB, show as 0..100
     support_reserve_pct: Math.round(m.support_reserve_pct * 100).toString(),
+    include_in_capacity: m.include_in_capacity,
   };
 }
 
@@ -111,6 +114,7 @@ export function EditMemberDialog({ member, open, onOpenChange }: Props) {
         0,
         Math.min(1, (Number.parseFloat(form.support_reserve_pct) || 0) / 100),
       ),
+      include_in_capacity: form.include_in_capacity,
     };
     try {
       if (isEdit && member) {
@@ -230,6 +234,27 @@ export function EditMemberDialog({ member, open, onOpenChange }: Props) {
               />
             </Field>
           </div>
+
+          <label className="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+            <input
+              type="checkbox"
+              checked={form.include_in_capacity}
+              onChange={(e) => set("include_in_capacity", e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-navy-900"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-slate-900">
+                Include in capacity calculations
+              </div>
+              <div className="mt-0.5 text-[11px] text-slate-500">
+                When unchecked, this person stays on the Team Roster for
+                reference but their hours don't count toward role supply,
+                utilization %, or the even-split demand fallback. Useful for
+                leads or cross-functional roles who appear in the roster
+                but don't actively take on work in their listed role.
+              </div>
+            </div>
+          </label>
 
           {mutation.isError && (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">

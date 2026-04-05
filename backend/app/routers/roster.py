@@ -120,6 +120,7 @@ def person_demand(
                 status=r["status"],
                 project_count=int(r["project_count"]),
                 projects=projects,
+                include_in_capacity=bool(r.get("include_in_capacity", True)),
             )
         )
     return out

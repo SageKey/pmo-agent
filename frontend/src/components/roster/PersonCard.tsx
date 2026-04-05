@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { EyeOff } from "lucide-react";
 import type { PersonDemand } from "@/types/roster";
 import { Card } from "@/components/ui/card";
 import { avatarTone, initials, pct } from "@/lib/format";
@@ -50,6 +51,7 @@ export function PersonCard({
 }) {
   const s = STATUS_STYLE[person.status] ?? STATUS_STYLE.GREEN;
   const width = Math.min(person.utilization_pct, 1.5) * 100;
+  const excluded = !person.include_in_capacity;
 
   return (
     <motion.button
@@ -62,7 +64,7 @@ export function PersonCard({
       <Card
         className={cn(
           "ring-1 ring-inset transition-all hover:-translate-y-0.5 hover:shadow-elev",
-          s.ring,
+          excluded ? "ring-slate-200 bg-slate-50/60 opacity-60" : s.ring,
         )}
       >
         <div className="p-5">
@@ -71,26 +73,40 @@ export function PersonCard({
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
                 avatarTone(person.name),
+                excluded && "grayscale",
               )}
             >
               {initials(person.name)}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-slate-900">
-                {person.name}
+              <div className="flex items-center gap-1.5">
+                <div className="truncate text-sm font-semibold text-slate-900">
+                  {person.name}
+                </div>
+                {excluded && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-slate-600"
+                    title="Visible on the roster but excluded from supply + utilization math"
+                  >
+                    <EyeOff className="h-2.5 w-2.5" />
+                    Not counted
+                  </span>
+                )}
               </div>
               <div className="mt-0.5 text-xs text-slate-500">
                 {ROLE_LABEL[person.role_key] ?? person.role}
               </div>
             </div>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                s.chip,
-              )}
-            >
-              {pct(person.utilization_pct)}
-            </span>
+            {!excluded && (
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                  s.chip,
+                )}
+              >
+                {pct(person.utilization_pct)}
+              </span>
+            )}
           </div>
 
           <div className="mt-4">
@@ -107,7 +123,10 @@ export function PersonCard({
                 initial={{ width: 0 }}
                 animate={{ width: `${width}%` }}
                 transition={{ duration: 0.6, delay: 0.2 + index * 0.02 }}
-                className={cn("h-full rounded-full", s.bar)}
+                className={cn(
+                  "h-full rounded-full",
+                  excluded ? "bg-slate-400" : s.bar,
+                )}
               />
             </div>
           </div>

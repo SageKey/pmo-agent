@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS team_members (
     classification       TEXT,
     rate_per_hour        REAL DEFAULT 0.0,
     weekly_hrs_available REAL DEFAULT 0.0,
-    support_reserve_pct  REAL DEFAULT 0.0
+    support_reserve_pct  REAL DEFAULT 0.0,
+    include_in_capacity  INTEGER DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS project_assignments (
@@ -328,6 +329,13 @@ class SQLiteConnector:
                 self._conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {col_type}")
             except Exception:
                 pass  # Column already exists
+        # Add team_members.include_in_capacity if missing (legacy DBs)
+        try:
+            self._conn.execute(
+                "ALTER TABLE team_members ADD COLUMN include_in_capacity INTEGER DEFAULT 1"
+            )
+        except Exception:
+            pass  # Column already exists
         self._conn.commit()
 
     def close(self):
@@ -408,6 +416,11 @@ class SQLiteConnector:
             reserve = row["support_reserve_pct"] or 0.0
             cap_pct = 1.0 - reserve
             cap_hrs = weekly * cap_pct
+            # Legacy DB rows may not have the column — default to True
+            try:
+                include = bool(row["include_in_capacity"]) if row["include_in_capacity"] is not None else True
+            except (IndexError, KeyError):
+                include = True
 
             members.append(TeamMember(
                 name=row["name"],
@@ -421,6 +434,7 @@ class SQLiteConnector:
                 support_reserve_pct=reserve,
                 project_capacity_pct=cap_pct,
                 project_capacity_hrs=cap_hrs,
+                include_in_capacity=include,
             ))
 
         return members
@@ -609,23 +623,29 @@ class SQLiteConnector:
             if not name:
                 return "Name is required."
 
+            include = 1 if fields.get("include_in_capacity", True) else 0
+
             conn.execute(
                 """INSERT INTO team_members (name, role, role_key, team, vendor,
-                   classification, rate_per_hour, weekly_hrs_available, support_reserve_pct)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   classification, rate_per_hour, weekly_hrs_available, support_reserve_pct,
+                   include_in_capacity)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                    ON CONFLICT(name) DO UPDATE SET
                    role=?, role_key=?, team=?, vendor=?, classification=?,
-                   rate_per_hour=?, weekly_hrs_available=?, support_reserve_pct=?""",
+                   rate_per_hour=?, weekly_hrs_available=?, support_reserve_pct=?,
+                   include_in_capacity=?""",
                 (
                     name, fields.get("role", ""), fields.get("role_key", ""),
                     fields.get("team"), fields.get("vendor"), fields.get("classification"),
                     fields.get("rate_per_hour", 0.0), fields.get("weekly_hrs_available", 0.0),
                     fields.get("support_reserve_pct", 0.0),
+                    include,
                     # UPDATE values
                     fields.get("role", ""), fields.get("role_key", ""),
                     fields.get("team"), fields.get("vendor"), fields.get("classification"),
                     fields.get("rate_per_hour", 0.0), fields.get("weekly_hrs_available", 0.0),
                     fields.get("support_reserve_pct", 0.0),
+                    include,
                 )
             )
             conn.commit()

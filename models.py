@@ -173,6 +173,10 @@ class TeamMember:
     support_reserve_pct: float
     project_capacity_pct: float
     project_capacity_hrs: float
+    # When False, this person is shown on the Team Roster for reference but
+    # excluded from supply/utilization calculations and the even-split
+    # fallback demand distribution. Defaults True for backward compatibility.
+    include_in_capacity: bool = True
 
 
 @dataclass

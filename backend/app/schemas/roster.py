@@ -17,6 +17,7 @@ class TeamMemberOut(BaseModel):
     support_reserve_pct: float = 0.0
     project_capacity_pct: float = 0.0
     project_capacity_hrs: float = 0.0
+    include_in_capacity: bool = True
 
     @classmethod
     def from_dataclass(cls, m: TeamMember) -> "TeamMemberOut":
@@ -32,6 +33,7 @@ class TeamMemberOut(BaseModel):
             support_reserve_pct=m.support_reserve_pct,
             project_capacity_pct=m.project_capacity_pct,
             project_capacity_hrs=m.project_capacity_hrs,
+            include_in_capacity=getattr(m, "include_in_capacity", True),
         )
 
 
@@ -54,3 +56,4 @@ class PersonDemandOut(BaseModel):
     status: str  # GREEN/YELLOW/RED
     project_count: int
     projects: List[PersonProjectDemand] = []
+    include_in_capacity: bool = True

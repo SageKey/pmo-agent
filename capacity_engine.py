@@ -109,9 +109,15 @@ class CapacityEngine:
         Supply per role in project hrs/week.
         Uses individual roster members' project_capacity_hrs (accounts for
         varying weekly hours and support reserves per person).
+
+        Members with include_in_capacity=False are excluded. They still
+        appear on the Team Roster page for reference but don't contribute
+        to capacity math.
         """
         supply = defaultdict(float)
         for member in self.roster:
+            if not getattr(member, "include_in_capacity", True):
+                continue
             supply[member.role_key] += member.project_capacity_hrs
         return dict(supply)
 
@@ -127,9 +133,12 @@ class CapacityEngine:
         Average project capacity per person per role (hrs/week).
         A single project typically gets ONE person per role, not the
         entire team. This is the realistic throughput for duration estimates.
+        Excluded (not-counted) members are skipped.
         """
         role_hours = defaultdict(list)
         for member in self.roster:
+            if not getattr(member, "include_in_capacity", True):
+                continue
             role_hours[member.role_key].append(member.project_capacity_hrs)
         return {
             role: sum(hrs) / len(hrs) if hrs else 0.0
@@ -286,26 +295,31 @@ class CapacityEngine:
             for demand in self.compute_project_role_demand(project):
                 project_role_demands[(project.id, demand.role_key)] = demand
 
-        # Roster members grouped by role
+        # Roster members grouped by role. Only members with
+        # include_in_capacity=True participate in the even-split fallback
+        # denominator — excluded members don't absorb unassigned work.
         role_members = defaultdict(list)
         for m in roster:
-            role_members[m.role_key].append(m)
+            if getattr(m, "include_in_capacity", True):
+                role_members[m.role_key].append(m)
 
-        # Compute per person
+        # Compute per person — iterate ALL roster (including excluded) so
+        # they still appear on the Team Roster page with their stats.
         results = []
         for member in roster:
             person_key = member.name.strip().lower()
             person_assignments = assignment_map.get(person_key, [])
+            included = getattr(member, "include_in_capacity", True)
             demand_items = []
             total_demand_hrs = 0.0
 
-            # Explicit assignments
+            # Explicit assignments — even excluded members pick up their
+            # explicit assignments (those are real work they agreed to).
             assigned_project_ids = set()
             for a in person_assignments:
                 assigned_project_ids.add(a.project_id)
                 rd = project_role_demands.get((a.project_id, a.role_key))
                 if rd:
-                    # Person gets their allocation fraction of the role demand
                     person_hrs = rd.weekly_hours * a.allocation_pct
                     demand_items.append({
                         "project_id": a.project_id,
@@ -317,25 +331,28 @@ class CapacityEngine:
                     })
                     total_demand_hrs += person_hrs
 
-            # Fallback: even split for unassigned project-roles
-            for (pid, role_key), rd in project_role_demands.items():
-                if role_key != member.role_key:
-                    continue
-                if (pid, role_key) in assigned_project_roles:
-                    continue  # This project-role has explicit assignments
-                # Split evenly across all people in this role
-                n_people = len(role_members.get(role_key, []))
-                if n_people > 0:
-                    person_hrs = rd.weekly_hours / n_people
-                    demand_items.append({
-                        "project_id": pid,
-                        "project_name": rd.project_name,
-                        "role": role_key,
-                        "source": "even_split",
-                        "allocation_pct": f"{1/n_people:.0%}",
-                        "weekly_hours": round(person_hrs, 1),
-                    })
-                    total_demand_hrs += person_hrs
+            # Fallback: even split for unassigned project-roles.
+            # Excluded members don't participate in the fallback denominator
+            # and don't receive fallback hours themselves.
+            if included:
+                for (pid, role_key), rd in project_role_demands.items():
+                    if role_key != member.role_key:
+                        continue
+                    if (pid, role_key) in assigned_project_roles:
+                        continue  # This project-role has explicit assignments
+                    # Split evenly across counted people in this role
+                    n_people = len(role_members.get(role_key, []))
+                    if n_people > 0:
+                        person_hrs = rd.weekly_hours / n_people
+                        demand_items.append({
+                            "project_id": pid,
+                            "project_name": rd.project_name,
+                            "role": role_key,
+                            "source": "even_split",
+                            "allocation_pct": f"{1/n_people:.0%}",
+                            "weekly_hours": round(person_hrs, 1),
+                        })
+                        total_demand_hrs += person_hrs
 
             capacity = member.project_capacity_hrs
             util_pct = total_demand_hrs / capacity if capacity > 0 else 0.0
@@ -351,6 +368,7 @@ class CapacityEngine:
                 "status": _utilization_status(util_pct),
                 "project_count": len(demand_items),
                 "projects": demand_items,
+                "include_in_capacity": included,
             })
 
         return results

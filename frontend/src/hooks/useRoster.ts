@@ -38,6 +38,7 @@ export interface RosterMemberPayload {
   rate_per_hour: number;
   weekly_hrs_available: number;
   support_reserve_pct: number;
+  include_in_capacity: boolean;
 }
 
 export function useCreateMember() {

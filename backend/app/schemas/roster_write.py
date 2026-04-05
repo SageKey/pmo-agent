@@ -16,3 +16,4 @@ class RosterMemberWrite(BaseModel):
     rate_per_hour: float = 0.0
     weekly_hrs_available: float = 0.0
     support_reserve_pct: float = 0.0
+    include_in_capacity: bool = True
