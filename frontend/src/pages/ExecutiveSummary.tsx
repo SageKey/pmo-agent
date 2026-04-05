@@ -37,6 +37,7 @@ export function ExecutiveSummary() {
   const utilEntries = Object.values(roles);
   const red = utilEntries.filter((r) => r.status === "RED").length;
   const yellow = utilEntries.filter((r) => r.status === "YELLOW").length;
+  const blue = utilEntries.filter((r) => r.status === "BLUE").length;
 
   // Weighted utilization across the whole team — total demand divided by
   // total supply. This is the metric that actually moves when someone is
@@ -122,7 +123,9 @@ export function ExecutiveSummary() {
             value={atRisk}
             subvalue={
               atRisk === 0
-                ? "All clear · no bottlenecks"
+                ? blue > 0
+                  ? `${blue} under-utilized · no overloads`
+                  : "All clear · no bottlenecks"
                 : `${red} over capacity · ${yellow} approaching`
             }
             icon={

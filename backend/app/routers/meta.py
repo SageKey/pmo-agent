@@ -30,4 +30,5 @@ def health(conn: SQLiteConnector = Depends(get_connector)) -> HealthResponse:
         roster_count=len(roster),
         auth_required=bool(settings.shared_password),
         public_mode=settings.public_mode,
+        show_admin=settings.show_admin,
     )

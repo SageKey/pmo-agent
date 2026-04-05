@@ -11,6 +11,7 @@ export interface HealthResponse {
   version: string;
   auth_required: boolean;
   public_mode: boolean;
+  show_admin: boolean;
 }
 
 export function useHealth() {

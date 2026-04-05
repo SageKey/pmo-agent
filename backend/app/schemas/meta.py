@@ -14,3 +14,4 @@ class HealthResponse(BaseModel):
     # Deployment flags consumed by the frontend to decide UI state.
     auth_required: bool = False
     public_mode: bool = False
+    show_admin: bool = False

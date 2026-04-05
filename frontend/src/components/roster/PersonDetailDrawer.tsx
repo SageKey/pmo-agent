@@ -18,6 +18,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const STATUS_STYLE: Record<string, string> = {
+  BLUE: "text-sky-700",
   GREEN: "text-emerald-700",
   YELLOW: "text-amber-700",
   RED: "text-red-700",

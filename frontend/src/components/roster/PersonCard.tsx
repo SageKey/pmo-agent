@@ -20,6 +20,12 @@ const STATUS_STYLE: Record<
   string,
   { bar: string; text: string; ring: string; chip: string }
 > = {
+  BLUE: {
+    bar: "bg-sky-500",
+    text: "text-sky-700",
+    ring: "ring-sky-200",
+    chip: "bg-sky-50 text-sky-700",
+  },
   GREEN: {
     bar: "bg-emerald-500",
     text: "text-emerald-700",

@@ -96,8 +96,10 @@ export function TeamRoster() {
   const countedPeople = (data ?? []).filter((p) => p.include_in_capacity);
   const excludedCount = (data ?? []).length - countedPeople.length;
   const redPeople = countedPeople.filter((p) => p.status === "RED");
-  const greenPeople = countedPeople
-    .filter((p) => p.status === "GREEN")
+  // "Most available" includes both BLUE (under-utilized) and GREEN (ideal)
+  // members sorted by utilization ascending so the lightest-loaded surface first.
+  const availablePeople = countedPeople
+    .filter((p) => p.status === "BLUE" || p.status === "GREEN")
     .sort((a, b) => a.utilization_pct - b.utilization_pct)
     .slice(0, 5);
 
@@ -164,9 +166,9 @@ export function TeamRoster() {
                 <CardTitle>Most available</CardTitle>
               </CardHeader>
               <CardContent>
-                {greenPeople.length > 0 ? (
+                {availablePeople.length > 0 ? (
                   <ul className="space-y-2">
-                    {greenPeople.map((p) => (
+                    {availablePeople.map((p) => (
                       <li
                         key={p.name}
                         className="flex items-center justify-between text-sm"
@@ -185,7 +187,7 @@ export function TeamRoster() {
                   </ul>
                 ) : (
                   <div className="text-sm text-slate-500">
-                    Nobody under 80% right now.
+                    Nobody in the ideal band right now.
                   </div>
                 )}
               </CardContent>

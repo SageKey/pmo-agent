@@ -8,6 +8,7 @@ import {
   Clock,
   Users,
   Sparkles,
+  Settings,
 } from "lucide-react";
 import { useHealth } from "@/hooks/useHealth";
 import { cn } from "@/lib/cn";
@@ -27,6 +28,7 @@ const NAV = [
 export function Sidebar() {
   const { data } = useHealth();
   const publicMode = data?.public_mode === true;
+  const showAdmin = data?.show_admin === true;
   const items = NAV.filter((n) => n.publicSafe || !publicMode);
 
   return (
@@ -53,6 +55,27 @@ export function Sidebar() {
             {label}
           </NavLink>
         ))}
+        {showAdmin && (
+          <div className="mt-4 border-t border-white/5 pt-4">
+            <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Admin
+            </div>
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                cn(
+                  "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-white/10 text-white"
+                    : "text-slate-300 hover:bg-white/5 hover:text-white",
+                )
+              }
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </NavLink>
+          </div>
+        )}
       </nav>
       <div className="px-5 pb-6 text-[11px] uppercase tracking-wide text-slate-500">
         v0.1.0 {publicMode ? "· public" : "· local dev"}

@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # When true, hides the AI Assistant page + disables /agent/* routes so
     # shared deployments can't burn the host's Anthropic credit.
     public_mode: bool = False
+    # When true, the frontend shows the Admin nav item and renders /admin.
+    # Off by default so production deployments don't expose settings UI.
+    show_admin: bool = False
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -52,9 +55,9 @@ class Settings(BaseSettings):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
-    @field_validator("public_mode", mode="before")
+    @field_validator("public_mode", "show_admin", mode="before")
     @classmethod
-    def _parse_public_mode(cls, v):
+    def _parse_bool_flag(cls, v):
         """Accept strings from hosting-platform env var UIs. Pydantic is
         picky about booleans from strings; be lenient so stray '=' or
         whitespace from the Railway Raw Editor don't crash startup."""

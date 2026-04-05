@@ -58,10 +58,62 @@ class WeeklySnapshot:
     role_demand_hrs: float
 
 
-def _utilization_status(pct: float) -> str:
-    if pct >= 1.0:
+DEFAULT_UTIL_THRESHOLDS = {
+    "under":     {"enabled": True, "max": 0.70},
+    "ideal":     {"enabled": True, "max": 0.80},
+    "stretched": {"enabled": True, "max": 1.00},
+    "over":      {"enabled": True},
+}
+
+
+def _utilization_status(pct: float, thresholds: Optional[dict] = None) -> str:
+    """Classify a utilization ratio into a 4-state color label.
+
+    4-state system mapped to backward-compatible color labels so existing
+    frontend code keeps working:
+        UNDER     → "BLUE"    (new — under-utilized, possibly over-staffed)
+        IDEAL     → "GREEN"   (target band)
+        STRETCHED → "YELLOW"  (warning, approaching capacity)
+        OVER      → "RED"     (over capacity, action needed)
+
+    When a state is disabled via its `enabled` flag, its range merges UP into
+    the next enabled state — disabling "stretched" pushes 80-100% into OVER,
+    not back into IDEAL. Conservative by design.
+    """
+    t = thresholds or DEFAULT_UTIL_THRESHOLDS
+    under_on = t.get("under", {}).get("enabled", True)
+    ideal_on = t.get("ideal", {}).get("enabled", True)
+    stretched_on = t.get("stretched", {}).get("enabled", True)
+    over_on = t.get("over", {}).get("enabled", True)
+
+    under_max = t.get("under", {}).get("max", 0.70)
+    ideal_max = t.get("ideal", {}).get("max", 0.80)
+    stretched_max = t.get("stretched", {}).get("max", 1.00)
+
+    # Walk the bands in order. Each band maps to a color; if disabled,
+    # roll forward to the next enabled band.
+    if pct < under_max:
+        if under_on:
+            return "BLUE"
+        if ideal_on:
+            return "GREEN"
+        if stretched_on:
+            return "YELLOW"
         return "RED"
-    elif pct >= 0.80:
+    if pct < ideal_max:
+        if ideal_on:
+            return "GREEN"
+        if stretched_on:
+            return "YELLOW"
+        return "RED"
+    if pct < stretched_max:
+        if stretched_on:
+            return "YELLOW"
+        return "RED"
+    # pct >= stretched_max
+    if over_on:
+        return "RED"
+    if stretched_on:
         return "YELLOW"
     return "GREEN"
 
@@ -100,6 +152,16 @@ class CapacityEngine:
     @property
     def roster(self) -> list[TeamMember]:
         return self._load()["roster"]
+
+    @property
+    def util_thresholds(self) -> dict:
+        """Utilization thresholds read from app_settings. Cached per engine instance."""
+        if not hasattr(self, "_thresholds") or self._thresholds is None:
+            try:
+                self._thresholds = self.connector.read_utilization_thresholds()
+            except Exception:
+                self._thresholds = DEFAULT_UTIL_THRESHOLDS
+        return self._thresholds
 
     # ------------------------------------------------------------------
     # Supply calculation
@@ -245,7 +307,7 @@ class CapacityEngine:
                 supply_hrs_week=supply_hrs,
                 demand_hrs_week=total_demand,
                 utilization_pct=util_pct,
-                status=_utilization_status(util_pct),
+                status=_utilization_status(util_pct, self.util_thresholds),
                 demand_breakdown=demands,
             )
 
@@ -365,7 +427,7 @@ class CapacityEngine:
                 "capacity_hrs_week": round(capacity, 1),
                 "demand_hrs_week": round(total_demand_hrs, 1),
                 "utilization_pct": f"{util_pct:.0%}",
-                "status": _utilization_status(util_pct),
+                "status": _utilization_status(util_pct, self.util_thresholds),
                 "project_count": len(demand_items),
                 "projects": demand_items,
                 "include_in_capacity": included,

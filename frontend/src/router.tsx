@@ -9,6 +9,7 @@ import { Timeline } from "@/pages/Timeline";
 import { Financials } from "@/pages/Financials";
 import { Timesheets } from "@/pages/Timesheets";
 import { AIAssistant } from "@/pages/AIAssistant";
+import { Admin } from "@/pages/Admin";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: "timesheets", element: <Timesheets /> },
       { path: "roster", element: <TeamRoster /> },
       { path: "assistant", element: <AIAssistant /> },
+      { path: "admin", element: <Admin /> },
     ],
   },
 ]);

@@ -6,7 +6,7 @@ export interface RoleDemand {
   weekly_hours: number;
 }
 
-export type RoleStatus = "GREEN" | "YELLOW" | "RED";
+export type RoleStatus = "BLUE" | "GREEN" | "YELLOW" | "RED";
 
 export interface RoleUtilization {
   role_key: string;

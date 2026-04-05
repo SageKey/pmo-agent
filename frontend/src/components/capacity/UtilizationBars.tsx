@@ -5,11 +5,13 @@ import { pct } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 const STATUS_BG: Record<string, string> = {
+  BLUE: "bg-sky-500",
   GREEN: "bg-emerald-500",
   YELLOW: "bg-amber-500",
   RED: "bg-red-500",
 };
 const STATUS_TEXT: Record<string, string> = {
+  BLUE: "text-sky-700",
   GREEN: "text-emerald-700",
   YELLOW: "text-amber-700",
   RED: "text-red-700",

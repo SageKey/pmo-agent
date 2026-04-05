@@ -278,7 +278,119 @@ CREATE TABLE IF NOT EXISTS task_dependencies (
 );
 CREATE INDEX IF NOT EXISTS idx_td_task ON task_dependencies(task_id);
 CREATE INDEX IF NOT EXISTS idx_td_dep ON task_dependencies(depends_on_id);
+
+-- Admin-editable settings (self-describing for generic UI rendering) ---
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    key             TEXT PRIMARY KEY,
+    category        TEXT NOT NULL,
+    value           TEXT NOT NULL,          -- stored as string, coerced via value_type
+    value_type      TEXT NOT NULL,          -- 'float', 'int', 'bool', 'string'
+    label           TEXT NOT NULL,          -- display label for admin UI
+    description     TEXT,                   -- longer help text
+    min_value       REAL,                   -- optional numeric bound
+    max_value       REAL,                   -- optional numeric bound
+    unit            TEXT,                   -- '%', 'hrs', '$' etc. for display
+    sort_order      INTEGER DEFAULT 0,
+    updated_at      TEXT DEFAULT (datetime('now')),
+    updated_by      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_app_settings_category ON app_settings(category);
 """
+
+
+# Default settings seeded on first boot. Self-describing so the admin UI can
+# render any row generically from its metadata.
+DEFAULT_APP_SETTINGS = [
+    # Utilization thresholds — 4-state system (under / ideal / stretched / over).
+    # Each state has an `enabled` flag so admin can collapse to 3 states.
+    # When a state is disabled, its range merges UP into the next enabled
+    # state (conservative: anything above ideal becomes more alarming).
+    {
+        "key": "util_under_enabled",
+        "category": "utilization",
+        "value": "1",
+        "value_type": "bool",
+        "label": "Under-utilized state",
+        "description": "When enabled, roles below the 'under' threshold are flagged as under-utilized. Disable to merge this range into 'ideal'.",
+        "min_value": None,
+        "max_value": None,
+        "unit": None,
+        "sort_order": 10,
+    },
+    {
+        "key": "util_under_max",
+        "category": "utilization",
+        "value": "0.70",
+        "value_type": "float",
+        "label": "Under → Ideal boundary",
+        "description": "Utilization at or above this value exits 'under-utilized' and enters the ideal band. Default 70%.",
+        "min_value": 0.0,
+        "max_value": 1.5,
+        "unit": "%",
+        "sort_order": 20,
+    },
+    {
+        "key": "util_ideal_enabled",
+        "category": "utilization",
+        "value": "1",
+        "value_type": "bool",
+        "label": "Ideal state",
+        "description": "The target utilization band. Typically always enabled.",
+        "min_value": None,
+        "max_value": None,
+        "unit": None,
+        "sort_order": 30,
+    },
+    {
+        "key": "util_ideal_max",
+        "category": "utilization",
+        "value": "0.80",
+        "value_type": "float",
+        "label": "Ideal → Stretched boundary",
+        "description": "Utilization at or above this value exits the ideal band. Default 80%.",
+        "min_value": 0.0,
+        "max_value": 1.5,
+        "unit": "%",
+        "sort_order": 40,
+    },
+    {
+        "key": "util_stretched_enabled",
+        "category": "utilization",
+        "value": "1",
+        "value_type": "bool",
+        "label": "Stretched state",
+        "description": "When enabled, roles between ideal and over are flagged as stretched (warning). Disable to merge this range into 'over'.",
+        "min_value": None,
+        "max_value": None,
+        "unit": None,
+        "sort_order": 50,
+    },
+    {
+        "key": "util_stretched_max",
+        "category": "utilization",
+        "value": "1.00",
+        "value_type": "float",
+        "label": "Stretched → Over boundary",
+        "description": "Utilization at or above this value is flagged as over-capacity. Default 100%.",
+        "min_value": 0.0,
+        "max_value": 2.0,
+        "unit": "%",
+        "sort_order": 60,
+    },
+    {
+        "key": "util_over_enabled",
+        "category": "utilization",
+        "value": "1",
+        "value_type": "bool",
+        "label": "Over-capacity state",
+        "description": "When enabled, roles above the stretched threshold are flagged as over-capacity. Typically always enabled.",
+        "min_value": None,
+        "max_value": None,
+        "unit": None,
+        "sort_order": 70,
+    },
+]
 
 
 def _compute_sort_order(health: Optional[str], priority: Optional[str]) -> int:
@@ -336,7 +448,140 @@ class SQLiteConnector:
             )
         except Exception:
             pass  # Column already exists
+        # Seed default app_settings rows (idempotent — INSERT OR IGNORE on key)
+        self._seed_default_settings()
         self._conn.commit()
+
+    def _seed_default_settings(self):
+        """Insert any missing default settings rows. Existing rows are left alone."""
+        for s in DEFAULT_APP_SETTINGS:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO app_settings
+                    (key, category, value, value_type, label, description,
+                     min_value, max_value, unit, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    s["key"], s["category"], s["value"], s["value_type"],
+                    s["label"], s.get("description"),
+                    s.get("min_value"), s.get("max_value"),
+                    s.get("unit"), s.get("sort_order", 0),
+                ),
+            )
+
+    # ------------------------------------------------------------------
+    # App Settings (admin-editable)
+    # ------------------------------------------------------------------
+    def read_settings(self, category: Optional[str] = None) -> list[dict]:
+        """Return all settings rows, optionally filtered by category.
+
+        Values are returned as strings — the caller coerces using `value_type`.
+        """
+        conn = self._open()
+        if category:
+            rows = conn.execute(
+                "SELECT * FROM app_settings WHERE category = ? ORDER BY sort_order, key",
+                (category,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM app_settings ORDER BY category, sort_order, key"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def read_setting(self, key: str) -> Optional[dict]:
+        conn = self._open()
+        row = conn.execute(
+            "SELECT * FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def update_setting(
+        self, key: str, value: str, updated_by: Optional[str] = None
+    ) -> Optional[dict]:
+        """Update a setting's value. Returns the updated row or None if not found."""
+        conn = self._open()
+        row = conn.execute(
+            "SELECT value_type, min_value, max_value FROM app_settings WHERE key = ?",
+            (key,),
+        ).fetchone()
+        if not row:
+            return None
+
+        # Coerce + validate per value_type
+        vtype = row["value_type"]
+        if vtype == "float":
+            try:
+                fv = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"Setting '{key}' expects a number, got: {value!r}")
+            if row["min_value"] is not None and fv < row["min_value"]:
+                raise ValueError(f"Setting '{key}' must be >= {row['min_value']}")
+            if row["max_value"] is not None and fv > row["max_value"]:
+                raise ValueError(f"Setting '{key}' must be <= {row['max_value']}")
+            value = str(fv)
+        elif vtype == "int":
+            try:
+                iv = int(float(value))
+            except (TypeError, ValueError):
+                raise ValueError(f"Setting '{key}' expects an integer, got: {value!r}")
+            value = str(iv)
+        elif vtype == "bool":
+            if isinstance(value, bool):
+                value = "1" if value else "0"
+            elif str(value).strip().lower() in ("1", "true", "yes", "on"):
+                value = "1"
+            elif str(value).strip().lower() in ("0", "false", "no", "off"):
+                value = "0"
+            else:
+                raise ValueError(f"Setting '{key}' expects a boolean, got: {value!r}")
+        # else: string — leave as-is
+
+        conn.execute(
+            """
+            UPDATE app_settings
+            SET value = ?, updated_at = datetime('now'), updated_by = ?
+            WHERE key = ?
+            """,
+            (value, updated_by, key),
+        )
+        conn.commit()
+        return self.read_setting(key)
+
+    def read_utilization_thresholds(self) -> dict:
+        """Return utilization threshold config for the capacity engine.
+
+        Shape:
+          {
+            "under":     {"enabled": bool, "max": float},
+            "ideal":     {"enabled": bool, "max": float},
+            "stretched": {"enabled": bool, "max": float},
+            "over":      {"enabled": bool},
+          }
+        """
+        rows = self.read_settings(category="utilization")
+        by_key = {r["key"]: r for r in rows}
+
+        def _f(key: str, default: float) -> float:
+            r = by_key.get(key)
+            try:
+                return float(r["value"]) if r else default
+            except (TypeError, ValueError):
+                return default
+
+        def _b(key: str, default: bool) -> bool:
+            r = by_key.get(key)
+            if not r:
+                return default
+            return str(r["value"]).strip() in ("1", "true", "True")
+
+        return {
+            "under":     {"enabled": _b("util_under_enabled", True),     "max": _f("util_under_max", 0.70)},
+            "ideal":     {"enabled": _b("util_ideal_enabled", True),     "max": _f("util_ideal_max", 0.80)},
+            "stretched": {"enabled": _b("util_stretched_enabled", True), "max": _f("util_stretched_max", 1.00)},
+            "over":      {"enabled": _b("util_over_enabled", True)},
+        }
 
     def close(self):
         if self._conn:

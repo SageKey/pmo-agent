@@ -32,6 +32,7 @@ from .routers import (
     milestones,
     portfolio,
     roster,
+    settings as settings_router,
     snapshots,
     tasks,
     timesheets,
@@ -242,6 +243,7 @@ def create_app() -> FastAPI:
     app.include_router(timesheets.router, prefix=settings.api_prefix)
     app.include_router(jira.router, prefix=settings.api_prefix)
     app.include_router(snapshots.router, prefix=settings.api_prefix)
+    app.include_router(settings_router.router, prefix=settings.api_prefix)
     # Agent routes are mounted only when not in public mode. The router
     # itself enforces the Anthropic key check, but PUBLIC_MODE lets the
     # host fully disable even the tool-list endpoint.

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { CheckCircle2, AlertCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertCircle, AlertTriangle, TrendingDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { RoleUtilization } from "@/types/capacity";
 import { Card } from "@/components/ui/card";
@@ -7,11 +7,13 @@ import { cn } from "@/lib/cn";
 import { pct } from "@/lib/format";
 
 const STATUS_DOT: Record<string, string> = {
+  BLUE: "bg-sky-500",
   GREEN: "bg-emerald-500",
   YELLOW: "bg-amber-500",
   RED: "bg-red-500",
 };
 const BAR_BG: Record<string, string> = {
+  BLUE: "bg-sky-500",
   GREEN: "bg-emerald-500",
   YELLOW: "bg-amber-500",
   RED: "bg-red-500",
@@ -41,15 +43,17 @@ export function ResourceHealthHero({
 
   const red = entries.filter((r) => r.status === "RED").length;
   const yellow = entries.filter((r) => r.status === "YELLOW").length;
-  const green = entries.length - red - yellow;
+  const blue = entries.filter((r) => r.status === "BLUE").length;
+  const green = entries.length - red - yellow - blue;
   const topRole = entries[0];
 
   // Hero banner varies with state — success, warning, or alert.
+  // Precedence: RED > YELLOW > BLUE (under-utilized) > GREEN.
   let banner: {
     icon: React.ReactNode;
     title: string;
     subtitle: string;
-    tone: "success" | "warning" | "danger";
+    tone: "success" | "warning" | "danger" | "info";
   };
   if (red > 0) {
     banner = {
@@ -65,11 +69,18 @@ export function ResourceHealthHero({
       subtitle: `${topRole ? `${ROLE_LABEL[topRole.role_key] ?? topRole.role_key} at ${pct(topRole.utilization_pct)}` : ""}`,
       tone: "warning",
     };
+  } else if (blue > 0) {
+    banner = {
+      icon: <TrendingDown className="h-6 w-6" />,
+      title: `${blue} role${blue === 1 ? "" : "s"} under-utilized`,
+      subtitle: `${green} roles in the ideal band · room to take on more work`,
+      tone: "info",
+    };
   } else {
     banner = {
       icon: <CheckCircle2 className="h-6 w-6" />,
-      title: "All roles green — ready for new work",
-      subtitle: `${green} roles under 80% · headroom across the team`,
+      title: "All roles in the ideal band",
+      subtitle: `${green} roles humming along · healthy utilization across the team`,
       tone: "success",
     };
   }
@@ -78,6 +89,7 @@ export function ResourceHealthHero({
     success: "from-emerald-50 to-white ring-emerald-200 text-emerald-800",
     warning: "from-amber-50 to-white ring-amber-200 text-amber-800",
     danger: "from-red-50 to-white ring-red-200 text-red-800",
+    info: "from-sky-50 to-white ring-sky-200 text-sky-800",
   }[banner.tone];
 
   return (
@@ -103,9 +115,10 @@ export function ResourceHealthHero({
             )}
           </div>
           <div className="ml-auto hidden items-center gap-4 md:flex">
-            <Stat count={green} label="green" dot="bg-emerald-500" />
-            <Stat count={yellow} label="yellow" dot="bg-amber-500" />
-            <Stat count={red} label="red" dot="bg-red-500" />
+            {blue > 0 && <Stat count={blue} label="under" dot="bg-sky-500" />}
+            <Stat count={green} label="ideal" dot="bg-emerald-500" />
+            <Stat count={yellow} label="stretched" dot="bg-amber-500" />
+            <Stat count={red} label="over" dot="bg-red-500" />
           </div>
         </div>
 
