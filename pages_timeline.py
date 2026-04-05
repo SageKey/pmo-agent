@@ -118,9 +118,9 @@ def render(data: dict, utilization: dict, person_demand: list):
         with c4:
             time_range = st.selectbox(
                 "Time range",
-                ["Next 3 months", "Next 6 months", "Next 12 months",
-                 "This year", "All"],
-                index=2)
+                ["Through end of 2026", "Next 3 months", "Next 6 months",
+                 "Next 12 months", "This year", "All"],
+                index=0)
 
     # --- Apply filters ---
     filtered = scheduled
@@ -136,7 +136,10 @@ def render(data: dict, utilization: dict, person_demand: list):
 
     # --- Time range → date_range ---
     today = date.today()
-    if time_range == "Next 3 months":
+    if time_range == "Through end of 2026":
+        # Tight window ending Dec 31 2026 — makes bars visibly wider
+        date_range = (today - timedelta(days=14), date(2026, 12, 31))
+    elif time_range == "Next 3 months":
         date_range = (today - timedelta(days=14), today + timedelta(days=90))
     elif time_range == "Next 6 months":
         date_range = (today - timedelta(days=30), today + timedelta(days=180))
