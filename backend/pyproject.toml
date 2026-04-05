@@ -1,7 +1,7 @@
 [project]
 name = "pmo-agent-backend"
 version = "0.1.0"
-description = "FastAPI layer over the ETE PMO Python engines (sqlite_connector, capacity_engine, schedule_optimizer, pmo_agent)."
+description = "FastAPI layer over the PMO Planner engines (sqlite_connector, capacity_engine, schedule_optimizer, pmo_agent)."
 requires-python = ">=3.9"
 dependencies = [
     "fastapi>=0.115",

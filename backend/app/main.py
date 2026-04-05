@@ -205,10 +205,10 @@ def _backfill_data_integrity() -> None:
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="ETE PMO API",
+        title="PMO Planner API",
         version="0.1.0",
         description=(
-            "FastAPI layer over the ETE PMO Python engines. Wraps "
+            "FastAPI layer over the PMO Planner Python engines. Wraps "
             "`sqlite_connector`, `capacity_engine`, `schedule_optimizer`, "
             "`pmo_agent`, and `snapshot_store` with typed REST endpoints."
         ),

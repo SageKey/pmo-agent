@@ -113,7 +113,7 @@ export function NewProjectDialog({ open, onOpenChange }: Props) {
               <Input
                 value={form.id}
                 onChange={(v) => set("id", v)}
-                placeholder="ETE-123"
+                placeholder="PRJ-123"
                 autoFocus
               />
             </Field>

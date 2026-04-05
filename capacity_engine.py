@@ -1,5 +1,5 @@
 """
-Capacity Engine for ETE IT PMO Resource Planning Agent.
+Capacity Engine for PMO Planner.
 Calculates weekly utilization by role using demand/supply formulas.
 
 Demand formula (per role, per project, per week):
@@ -1550,7 +1550,7 @@ class CapacityEngine:
         data = self._load()
         utilization = self.compute_utilization()
 
-        print(f"ETE IT PMO — Resource Utilization Report")
+        print(f"PMO Planner — Resource Utilization Report")
         print(f"Data as of: {data['data_as_of']}")
         print(f"Active projects: {len(data['active_portfolio'])}")
         scheduled = [p for p in data["active_portfolio"] if p.duration_weeks]

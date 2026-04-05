@@ -1,8 +1,6 @@
-# ETE PMO Resource Planning Agent
+# PMO Planner
 
-An AI-powered assistant that helps IT Project Management Office (PMO) teams make smarter resource allocation decisions. Instead of manually crunching spreadsheets, you ask questions in plain English and get instant, data-driven answers about your project portfolio, team capacity, and scheduling options.
-
-Built for the ETE IT PMO team. Powered by Claude and connected directly to your existing Excel workbook.
+An AI-powered resource planning tool for IT Project Management Office (PMO) teams. Make smarter resource allocation decisions with capacity-driven scheduling, what-if scenario analysis, and real-time utilization dashboards — without manually crunching spreadsheets.
 
 ---
 
@@ -31,6 +29,74 @@ No formulas to build. No pivot tables to maintain. Just ask.
 | **What-If: Lose Resource** | Assess the risk of losing a specific team member or a headcount in any role. |
 | **Schedule Optimization** | An OR-Tools constraint solver that assigns optimal start dates to unscheduled projects and adjusts existing ones, respecting priority hierarchy. |
 | **Change Detection** | Snapshot-based diffing that tracks new projects, removed projects, status changes, progress updates, date shifts, priority changes, and hours changes between sessions. |
+| **Planning** | Capacity-driven project scheduling + what-if scenario analysis. See below. |
+
+---
+
+## Planning Module
+
+The Planning page is where scheduling and capacity decisions happen. It has two connected tabs that share state.
+
+### How it works
+
+```
+                        ┌─────────────────────────────┐
+                        │    Modification Stack        │
+                        │  (shared between both tabs)  │
+                        │                              │
+                        │  + Add project               │
+                        │  + Exclude person            │
+                        │  + Add hire                  │
+                        │  + Shift dates               │
+                        │  + Change allocation         │
+                        │  + Resize scope              │
+                        │  + Cancel project            │
+                        └──────────┬──────────────────┘
+                                   │
+                    ┌──────────────┼──────────────┐
+                    ▼                             ▼
+          ┌─────────────────┐          ┌──────────────────┐
+          │   What-If Tab   │          │ Auto-Schedule Tab │
+          │                 │          │                   │
+          │ Before / After  │          │ Project placement │
+          │ utilization     │          │ by capacity       │
+          │ comparison      │          │                   │
+          │ per role        │          │ Start dates       │
+          │                 │          │ Wait times        │
+          │ Status changes  │          │ Bottleneck roles  │
+          │ Delta arrows    │          │ Feasibility       │
+          └─────────────────┘          └──────────────────┘
+```
+
+### Typical workflow
+
+**Step 1 — Check the baseline.** Open Planning. The Auto-Schedule tab runs automatically and shows which plannable projects can start now, which are queued behind capacity constraints, and which can't be scheduled at all. Note the bottleneck roles.
+
+**Step 2 — Ask "what if?"** Switch to the What-If tab. Build a scenario by stacking modifications:
+
+| Modification | What it answers |
+|---|---|
+| **Add project** | "Can we absorb a new 800-hour initiative starting in May?" |
+| **Cancel project** | "If we drop this one, does anything else unblock?" |
+| **Exclude person** | "What happens if we lose Marcus?" |
+| **Add hire** | "If we hire another Developer at 40h/week, how much headroom opens up?" |
+| **Shift dates** | "What if we push Project X out 6 weeks?" |
+| **Change allocation** | "What if we bump Developer from 60% to 80% on this project?" |
+| **Resize scope** | "What if this project turns out to be twice as big?" |
+
+The right panel updates live — before/after utilization bars per role, delta arrows showing percentage-point changes, and a headline summarizing what broke or improved.
+
+**Step 3 — See the scheduling impact.** Switch back to Auto-Schedule. Your modifications carry over (the tab badge shows how many are active). The scheduler re-runs against the modified portfolio and roster so you can see how your what-if changes affect project placement and timelines.
+
+**Step 4 — Iterate.** Add, remove, or swap modifications. Both tabs re-compute instantly. When you find a combination that works, you have a data-backed answer to bring to the conversation.
+
+### Key concepts
+
+- **Nothing is saved.** Scenarios are ephemeral — they exist only while you're on the Planning page. No database writes, no side effects, no risk.
+- **Modifications compose.** Stack as many as you want. "Add a project + exclude a person + hire a replacement" runs as a single scenario.
+- **The scheduler respects admin thresholds.** The utilization ceiling defaults to the `util_stretched_max` value from Admin Settings (default 100%). Lower it to 85% if you want headroom built in.
+- **Priority drives placement order.** The scheduler places Highest-priority projects first, then High, Medium, Low. Within a tier, larger projects (more hours) go first. This means a High-priority 200-hour project gets calendar space before a Medium-priority 50-hour one.
+- **Bottleneck role** = the role that prevented an earlier start. If "Functional" is the bottleneck for 3 projects, that's a signal to either hire, reallocate, or push work around.
 
 ---
 
@@ -121,7 +187,7 @@ To force Railway (or any deployment) to wipe its volume and reseed from `seed_da
 - "Save a snapshot after this planning session"
 
 **Project details:**
-- "Tell me about ETE-83"
+- "Tell me about DEMO-001"
 - "Show me the details for the SAP project"
 
 ---
@@ -132,7 +198,7 @@ To force Railway (or any deployment) to wipe its volume and reseed from `seed_da
 
 - Python 3.9 or later
 - An Anthropic API key (get one at [console.anthropic.com](https://console.anthropic.com))
-- The ETE PMO Excel workbook placed in the project directory
+- A PMO data source (SQLite database or Excel workbook) placed in the project directory
 
 ### 1. Install Dependencies
 

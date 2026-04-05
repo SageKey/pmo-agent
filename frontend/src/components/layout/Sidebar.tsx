@@ -36,7 +36,7 @@ export function Sidebar() {
   return (
     <aside className="hidden w-60 shrink-0 border-r border-navy-900/10 bg-navy-950 text-slate-200 md:flex md:flex-col">
       <div className="px-5 py-6">
-        <div className="text-lg font-bold text-white">ETE IT PMO</div>
+        <div className="text-lg font-bold text-white">PMO Planner</div>
         <div className="mt-0.5 text-xs text-slate-400">Resource Planning</div>
       </div>
       <nav className="flex-1 space-y-0.5 px-2 pb-6">

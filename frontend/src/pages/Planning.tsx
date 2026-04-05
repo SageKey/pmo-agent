@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { PlayCircle, Sparkles, CalendarClock, FlaskConical } from "lucide-react";
+import { PlayCircle, Sparkles, CalendarClock, FlaskConical, HelpCircle, ChevronDown } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/button";
 import { ScenarioBuilder } from "@/components/planning/ScenarioBuilder";
@@ -53,6 +53,9 @@ export function Planning() {
             label="What-If Scenario"
           />
         </div>
+
+        {/* Collapsible workflow guide */}
+        <WorkflowGuide />
 
         {/* Tab content */}
         {tab === "schedule" && <ScheduleView modifications={modifications} />}
@@ -154,5 +157,72 @@ function TabButton({
         />
       )}
     </button>
+  );
+}
+
+function WorkflowGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-5 py-3 text-left text-sm font-medium text-slate-700 hover:text-navy-800 transition-colors"
+      >
+        <HelpCircle className="h-4 w-4 text-slate-400" />
+        How to use the Planning module
+        <ChevronDown
+          className={cn(
+            "ml-auto h-4 w-4 text-slate-400 transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="border-t border-slate-100 px-5 py-4 text-sm text-slate-600 space-y-4"
+        >
+          <div>
+            <div className="font-semibold text-slate-800 mb-1">Step 1 — Check the baseline</div>
+            <p>
+              The <strong>Auto-Schedule</strong> tab runs automatically. It shows which
+              plannable projects can start now, which are queued behind capacity
+              constraints, and which roles are the bottleneck.
+            </p>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-800 mb-1">Step 2 — Explore what-if scenarios</div>
+            <p>
+              Switch to the <strong>What-If</strong> tab and stack modifications: add a
+              project, exclude a person, hire someone, shift dates, resize scope,
+              or change a role allocation. The right panel shows instant
+              before/after utilization impact per role.
+            </p>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-800 mb-1">Step 3 — See the scheduling impact</div>
+            <p>
+              Switch back to <strong>Auto-Schedule</strong>. Your modifications carry over
+              (badge shows the count). The scheduler re-runs against the modified
+              data so you can see how your changes affect project placement and timelines.
+            </p>
+          </div>
+          <div>
+            <div className="font-semibold text-slate-800 mb-1">Step 4 — Iterate</div>
+            <p>
+              Add, remove, or swap modifications. Both tabs re-compute instantly.
+              Nothing is saved — scenarios are ephemeral exploration, not database writes.
+            </p>
+          </div>
+          <div className="rounded-md bg-slate-50 px-4 py-3 text-xs text-slate-500 space-y-1">
+            <div><strong>Priority drives placement order.</strong> Highest goes first, then High, Medium, Low. Larger projects go first within a tier.</div>
+            <div><strong>Bottleneck role</strong> = the role that prevented an earlier start. If the same role blocks multiple projects, that's a hiring or reallocation signal.</div>
+            <div><strong>Utilization ceiling</strong> defaults to the admin threshold (Settings page). Lower it to build in headroom.</div>
+          </div>
+        </motion.div>
+      )}
+    </div>
   );
 }

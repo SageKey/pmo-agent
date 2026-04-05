@@ -1,6 +1,6 @@
 """
-SQLite Connector for ETE IT PMO Resource Planning.
-SQLite data access layer for ETE IT PMO Resource Planning.
+SQLite Connector for PMO Planner Resource Planning.
+SQLite data access layer for PMO Planner Resource Planning.
 """
 
 import os

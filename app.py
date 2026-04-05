@@ -1,5 +1,5 @@
 """
-ETE PMO Executive Dashboard
+PMO Planner Executive Dashboard
 Run with: streamlit run app.py
 """
 
@@ -31,7 +31,7 @@ import pages_timesheets
 # Page Config
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="ETE PMO Resource Planning",
+    page_title="PMO Planner Resource Planning",
     page_icon="\U0001F4CA",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -47,7 +47,7 @@ with st.sidebar:
     st.markdown("""
     <div style="padding: 0.75rem 0 0.5rem 0;">
         <div style="font-size: 1.4rem; font-weight: 700; color: #FFFFFF;">
-            ETE IT PMO</div>
+            PMO Planner</div>
         <div style="font-size: 0.8rem; color: #8BA4C4; margin-top: 0.15rem;">
             Resource Planning Dashboard</div>
     </div>

@@ -140,7 +140,7 @@ export function ShareKeyGate({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <h1 className="text-center text-lg font-semibold tracking-tight text-slate-900">
-          ETE IT PMO
+          PMO Planner
         </h1>
         <p className="mt-1 text-center text-xs text-slate-500">
           This instance is password-protected. Enter the shared password to

@@ -1,5 +1,5 @@
 """
-Reusable UI components for the ETE PMO Executive Dashboard.
+Reusable UI components for the PMO Planner Executive Dashboard.
 KPI cards, charts, styled tables, and custom CSS.
 """
 

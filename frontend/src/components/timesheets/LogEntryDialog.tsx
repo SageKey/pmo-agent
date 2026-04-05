@@ -142,7 +142,7 @@ export function LogEntryDialog({ defaultMonth, open, onOpenChange }: Props) {
                 type="text"
                 value={form.project_key}
                 onChange={(e) => set("project_key", e.target.value)}
-                placeholder="ETE-68"
+                placeholder="PRJ-001"
                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
               />
             </Field>
