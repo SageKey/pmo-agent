@@ -43,11 +43,34 @@ log = logging.getLogger("pmo.startup")
 
 def _seed_database_if_missing() -> None:
     """If the configured DB doesn't exist or has no projects yet, populate
-    it from seed_data.sql. Safe to call on every boot — no-op once seeded."""
+    it from seed_data.sql. Safe to call on every boot — no-op once seeded.
+
+    Set RESEED_ON_BOOT=true in the environment to force a wipe-and-reseed
+    on the next startup. Useful for flipping the Railway deploy from real
+    data to anonymized demo data (or vice versa) without shell access to
+    the volume. Remember to remove the flag after the boot completes or
+    the DB will be wiped every restart.
+    """
+    import os
     import sqlite3
 
     db_path = Path(settings.db_path)
     seed_sql = REPO_ROOT / "seed_data.sql"
+
+    # Explicit force-reseed flag overrides the normal "is it missing?" check
+    force = str(os.environ.get("RESEED_ON_BOOT", "")).strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if force and db_path.exists():
+        log.warning(
+            "RESEED_ON_BOOT=true — deleting %s before reseeding. "
+            "Remove the env var after this deploy to avoid repeated wipes.",
+            db_path,
+        )
+        try:
+            db_path.unlink()
+        except Exception as exc:  # noqa: BLE001
+            log.error("Could not delete DB for reseed: %s", exc)
 
     need_seed = False
     if not db_path.exists():

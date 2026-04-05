@@ -24,16 +24,46 @@ class TestSupply:
             assert rk in supply, f"Missing supply for {rk}"
             assert supply[rk] >= 0
 
-    def test_pm_supply(self, engine):
-        """PM supply should be ~54.0h (roster-based with support reserves)."""
-        supply = engine.compute_supply_by_role()
-        assert approx(supply["pm"], 54.0, tol=0.03), f"PM supply={supply['pm']:.1f}"
+    def test_supply_matches_roster_math(self, connector, engine):
+        """Supply for each role must equal the sum of project_capacity_hrs
+        across all counted members in that role. This is shape-based so it
+        works against any seed (real or demo)."""
+        from collections import defaultdict
+        expected = defaultdict(float)
+        for m in connector.read_roster():
+            if getattr(m, "include_in_capacity", True):
+                expected[m.role_key] += m.project_capacity_hrs
 
-    def test_developer_supply(self, engine):
-        """Developer supply should be ~81.25h."""
         supply = engine.compute_supply_by_role()
-        assert approx(supply["developer"], 81.25, tol=0.03), (
-            f"Developer supply={supply['developer']:.1f}"
+        for role, hrs in expected.items():
+            assert approx(supply.get(role, 0), hrs, tol=0.02), (
+                f"{role}: engine supply={supply.get(role, 0):.2f}, roster math={hrs:.2f}"
+            )
+
+    def test_supply_excludes_opted_out_members(self, connector, engine):
+        """Members with include_in_capacity=False must not contribute."""
+        supply_before = engine.compute_supply_by_role()
+        # Find any counted member, flip their flag, and recompute
+        target = next(
+            (m for m in connector.read_roster()
+             if getattr(m, "include_in_capacity", True) and m.project_capacity_hrs > 0),
+            None,
+        )
+        if target is None:
+            pytest.skip("No counted members in roster")
+        connector.save_roster_member({
+            "name": target.name, "role": target.role, "role_key": target.role_key,
+            "team": target.team, "vendor": target.vendor,
+            "classification": target.classification,
+            "rate_per_hour": target.rate_per_hour,
+            "weekly_hrs_available": target.weekly_hrs_available,
+            "support_reserve_pct": target.support_reserve_pct,
+            "include_in_capacity": False,
+        })
+        engine._data = None
+        supply_after = engine.compute_supply_by_role()
+        assert supply_after[target.role_key] < supply_before[target.role_key], (
+            f"Excluding {target.name} didn't reduce {target.role_key} supply"
         )
 
 
@@ -41,31 +71,68 @@ class TestDemand:
     """Per-project demand calculations."""
 
     def test_zero_alloc_produces_no_demand(self, connector, engine):
-        """Roles with 0% allocation must produce no demand."""
-        portfolio = connector.read_portfolio()
-        p = next(p for p in portfolio if p.id == "ETE-83")
-        demands = engine.compute_project_role_demand(p)
-        # ETE-83 has 0% functional, infrastructure, technical, wms
-        for d in demands:
-            assert d.role_key not in ("functional", "infrastructure", "technical", "wms"), (
-                f"Role {d.role_key} has 0% allocation but produced demand"
-            )
+        """Roles with 0% allocation must produce no demand.
 
-    def test_ete83_allocated_roles(self, connector, engine):
-        """ETE-83 should produce demand for BA, DBA, Developer, PM."""
+        Finds any scheduled project with at least one zero-allocation role
+        and verifies the engine doesn't invent demand for that role.
+        """
         portfolio = connector.read_portfolio()
-        p = next(p for p in portfolio if p.id == "ETE-83")
-        demands = engine.compute_project_role_demand(p)
-        roles = sorted(d.role_key for d in demands)
-        assert roles == ["ba", "dba", "developer", "pm"], (
-            f"Expected ba/dba/developer/pm demand, got {roles}"
-        )
+        # Find any scheduled project that has at least one zero-allocation role
+        for p in portfolio:
+            if not (p.start_date and p.end_date and p.est_hours):
+                continue
+            zero_roles = [
+                rk for rk, alloc in (p.role_allocations or {}).items() if alloc == 0
+            ]
+            if zero_roles:
+                demands = engine.compute_project_role_demand(p)
+                produced_roles = {d.role_key for d in demands}
+                for zr in zero_roles:
+                    assert zr not in produced_roles, (
+                        f"{p.id}: role {zr} has 0% allocation but produced demand"
+                    )
+                return
+        pytest.skip("No project in seed has a zero-allocation role to test")
+
+    def test_allocated_roles_produce_demand(self, connector, engine):
+        """Every non-zero allocation on a scheduled project must surface in
+        the demand list — the inverse of the zero-alloc check."""
+        portfolio = connector.read_portfolio()
+        for p in portfolio:
+            if not (p.start_date and p.end_date and p.est_hours):
+                continue
+            nonzero = {
+                rk for rk, a in (p.role_allocations or {}).items() if a and a > 0
+            }
+            if not nonzero:
+                continue
+            demands = engine.compute_project_role_demand(p)
+            produced = {d.role_key for d in demands}
+            assert nonzero.issubset(produced), (
+                f"{p.id}: expected demand for {nonzero}, got {produced}"
+            )
+            return
+        pytest.skip("No scheduled project with non-zero allocations in seed")
 
     def test_demand_formula(self, connector, engine):
-        """Verify demand = est_hours × alloc × avg_effort / duration_weeks."""
+        """Verify demand = est_hours × alloc × avg_effort / duration_weeks.
+
+        Picks any scheduled project with a non-zero developer allocation
+        and checks the computed weekly hours match the formula.
+        """
         assumptions = connector.read_assumptions()
         portfolio = connector.read_portfolio()
-        p = next(p for p in portfolio if p.id == "ETE-68")
+        p = next(
+            (
+                p for p in portfolio
+                if p.start_date and p.end_date and p.est_hours
+                and (p.role_allocations or {}).get("developer", 0) > 0
+            ),
+            None,
+        )
+        if p is None:
+            pytest.skip("No scheduled project with developer allocation in seed")
+
         demands = engine.compute_project_role_demand(p)
         dev = next(d for d in demands if d.role_key == "developer")
 
@@ -76,7 +143,7 @@ class TestDemand:
             / p.duration_weeks
         )
         assert approx(dev.weekly_hours, expected), (
-            f"Expected {expected:.2f}, got {dev.weekly_hours:.2f}"
+            f"{p.id}: expected {expected:.2f}, got {dev.weekly_hours:.2f}"
         )
 
     def test_unscheduled_projects_zero_demand(self, connector, engine):
@@ -131,7 +198,16 @@ class TestWeeklyTimeline:
     def test_timeline_phases_in_order(self, connector, engine):
         """Phases must progress in SDLC order."""
         portfolio = connector.read_portfolio()
-        p = next(p for p in portfolio if p.id == "ETE-68")
+        p = next(
+            (
+                p for p in portfolio
+                if p.start_date and p.end_date and p.est_hours
+                and (p.role_allocations or {}).get("developer", 0) > 0
+            ),
+            None,
+        )
+        if p is None:
+            pytest.skip("No scheduled project with developer allocation")
         timeline = engine.compute_weekly_demand_timeline(p)
 
         assert "developer" in timeline
@@ -145,12 +221,29 @@ class TestWeeklyTimeline:
         assert phases_seen == SDLC_PHASES[:len(phases_seen)]
 
     def test_timeline_week_count(self, connector, engine):
-        """ETE-68 should have ~23 weeks of timeline."""
+        """Timeline week count must match the project's duration_weeks.
+
+        For any scheduled project with developer allocation, the timeline
+        should span roughly the same number of weeks as the project itself.
+        """
         portfolio = connector.read_portfolio()
-        p = next(p for p in portfolio if p.id == "ETE-68")
+        p = next(
+            (
+                p for p in portfolio
+                if p.start_date and p.end_date and p.est_hours
+                and (p.role_allocations or {}).get("developer", 0) > 0
+            ),
+            None,
+        )
+        if p is None:
+            pytest.skip("No scheduled project with developer allocation")
         timeline = engine.compute_weekly_demand_timeline(p)
         dev_weeks = timeline.get("developer", [])
-        assert 20 <= len(dev_weeks) <= 25, f"Expected ~23 weeks, got {len(dev_weeks)}"
+        expected = p.duration_weeks or 0
+        # Allow ±2 weeks for week-boundary rounding
+        assert abs(len(dev_weeks) - expected) <= 2, (
+            f"{p.id}: expected ~{expected:.0f} weeks, got {len(dev_weeks)}"
+        )
 
 
 class TestPortfolioSimulation:

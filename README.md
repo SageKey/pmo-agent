@@ -34,6 +34,29 @@ No formulas to build. No pivot tables to maintain. Just ask.
 
 ---
 
+## Demo Data
+
+The `seed_data.sql` file in this repo contains **anonymized demo data only** — fictional project names, fake people, fictional vendors, and scaled/jittered dollar amounts. Any fresh deploy (Railway, local dev) boots from this seed and shows the demo dataset.
+
+To regenerate the demo seed from a private real database:
+
+```bash
+# 1. Keep your real data locally (never committed; *.db is gitignored)
+cp pmo_data.db pmo_data.real.db
+
+# 2. Run the anonymizer (deterministic — same input + seed → same output)
+python3 scripts/anonymize_data.py \
+  --source pmo_data.real.db \
+  --dest pmo_data.demo.db
+
+# 3. Dump the demo DB to the seed file
+sqlite3 pmo_data.demo.db .dump > seed_data.sql
+```
+
+To force Railway (or any deployment) to wipe its volume and reseed from `seed_data.sql`, set `RESEED_ON_BOOT=true` in the service environment, redeploy, then remove the env var once the boot completes.
+
+---
+
 ## How It Works
 
 ```
