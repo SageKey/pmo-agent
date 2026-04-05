@@ -17,6 +17,7 @@ from . import engines  # noqa: F401
 from .config import settings
 from .routers import (
     agent,
+    assignments,
     capacity,
     comments,
     financials,
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(tasks.router, prefix=settings.api_prefix)
     app.include_router(comments.router, prefix=settings.api_prefix)
     app.include_router(roster.router, prefix=settings.api_prefix)
+    app.include_router(assignments.router, prefix=settings.api_prefix)
     app.include_router(financials.router, prefix=settings.api_prefix)
     app.include_router(timesheets.router, prefix=settings.api_prefix)
     app.include_router(agent.router, prefix=settings.api_prefix)

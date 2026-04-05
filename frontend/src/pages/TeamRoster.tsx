@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
+import { Button } from "@/components/ui/button";
 import { PersonCard } from "@/components/roster/PersonCard";
 import { PersonDetailDrawer } from "@/components/roster/PersonDetailDrawer";
+import { EditMemberDialog } from "@/components/roster/EditMemberDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { usePersonDemand } from "@/hooks/useRoster";
-import type { PersonDemand } from "@/types/roster";
+import { usePersonDemand, useRoster } from "@/hooks/useRoster";
+import type { PersonDemand, TeamMember } from "@/types/roster";
 import { cn } from "@/lib/cn";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -35,8 +37,22 @@ export function TeamRoster() {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<PersonDemand | null>(null);
+  const [editMember, setEditMember] = useState<TeamMember | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data, isLoading, isError, error } = usePersonDemand();
+  const rosterQuery = useRoster();
+  const roster = rosterQuery.data ?? [];
+
+  const openEdit = (m: TeamMember) => {
+    setEditMember(m);
+    setDialogOpen(true);
+    setSelected(null); // close the drawer so it doesn't stack
+  };
+  const openNew = () => {
+    setEditMember(null);
+    setDialogOpen(true);
+  };
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -88,6 +104,13 @@ export function TeamRoster() {
         subtitle="Person-level load across the 8 IT roles."
       />
       <div className="space-y-6 p-8">
+        <div className="flex items-center justify-between">
+          <div />
+          <Button onClick={openNew}>
+            <Plus className="h-4 w-4" />
+            New member
+          </Button>
+        </div>
         {/* Topline: overloaded + most available */}
         {data && (
           <div className="grid gap-4 md:grid-cols-2">
@@ -251,7 +274,18 @@ export function TeamRoster() {
         )}
       </div>
 
-      <PersonDetailDrawer person={selected} onClose={() => setSelected(null)} />
+      <PersonDetailDrawer
+        person={selected}
+        roster={roster}
+        onClose={() => setSelected(null)}
+        onEdit={openEdit}
+      />
+
+      <EditMemberDialog
+        member={editMember}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
     </>
   );
 }

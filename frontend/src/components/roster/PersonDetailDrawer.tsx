@@ -1,8 +1,9 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { PersonDemand } from "@/types/roster";
+import type { PersonDemand, TeamMember } from "@/types/roster";
 import { avatarTone, initials, pct } from "@/lib/format";
+import { useDeleteMember } from "@/hooks/useRoster";
 import { cn } from "@/lib/cn";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -24,11 +25,33 @@ const STATUS_STYLE: Record<string, string> = {
 
 export function PersonDetailDrawer({
   person,
+  roster,
   onClose,
+  onEdit,
 }: {
   person: PersonDemand | null;
+  roster: TeamMember[];
   onClose: () => void;
+  onEdit: (m: TeamMember) => void;
 }) {
+  const deleteMutation = useDeleteMember();
+  const memberRecord = person
+    ? roster.find((m) => m.name === person.name) ?? null
+    : null;
+
+  const handleDelete = () => {
+    if (!person) return;
+    if (
+      confirm(
+        `Delete ${person.name}? This removes them from the roster and unassigns them from every project.`,
+      )
+    ) {
+      deleteMutation.mutate(person.name, {
+        onSuccess: () => onClose(),
+      });
+    }
+  };
+
   return (
     <AnimatePresence>
       {person && (
@@ -67,12 +90,30 @@ export function PersonDetailDrawer({
                   </div>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <X className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => memberRecord && onEdit(memberRecord)}
+                  disabled={!memberRecord}
+                  className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"
+                  title="Edit member"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleteMutation.isPending}
+                  className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                  title="Delete member"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={onClose}
+                  className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-5 px-6 py-5">

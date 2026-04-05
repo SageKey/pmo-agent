@@ -2,12 +2,14 @@ import { useParams } from "react-router-dom";
 import { ProjectHero } from "@/components/project/ProjectHero";
 import { ProjectKpiStrip } from "@/components/project/ProjectKpiStrip";
 import { RoleDemandCard } from "@/components/project/RoleDemandCard";
+import { AssignmentsPanel } from "@/components/project/AssignmentsPanel";
 import { MilestonesPanel } from "@/components/project/MilestonesPanel";
 import { CommentsPanel } from "@/components/project/CommentsPanel";
 import { useProject } from "@/hooks/usePortfolio";
 import { useProjectDemand } from "@/hooks/useProjectDemand";
 import { useMilestones } from "@/hooks/useMilestones";
 import { useComments } from "@/hooks/useComments";
+import { useProjectAssignments } from "@/hooks/useAssignments";
 
 export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -16,6 +18,7 @@ export function ProjectDetail() {
   const demand = useProjectDemand(projectId);
   const milestones = useMilestones(projectId);
   const comments = useComments(projectId);
+  const assignments = useProjectAssignments(projectId);
 
   if (project.isLoading) {
     return <LoadingState />;
@@ -42,6 +45,10 @@ export function ProjectDetail() {
       />
 
       {demand.data && <RoleDemandCard demand={demand.data} />}
+
+      {assignments.data && (
+        <AssignmentsPanel project={p} assignments={assignments.data} />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {milestones.data && projectId && (
