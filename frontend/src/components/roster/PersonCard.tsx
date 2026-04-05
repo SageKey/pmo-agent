@@ -44,6 +44,12 @@ const STATUS_STYLE: Record<
     ring: "ring-red-200",
     chip: "bg-red-50 text-red-700",
   },
+  GREY: {
+    bar: "bg-slate-400",
+    text: "text-slate-600",
+    ring: "ring-slate-300",
+    chip: "bg-slate-100 text-slate-600",
+  },
 };
 
 export function PersonCard({

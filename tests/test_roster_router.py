@@ -112,9 +112,12 @@ class TestPersonDemand:
                         "project_count", "projects", "include_in_capacity"):
                 assert key in row, f"{row.get('name')} missing {key}"
 
-    def test_status_is_one_of_four_states(self, api_client):
+    def test_status_is_one_of_five_states(self, api_client):
         rows = api_client.get(f"{API}/demand").json()
-        valid = {"BLUE", "GREEN", "YELLOW", "RED"}
+        # 5 states: BLUE under, GREEN ideal, YELLOW stretched, RED over,
+        # GREY unstaffed (zero capacity but has demand — person-level mirror
+        # of the role-level unstaffed case).
+        valid = {"BLUE", "GREEN", "YELLOW", "RED", "GREY"}
         for row in rows:
             assert row["status"] in valid, f"{row['name']}: {row['status']}"
 

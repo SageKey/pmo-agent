@@ -22,6 +22,7 @@ const STATUS_STYLE: Record<string, string> = {
   GREEN: "text-emerald-700",
   YELLOW: "text-amber-700",
   RED: "text-red-700",
+  GREY: "text-slate-600",
 };
 
 export function PersonDetailDrawer({

@@ -302,12 +302,23 @@ class CapacityEngine:
                 float("inf") if total_demand > 0 else 0.0
             )
 
+            # Unstaffed case: demand exists but there's literally nobody to
+            # do it (either the role has no roster members, or they were
+            # all excluded via include_in_capacity). Distinct from OVER
+            # because "1000% of 0 capacity" is a different problem from
+            # "110% of 40 hrs" — one says re-include or hire, the other
+            # says reassign.
+            if supply_hrs == 0 and total_demand > 0:
+                status = "GREY"
+            else:
+                status = _utilization_status(util_pct, self.util_thresholds)
+
             utilization[role] = RoleUtilization(
                 role_key=role,
                 supply_hrs_week=supply_hrs,
                 demand_hrs_week=total_demand,
                 utilization_pct=util_pct,
-                status=_utilization_status(util_pct, self.util_thresholds),
+                status=status,
                 demand_breakdown=demands,
             )
 
@@ -419,6 +430,14 @@ class CapacityEngine:
             capacity = member.project_capacity_hrs
             util_pct = total_demand_hrs / capacity if capacity > 0 else 0.0
 
+            # Person-level mirror of the role-level GREY case. Someone with
+            # zero counted capacity but explicit assignments is a data
+            # inconsistency worth flagging distinctly.
+            if capacity == 0 and total_demand_hrs > 0:
+                person_status = "GREY"
+            else:
+                person_status = _utilization_status(util_pct, self.util_thresholds)
+
             results.append({
                 "name": member.name,
                 "role": member.role,
@@ -427,7 +446,7 @@ class CapacityEngine:
                 "capacity_hrs_week": round(capacity, 1),
                 "demand_hrs_week": round(total_demand_hrs, 1),
                 "utilization_pct": f"{util_pct:.0%}",
-                "status": _utilization_status(util_pct, self.util_thresholds),
+                "status": person_status,
                 "project_count": len(demand_items),
                 "projects": demand_items,
                 "include_in_capacity": included,

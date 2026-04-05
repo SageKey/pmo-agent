@@ -212,3 +212,86 @@ class TestEngineUsesSettingsThresholds:
         # new (very tight) ideal band.
         statuses = {u.status for u in util.values() if u.utilization_pct > 0}
         assert statuses  # not empty
+
+
+# ---------------------------------------------------------------------------
+# UNSTAFFED (GREY) state — supply=0 but demand>0
+# ---------------------------------------------------------------------------
+
+class TestUnstaffedState:
+    """When a role has weekly demand but no counted capacity, the engine
+    must return status='GREY' instead of rolling into RED. This keeps the
+    'we have no one to do this' case visually distinct from 'we have
+    people but they're over-allocated'."""
+
+    def test_role_with_demand_and_zero_supply_is_grey(self, connector, engine):
+        # Exclude every infrastructure team member so supply drops to 0
+        for m in connector.read_roster():
+            if m.role_key == "infrastructure":
+                payload = {
+                    "name": m.name,
+                    "role": m.role,
+                    "role_key": m.role_key,
+                    "team": m.team,
+                    "vendor": m.vendor,
+                    "classification": m.classification,
+                    "rate_per_hour": m.rate_per_hour,
+                    "weekly_hrs_available": m.weekly_hrs_available,
+                    "support_reserve_pct": m.support_reserve_pct,
+                    "include_in_capacity": False,
+                }
+                connector.save_roster_member(payload)
+
+        # Rebuild engine state after the roster change
+        engine._data = None
+        util = engine.compute_utilization()
+
+        infra = util.get("infrastructure")
+        assert infra is not None, "infra role must appear in utilization output"
+        assert infra.supply_hrs_week == 0
+        # Seed data has 5 projects with infra allocation — demand > 0
+        assert infra.demand_hrs_week > 0
+        assert infra.status == "GREY", (
+            f"unstaffed role should be GREY, got {infra.status}"
+        )
+
+    def test_role_with_no_demand_and_zero_supply_not_grey(self, connector, engine):
+        """If supply=0 AND demand=0, the role is irrelevant — don't flag
+        it as unstaffed. (Would otherwise be noise.)"""
+        # Zero out demand for a role by setting all active projects'
+        # infra allocations to 0, then exclude all infra people.
+        db = connector._open()
+        db.execute(
+            "UPDATE project_role_allocations SET allocation = 0 WHERE role_key = ?",
+            ("infrastructure",),
+        )
+        db.commit()
+        for m in connector.read_roster():
+            if m.role_key == "infrastructure":
+                connector.save_roster_member({
+                    "name": m.name, "role": m.role, "role_key": m.role_key,
+                    "team": m.team, "vendor": m.vendor,
+                    "classification": m.classification,
+                    "rate_per_hour": m.rate_per_hour,
+                    "weekly_hrs_available": m.weekly_hrs_available,
+                    "support_reserve_pct": m.support_reserve_pct,
+                    "include_in_capacity": False,
+                })
+
+        engine._data = None
+        util = engine.compute_utilization()
+        infra = util.get("infrastructure")
+        if infra is not None:
+            # If the role still shows up, it must NOT be GREY
+            # (no demand = not unstaffed, just unused)
+            assert infra.status != "GREY"
+
+    def test_normal_roles_still_classified_correctly(self, connector, engine):
+        """Adding the GREY short-circuit must not affect the 4-state
+        classification for roles where supply > 0."""
+        util = engine.compute_utilization()
+        for role_key, u in util.items():
+            if u.supply_hrs_week > 0:
+                assert u.status in {"BLUE", "GREEN", "YELLOW", "RED"}, (
+                    f"{role_key} with supply>0 should use 4-state, got {u.status}"
+                )

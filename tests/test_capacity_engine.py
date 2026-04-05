@@ -114,13 +114,13 @@ class TestUtilization:
             assert hasattr(u, "status")
 
     def test_utilization_status_values(self, engine):
-        """Status must be one of the 4 utilization states.
+        """Status must be one of the 5 utilization states.
 
-        BLUE = under-utilized (new in the admin-thresholds feature),
-        GREEN = ideal, YELLOW = stretched, RED = over capacity.
+        BLUE = under-utilized, GREEN = ideal, YELLOW = stretched,
+        RED = over capacity, GREY = unstaffed (supply=0 but demand>0).
         """
         util = engine.compute_utilization()
-        valid = {"BLUE", "GREEN", "YELLOW", "RED"}
+        valid = {"BLUE", "GREEN", "YELLOW", "RED", "GREY"}
         for role, u in util.items():
             assert u.status in valid, f"{role} has status '{u.status}'"
 

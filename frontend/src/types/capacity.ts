@@ -6,7 +6,10 @@ export interface RoleDemand {
   weekly_hours: number;
 }
 
-export type RoleStatus = "BLUE" | "GREEN" | "YELLOW" | "RED";
+// GREY is the "unstaffed" case: role has demand > 0 but supply = 0 (no
+// roster members, or all excluded via include_in_capacity). Distinct from
+// RED because it's a staffing gap, not an over-allocation.
+export type RoleStatus = "BLUE" | "GREEN" | "YELLOW" | "RED" | "GREY";
 
 export interface RoleUtilization {
   role_key: string;

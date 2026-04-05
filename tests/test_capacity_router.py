@@ -20,7 +20,9 @@ class TestUtilizationEndpoint:
             for k in ("role_key", "supply_hrs_week", "demand_hrs_week",
                       "utilization_pct", "status"):
                 assert k in row
-            assert row["status"] in {"BLUE", "GREEN", "YELLOW", "RED"}
+            # 5 possible statuses: BLUE under, GREEN ideal, YELLOW stretched,
+            # RED over, GREY unstaffed (supply=0 with demand>0)
+            assert row["status"] in {"BLUE", "GREEN", "YELLOW", "RED", "GREY"}
 
     def test_respects_admin_threshold_changes(self, api_client):
         """When the admin lowers the ideal ceiling, at least one role's

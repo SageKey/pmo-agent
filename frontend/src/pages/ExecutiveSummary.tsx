@@ -38,6 +38,7 @@ export function ExecutiveSummary() {
   const red = utilEntries.filter((r) => r.status === "RED").length;
   const yellow = utilEntries.filter((r) => r.status === "YELLOW").length;
   const blue = utilEntries.filter((r) => r.status === "BLUE").length;
+  const grey = utilEntries.filter((r) => r.status === "GREY").length;
 
   // Weighted utilization across the whole team — total demand divided by
   // total supply. This is the metric that actually moves when someone is
@@ -61,10 +62,12 @@ export function ExecutiveSummary() {
   // Active share: what fraction of the portfolio is currently in-flight
   const activeShare = totalCount > 0 ? activeCount / totalCount : 0;
 
-  // "At risk" combined count
-  const atRisk = red + yellow;
+  // "At risk" combined count — unstaffed roles count as at-risk because
+  // they signal a real gap that needs attention (hire, reassign, or zero
+  // out stale allocations).
+  const atRisk = red + yellow + grey;
   const riskTone: "success" | "warning" | "danger" =
-    red > 0 ? "danger" : yellow > 0 ? "warning" : "success";
+    red > 0 ? "danger" : yellow > 0 || grey > 0 ? "warning" : "success";
 
   const utilTone: "success" | "warning" | "danger" =
     avgUtil >= 1 ? "danger" : avgUtil >= 0.8 ? "warning" : "success";
@@ -126,7 +129,9 @@ export function ExecutiveSummary() {
                 ? blue > 0
                   ? `${blue} under-utilized · no overloads`
                   : "All clear · no bottlenecks"
-                : `${red} over capacity · ${yellow} approaching`
+                : grey > 0 && red === 0 && yellow === 0
+                  ? `${grey} unstaffed · needs hire or reassign`
+                  : `${red} over · ${yellow} approaching${grey > 0 ? ` · ${grey} unstaffed` : ""}`
             }
             icon={
               atRisk === 0 ? (

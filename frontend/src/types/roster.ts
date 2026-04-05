@@ -21,7 +21,7 @@ export interface PersonProjectDemand {
   alloc_pct: number;
 }
 
-export type RoleStatus = "BLUE" | "GREEN" | "YELLOW" | "RED";
+export type RoleStatus = "BLUE" | "GREEN" | "YELLOW" | "RED" | "GREY";
 
 export interface PersonDemand {
   name: string;
