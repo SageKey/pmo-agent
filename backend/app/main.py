@@ -88,6 +88,51 @@ def _seed_database_if_missing() -> None:
     log.info("Seed complete")
 
 
+def _backfill_completion_consistency() -> None:
+    """One-time data repair: any project with health=COMPLETE but
+    pct_complete < 1.0 (or vice versa) gets normalized. Runs on every
+    boot but is a no-op once the data is clean."""
+    import sqlite3
+
+    db_path = Path(settings.db_path)
+    if not db_path.exists():
+        return
+    try:
+        conn = sqlite3.connect(str(db_path))
+        # COMPLETE health but not 100% -> set to 100%
+        cur = conn.execute(
+            """UPDATE projects
+               SET pct_complete = 1.0
+               WHERE health LIKE '%COMPLETE%'
+                 AND health NOT LIKE '%INCOMPLETE%'
+                 AND (pct_complete IS NULL OR pct_complete < 1.0)"""
+        )
+        fixed_pct = cur.rowcount
+        # 100%+ but health not Complete/Postponed -> upgrade health
+        cur = conn.execute(
+            """UPDATE projects
+               SET health = '✅ COMPLETE'
+               WHERE pct_complete >= 1.0
+                 AND (health IS NULL
+                      OR (health NOT LIKE '%COMPLETE%' AND health NOT LIKE '%POSTPONED%'))"""
+        )
+        fixed_health = cur.rowcount
+        conn.commit()
+        if fixed_pct or fixed_health:
+            log.info(
+                "Backfilled completion consistency: %d pct rows, %d health rows",
+                fixed_pct,
+                fixed_health,
+            )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Completion backfill failed: %s", exc)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="ETE PMO API",
@@ -103,6 +148,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def on_startup() -> None:
         _seed_database_if_missing()
+        _backfill_completion_consistency()
 
     # --- CORS ---
     # Include localhost defaults + any production origin from env. We also

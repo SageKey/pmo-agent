@@ -28,6 +28,44 @@ def _find_project(conn: SQLiteConnector, project_id: str):
     raise HTTPException(status_code=404, detail=f"Project {project_id} not found")
 
 
+def _is_complete_health(h: object) -> bool:
+    if not isinstance(h, str):
+        return False
+    up = h.upper()
+    return "COMPLETE" in up and "INCOMPLETE" not in up
+
+
+def _is_postponed_health(h: object) -> bool:
+    return isinstance(h, str) and "POSTPONED" in h.upper()
+
+
+def _normalize_completion(
+    fields: Dict[str, Any],
+    current_health: object = None,
+) -> None:
+    """Keep `health` and `pct_complete` in sync on writes.
+
+    - If the write sets health to a "complete" variant, force pct_complete=1.0.
+    - If the write sets pct_complete >= 1.0 AND the user didn't also send
+      a new health value, upgrade health to COMPLETE (unless the current
+      stored health is already complete or postponed).
+    - Mutates `fields` in place.
+    """
+    health = fields.get("health")
+    pct = fields.get("pct_complete")
+
+    if health is not None and _is_complete_health(health):
+        fields["pct_complete"] = 1.0
+        return
+
+    if pct is not None and pct >= 1.0 and "health" not in fields:
+        # Only auto-upgrade if current health isn't already complete/postponed
+        if not _is_complete_health(current_health) and not _is_postponed_health(
+            current_health
+        ):
+            fields["health"] = "✅ COMPLETE"
+
+
 @router.get("/", response_model=List[ProjectOut])
 def list_projects(
     active_only: bool = Query(False, description="Exclude POSTPONED and 100% complete."),
@@ -61,6 +99,9 @@ def create_project(
             fields[key] = value.isoformat()
         else:
             fields[key] = value
+
+    # On create there's no prior health to consider — normalize with None.
+    _normalize_completion(fields, current_health=None)
 
     err = conn.save_project(fields, is_new=True)
     if err:
@@ -111,8 +152,9 @@ def update_project(
     conn: SQLiteConnector = Depends(get_connector),
 ) -> ProjectOut:
     """Partial update. Only supplied fields are written."""
-    # Confirm the project exists first so we can surface a clean 404.
-    _find_project(conn, project_id)
+    # Confirm the project exists first so we can surface a clean 404 + we
+    # need its current health for the completion-sync rule.
+    current = _find_project(conn, project_id)
 
     # Build the fields dict save_project expects: flat column names, plus
     # "alloc_{role}" keys for role allocations. Dates are ISO strings.
@@ -128,6 +170,10 @@ def update_project(
             fields[key] = value.isoformat()
         else:
             fields[key] = value
+
+    # Enforce health/pct_complete sync using the current stored health
+    # as context for when only one of the two fields is being updated.
+    _normalize_completion(fields, current_health=current.health)
 
     err = conn.save_project(fields, is_new=False)
     if err:
