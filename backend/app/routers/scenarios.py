@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..deps import get_capacity, get_connector
 from ..engines import CapacityEngine, SQLiteConnector
 from ..schemas.scenario import (
+    InFlightProject,
     RoleUtilSnapshot,
     ScenarioDelta,
     ScenarioEvaluateRequest,
@@ -214,14 +215,37 @@ def schedule_portfolio(
     if payload.modifications:
         mods_as_dicts = [m.model_dump() for m in payload.modifications]
         try:
-            results = engine.simulate_portfolio_schedule_with_scenario(
-                modifications=mods_as_dicts,
-                **schedule_kwargs,
-            )
+            # Apply modifications then classify + schedule
+            import copy
+            from capacity_engine import _apply_scenario_modifications
+            engine._load()
+            orig_data = engine._data
+            engine._data = copy.deepcopy(orig_data)
+            try:
+                _apply_scenario_modifications(engine._data, mods_as_dicts)
+                in_dev, _plannable = engine._classify_projects()
+                results = engine.simulate_portfolio_schedule(**schedule_kwargs)
+            finally:
+                engine._data = orig_data
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
     else:
+        in_dev, _plannable = engine._classify_projects()
         results = engine.simulate_portfolio_schedule(**schedule_kwargs)
+
+    in_flight = [
+        InFlightProject(
+            project_id=p.id,
+            project_name=p.name,
+            priority=p.priority or "",
+            est_hours=p.est_hours,
+            health=p.health or "",
+            pct_complete=p.pct_complete,
+            start_date=p.start_date.isoformat() if p.start_date else None,
+            end_date=p.end_date.isoformat() if p.end_date else None,
+        )
+        for p in in_dev
+    ]
 
     projects = [ScheduledProject(**r) for r in results]
 
@@ -240,6 +264,7 @@ def schedule_portfolio(
     return SchedulePortfolioResponse(
         max_util_pct=max_util,
         horizon_weeks=payload.horizon_weeks,
+        in_flight=in_flight,
         projects=projects,
         can_start_now_count=can_now,
         waiting_count=waiting,

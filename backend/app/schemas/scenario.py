@@ -198,14 +198,29 @@ class ScheduledProject(BaseModel):
     can_start_now: bool
 
 
+class InFlightProject(BaseModel):
+    """A project that's already in development — consuming capacity on the
+    demand grid but not eligible for scheduling placement."""
+    project_id: str
+    project_name: str
+    priority: str
+    est_hours: float
+    health: str
+    pct_complete: float
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
 class SchedulePortfolioResponse(BaseModel):
     """Response from the auto-scheduler. `summary` gives at-a-glance stats;
-    `projects` is the per-project placement sorted by suggested_start."""
-    max_util_pct: float              # the value actually used (resolved from admin if omitted)
+    `projects` is the per-project placement sorted by suggested_start.
+    `in_flight` shows what's already consuming capacity."""
+    max_util_pct: float
     horizon_weeks: int
-    projects: List[ScheduledProject]
+    in_flight: List[InFlightProject]  # already in development
+    projects: List[ScheduledProject]  # plannable projects with suggested dates
     # Counts for the UI summary banner
     can_start_now_count: int
     waiting_count: int
     infeasible_count: int
-    bottleneck_roles: Dict[str, int]  # role_key → how many projects blocked by it
+    bottleneck_roles: Dict[str, int]

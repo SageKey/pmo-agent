@@ -109,9 +109,21 @@ export interface ScheduledProject {
   can_start_now: boolean;
 }
 
+export interface InFlightProject {
+  project_id: string;
+  project_name: string;
+  priority: string;
+  est_hours: number;
+  health: string;
+  pct_complete: number;
+  start_date: string | null;
+  end_date: string | null;
+}
+
 export interface SchedulePortfolioResponse {
   max_util_pct: number;
   horizon_weeks: number;
+  in_flight: InFlightProject[];
   projects: ScheduledProject[];
   can_start_now_count: number;
   waiting_count: number;
