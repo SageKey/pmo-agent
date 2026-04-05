@@ -39,31 +39,115 @@ def _is_postponed_health(h: object) -> bool:
     return isinstance(h, str) and "POSTPONED" in h.upper()
 
 
-def _normalize_completion(
+def _is_not_started_health(h: object) -> bool:
+    return isinstance(h, str) and "NOT STARTED" in h.upper()
+
+
+def _normalize_project(
     fields: Dict[str, Any],
-    current_health: object = None,
+    current: object = None,
 ) -> None:
-    """Keep `health` and `pct_complete` in sync on writes.
+    """Enforce data-integrity invariants on every create/update write.
 
-    - If the write sets health to a "complete" variant, force pct_complete=1.0.
-    - If the write sets pct_complete >= 1.0 AND the user didn't also send
-      a new health value, upgrade health to COMPLETE (unless the current
-      stored health is already complete or postponed).
-    - Mutates `fields` in place.
+    Applied in order (each rule assumes earlier rules have run):
+
+    1. Clamp pct_complete to [0, 1] — defense against bad client input.
+    2. Validate dates — end_date must be on/after start_date. Uses the
+       patched value OR the stored value if the patch doesn't touch it.
+       Raises HTTP 400 rather than silently swapping (a swap could mask
+       a user typo, which is worse than a clear error message).
+    3. actual_end set → force health=COMPLETE + pct_complete=1.0. An
+       actual end date means the project shipped; syncing the other two
+       fields is the only consistent interpretation.
+    4. health set to COMPLETE → force pct_complete=1.0.
+    5. pct_complete >= 1.0 and the write didn't also set health → upgrade
+       health to COMPLETE (unless stored health is already Complete or
+       Postponed).
+    6. pct_complete > 0 and health=NOT STARTED → upgrade health to
+       ON TRACK. "Not started" with progress is impossible by definition.
+
+    `current` is the stored Project (or None on create) — used to pick up
+    fields that the partial update didn't touch when a rule needs them.
     """
-    health = fields.get("health")
-    pct = fields.get("pct_complete")
+    # Rule 1: clamp pct_complete
+    if "pct_complete" in fields:
+        pct = fields["pct_complete"]
+        if isinstance(pct, (int, float)):
+            fields["pct_complete"] = max(0.0, min(1.0, float(pct)))
 
-    if health is not None and _is_complete_health(health):
+    # Rule 2: date sanity. Compose effective start/end combining patch + stored.
+    from datetime import date as _date
+    def _parse(d: object) -> "_date | None":
+        if d is None:
+            return None
+        if isinstance(d, _date):
+            return d
+        if isinstance(d, str):
+            try:
+                return _date.fromisoformat(d)
+            except ValueError:
+                return None
+        return None
+
+    eff_start = _parse(fields.get("start_date")) if "start_date" in fields else _parse(
+        getattr(current, "start_date", None)
+    )
+    eff_end = _parse(fields.get("end_date")) if "end_date" in fields else _parse(
+        getattr(current, "end_date", None)
+    )
+    if eff_start and eff_end and eff_end < eff_start:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"end_date ({eff_end.isoformat()}) cannot be before "
+                f"start_date ({eff_start.isoformat()})"
+            ),
+        )
+
+    # Rule 3: actual_end set implies project is done
+    if fields.get("actual_end") not in (None, ""):
+        if "health" not in fields or not _is_complete_health(fields.get("health")):
+            # Only force health if the write didn't explicitly set a non-complete one
+            if "health" not in fields:
+                fields["health"] = "✅ COMPLETE"
         fields["pct_complete"] = 1.0
         return
 
+    # Rule 4: explicit complete health → 100%
+    if fields.get("health") is not None and _is_complete_health(fields.get("health")):
+        fields["pct_complete"] = 1.0
+        return
+
+    pct = fields.get("pct_complete")
+    current_health = getattr(current, "health", None)
+
+    # Rule 5: 100%+ → upgrade health to Complete (unless stored is already complete/postponed)
     if pct is not None and pct >= 1.0 and "health" not in fields:
-        # Only auto-upgrade if current health isn't already complete/postponed
         if not _is_complete_health(current_health) and not _is_postponed_health(
             current_health
         ):
             fields["health"] = "✅ COMPLETE"
+        return
+
+    # Rule 6: progress > 0 + NOT STARTED → upgrade to ON TRACK
+    effective_health = fields.get("health", current_health)
+    effective_pct = pct if pct is not None else getattr(current, "pct_complete", 0.0) or 0.0
+    if effective_pct > 0 and _is_not_started_health(effective_health):
+        # Only upgrade if the client didn't explicitly set a non-NOT-STARTED
+        # health in this write (which would already have been used above)
+        if "health" not in fields:
+            fields["health"] = "🟢 ON TRACK"
+
+    # Rule 7: pct lowered below 100% on a Complete project → downgrade
+    # health to ON TRACK. Symmetric with rule 5 (pct=100 → upgrade).
+    # Rationale: if you're < 100% done you can't be Complete by definition.
+    if (
+        pct is not None
+        and pct < 1.0
+        and "health" not in fields
+        and _is_complete_health(current_health)
+    ):
+        fields["health"] = "🟢 ON TRACK"
 
 
 @router.get("/", response_model=List[ProjectOut])
@@ -101,7 +185,7 @@ def create_project(
             fields[key] = value
 
     # On create there's no prior health to consider — normalize with None.
-    _normalize_completion(fields, current_health=None)
+    _normalize_project(fields, current=None)
 
     err = conn.save_project(fields, is_new=True)
     if err:
@@ -173,7 +257,7 @@ def update_project(
 
     # Enforce health/pct_complete sync using the current stored health
     # as context for when only one of the two fields is being updated.
-    _normalize_completion(fields, current_health=current.health)
+    _normalize_project(fields, current=current)
 
     err = conn.save_project(fields, is_new=False)
     if err:

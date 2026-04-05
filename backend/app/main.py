@@ -88,10 +88,11 @@ def _seed_database_if_missing() -> None:
     log.info("Seed complete")
 
 
-def _backfill_completion_consistency() -> None:
-    """One-time data repair: any project with health=COMPLETE but
-    pct_complete < 1.0 (or vice versa) gets normalized. Runs on every
-    boot but is a no-op once the data is clean."""
+def _backfill_data_integrity() -> None:
+    """One-time data repair for legacy drift. Runs on every boot but is a
+    no-op once the data is clean. Matches the invariants enforced in
+    portfolio.py::_normalize_project so DB state always equals the write-
+    layer rules."""
     import sqlite3
 
     db_path = Path(settings.db_path)
@@ -99,7 +100,43 @@ def _backfill_completion_consistency() -> None:
         return
     try:
         conn = sqlite3.connect(str(db_path))
-        # COMPLETE health but not 100% -> set to 100%
+        stats: dict = {}
+
+        # Rule 1: clamp pct_complete to [0, 1]
+        cur = conn.execute(
+            "UPDATE projects SET pct_complete = 0 WHERE pct_complete < 0"
+        )
+        stats["pct_clamped_low"] = cur.rowcount
+        cur = conn.execute(
+            "UPDATE projects SET pct_complete = 1.0 WHERE pct_complete > 1.0"
+        )
+        stats["pct_clamped_high"] = cur.rowcount
+
+        # Rule 2: impossible dates. Can't auto-fix — log and leave.
+        rows = conn.execute(
+            """SELECT id, start_date, end_date FROM projects
+               WHERE start_date IS NOT NULL AND end_date IS NOT NULL
+                 AND end_date < start_date"""
+        ).fetchall()
+        if rows:
+            for r in rows:
+                log.warning(
+                    "Project %s has end_date %s before start_date %s — "
+                    "manual fix required",
+                    r[0], r[2], r[1],
+                )
+
+        # Rule 3: actual_end set -> force health COMPLETE + pct 1.0
+        cur = conn.execute(
+            """UPDATE projects
+               SET health = '✅ COMPLETE', pct_complete = 1.0
+               WHERE actual_end IS NOT NULL AND actual_end != ''
+                 AND (health IS NULL
+                      OR (health NOT LIKE '%COMPLETE%' AND health NOT LIKE '%POSTPONED%'))"""
+        )
+        stats["actual_end_synced"] = cur.rowcount
+
+        # Rule 4: health=COMPLETE but pct < 1.0 -> set pct 1.0
         cur = conn.execute(
             """UPDATE projects
                SET pct_complete = 1.0
@@ -107,8 +144,9 @@ def _backfill_completion_consistency() -> None:
                  AND health NOT LIKE '%INCOMPLETE%'
                  AND (pct_complete IS NULL OR pct_complete < 1.0)"""
         )
-        fixed_pct = cur.rowcount
-        # 100%+ but health not Complete/Postponed -> upgrade health
+        stats["complete_forced_100"] = cur.rowcount
+
+        # Rule 5: pct >= 1.0 but health not Complete/Postponed -> upgrade
         cur = conn.execute(
             """UPDATE projects
                SET health = '✅ COMPLETE'
@@ -116,16 +154,23 @@ def _backfill_completion_consistency() -> None:
                  AND (health IS NULL
                       OR (health NOT LIKE '%COMPLETE%' AND health NOT LIKE '%POSTPONED%'))"""
         )
-        fixed_health = cur.rowcount
+        stats["pct_100_upgraded"] = cur.rowcount
+
+        # Rule 6: pct > 0 + health = NOT STARTED -> upgrade to ON TRACK
+        cur = conn.execute(
+            """UPDATE projects
+               SET health = '🟢 ON TRACK'
+               WHERE pct_complete > 0
+                 AND health LIKE '%NOT STARTED%'"""
+        )
+        stats["not_started_upgraded"] = cur.rowcount
+
         conn.commit()
-        if fixed_pct or fixed_health:
-            log.info(
-                "Backfilled completion consistency: %d pct rows, %d health rows",
-                fixed_pct,
-                fixed_health,
-            )
+        total = sum(stats.values())
+        if total:
+            log.info("Data integrity backfill applied: %s", stats)
     except Exception as exc:  # noqa: BLE001
-        log.warning("Completion backfill failed: %s", exc)
+        log.warning("Data integrity backfill failed: %s", exc)
     finally:
         try:
             conn.close()
@@ -148,7 +193,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def on_startup() -> None:
         _seed_database_if_missing()
-        _backfill_completion_consistency()
+        _backfill_data_integrity()
 
     # --- CORS ---
     # Include localhost defaults + any production origin from env. We also
