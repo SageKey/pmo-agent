@@ -52,6 +52,30 @@ class Settings(BaseSettings):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
 
+    @field_validator("public_mode", mode="before")
+    @classmethod
+    def _parse_public_mode(cls, v):
+        """Accept strings from hosting-platform env var UIs. Pydantic is
+        picky about booleans from strings; be lenient so stray '=' or
+        whitespace from the Railway Raw Editor don't crash startup."""
+        if isinstance(v, bool):
+            return v
+        if v is None:
+            return False
+        s = str(v).strip().lstrip("=").strip().lower()
+        return s in ("1", "true", "yes", "on", "y", "t")
+
+    @field_validator("shared_password", mode="before")
+    @classmethod
+    def _clean_shared_password(cls, v):
+        """Strip a stray leading '=' and whitespace from the Railway UI."""
+        if v is None:
+            return None
+        s = str(v).strip()
+        if s.startswith("="):
+            s = s[1:].strip()
+        return s or None
+
     @classmethod
     def settings_customise_sources(
         cls,
