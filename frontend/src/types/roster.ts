@@ -35,3 +35,24 @@ export interface PersonDemand {
   projects: PersonProjectDemand[];
   include_in_capacity: boolean;
 }
+
+export interface PersonAvailability {
+  name: string;
+  role: string;
+  role_key: string;
+  team: string | null;
+  capacity_hrs_week: number;
+  current_demand: number;
+  current_utilization: number;
+  status: RoleStatus;
+  available_date: string | null;
+  available_in_weeks: number | null;
+  available_now: boolean;
+  projects: {
+    project_id: string;
+    project_name: string;
+    role: string;
+    weekly_hours: number;
+    end_date: string | null;
+  }[];
+}

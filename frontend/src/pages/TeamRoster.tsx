@@ -7,8 +7,8 @@ import { PersonCard } from "@/components/roster/PersonCard";
 import { PersonDetailDrawer } from "@/components/roster/PersonDetailDrawer";
 import { EditMemberDialog } from "@/components/roster/EditMemberDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { usePersonDemand, useRoster } from "@/hooks/useRoster";
-import type { PersonDemand, TeamMember } from "@/types/roster";
+import { usePersonAvailability, usePersonDemand, useRoster } from "@/hooks/useRoster";
+import type { PersonAvailability, PersonDemand, TeamMember } from "@/types/roster";
 import { cn } from "@/lib/cn";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -43,6 +43,12 @@ export function TeamRoster() {
   const { data, isLoading, isError, error } = usePersonDemand();
   const rosterQuery = useRoster();
   const roster = rosterQuery.data ?? [];
+  const availQuery = usePersonAvailability();
+  const availByName = useMemo(() => {
+    const map = new Map<string, PersonAvailability>();
+    for (const a of availQuery.data ?? []) map.set(a.name, a);
+    return map;
+  }, [availQuery.data]);
 
   const openEdit = (m: TeamMember) => {
     setEditMember(m);
@@ -272,6 +278,7 @@ export function TeamRoster() {
                   person={p}
                   index={gi * 10 + i}
                   onClick={() => setSelected(p)}
+                  availability={availByName.get(p.name)}
                 />
               ))}
             </div>

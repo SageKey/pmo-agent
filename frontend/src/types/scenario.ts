@@ -33,7 +33,10 @@ export type ScenarioModification =
   | { type: "add_project"; project: AddProjectPayload }
   | { type: "cancel_project"; project_id: string }
   | { type: "exclude_person"; person_name: string }
-  | { type: "add_person"; person: AddPersonPayload };
+  | { type: "add_person"; person: AddPersonPayload }
+  | { type: "shift_project"; project_id: string; new_start_date?: string; new_end_date?: string }
+  | { type: "change_allocation"; project_id: string; role_key: string; allocation: number }
+  | { type: "resize_project"; project_id: string; est_hours: number };
 
 // ---------------------------------------------------------------------------
 // Request / response

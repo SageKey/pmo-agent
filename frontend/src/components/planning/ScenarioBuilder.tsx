@@ -8,6 +8,9 @@ import {
   Trash2,
   Plus,
   X,
+  CalendarRange,
+  SlidersHorizontal,
+  Scale,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,7 +30,7 @@ const ROLE_OPTIONS = [
   { key: "wms", label: "WMS" },
 ];
 
-type BuilderMode = "closed" | "add_project" | "cancel_project" | "exclude_person" | "add_person";
+type BuilderMode = "closed" | "add_project" | "cancel_project" | "exclude_person" | "add_person" | "shift_project" | "change_allocation" | "resize_project";
 
 export function ScenarioBuilder({
   modifications,
@@ -128,6 +131,27 @@ export function ScenarioBuilder({
         {mode === "add_person" && (
           <AddPersonForm onCancel={() => setMode("closed")} onSubmit={addMod} />
         )}
+        {mode === "shift_project" && (
+          <ShiftProjectForm
+            projects={projects}
+            onCancel={() => setMode("closed")}
+            onSubmit={addMod}
+          />
+        )}
+        {mode === "change_allocation" && (
+          <ChangeAllocationForm
+            projects={projects}
+            onCancel={() => setMode("closed")}
+            onSubmit={addMod}
+          />
+        )}
+        {mode === "resize_project" && (
+          <ResizeProjectForm
+            projects={projects}
+            onCancel={() => setMode("closed")}
+            onSubmit={addMod}
+          />
+        )}
 
         {/* Add-modification buttons */}
         {mode === "closed" && (
@@ -151,6 +175,21 @@ export function ScenarioBuilder({
               icon={<UserPlus className="h-4 w-4" />}
               label="Add hire"
               onClick={() => setMode("add_person")}
+            />
+            <AddButton
+              icon={<CalendarRange className="h-4 w-4" />}
+              label="Shift dates"
+              onClick={() => setMode("shift_project")}
+            />
+            <AddButton
+              icon={<SlidersHorizontal className="h-4 w-4" />}
+              label="Change allocation"
+              onClick={() => setMode("change_allocation")}
+            />
+            <AddButton
+              icon={<Scale className="h-4 w-4" />}
+              label="Resize scope"
+              onClick={() => setMode("resize_project")}
             />
           </div>
         )}
@@ -248,12 +287,39 @@ function describeModification(mod: ScenarioModification): {
       tone: "border-amber-200 bg-amber-50 text-amber-900",
     };
   }
-  // add_person
+  if (mod.type === "add_person") {
+    return {
+      icon: <UserPlus className="h-4 w-4 text-emerald-600" />,
+      title: `Hire: ${mod.person.name}`,
+      subtitle: `${mod.person.role_key} · ${mod.person.weekly_hrs_available}h/week`,
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    };
+  }
+  if (mod.type === "shift_project") {
+    const parts: string[] = [];
+    if (mod.new_start_date) parts.push(`start → ${mod.new_start_date}`);
+    if (mod.new_end_date) parts.push(`end → ${mod.new_end_date}`);
+    return {
+      icon: <CalendarRange className="h-4 w-4 text-violet-600" />,
+      title: `Shift: ${mod.project_id}`,
+      subtitle: parts.join(" · ") || "dates unchanged",
+      tone: "border-violet-200 bg-violet-50 text-violet-900",
+    };
+  }
+  if (mod.type === "change_allocation") {
+    return {
+      icon: <SlidersHorizontal className="h-4 w-4 text-indigo-600" />,
+      title: `Realloc: ${mod.project_id}`,
+      subtitle: `${mod.role_key} → ${Math.round(mod.allocation * 100)}%`,
+      tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    };
+  }
+  // resize_project
   return {
-    icon: <UserPlus className="h-4 w-4 text-emerald-600" />,
-    title: `Hire: ${mod.person.name}`,
-    subtitle: `${mod.person.role_key} · ${mod.person.weekly_hrs_available}h/week`,
-    tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    icon: <Scale className="h-4 w-4 text-teal-600" />,
+    title: `Resize: ${mod.project_id}`,
+    subtitle: `${mod.est_hours} estimated hours`,
+    tone: "border-teal-200 bg-teal-50 text-teal-900",
   };
 }
 
@@ -616,6 +682,144 @@ function AddPersonForm({
         >
           <Plus className="h-3.5 w-3.5" />
           Add to scenario
+        </Button>
+      </div>
+    </FormShell>
+  );
+}
+
+// --- Stage 2 forms: shift, change allocation, resize ----------------------
+
+function activeProjectsForSelect(projects: Project[]) {
+  return projects
+    .filter((p) => {
+      const h = (p.health ?? "").toUpperCase();
+      if (h.includes("COMPLETE") && !h.includes("INCOMPLETE")) return false;
+      if (h.includes("POSTPONED")) return false;
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function ShiftProjectForm({
+  projects,
+  onCancel,
+  onSubmit,
+}: {
+  projects: Project[];
+  onCancel: () => void;
+  onSubmit: (mod: ScenarioModification) => void;
+}) {
+  const [selected, setSelected] = useState("");
+  const [newStart, setNewStart] = useState("");
+  const [newEnd, setNewEnd] = useState("");
+  const available = activeProjectsForSelect(projects);
+  const valid = selected && (newStart || newEnd);
+
+  return (
+    <FormShell title="Shift project dates" onCancel={onCancel}>
+      <InputRow label="Which project?">
+        <select className={inputCls} value={selected} onChange={(e) => setSelected(e.target.value)}>
+          <option value="">— select a project —</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>{p.id} · {p.name}</option>
+          ))}
+        </select>
+      </InputRow>
+      <div className="grid grid-cols-2 gap-3">
+        <InputRow label="New start (blank = keep)">
+          <input type="date" className={inputCls} value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+        </InputRow>
+        <InputRow label="New end (blank = keep)">
+          <input type="date" className={inputCls} value={newEnd} onChange={(e) => setNewEnd(e.target.value)} />
+        </InputRow>
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" disabled={!valid} onClick={() => valid && onSubmit({ type: "shift_project", project_id: selected, new_start_date: newStart || undefined, new_end_date: newEnd || undefined })}>
+          <Plus className="h-3.5 w-3.5" /> Add to scenario
+        </Button>
+      </div>
+    </FormShell>
+  );
+}
+
+function ChangeAllocationForm({
+  projects,
+  onCancel,
+  onSubmit,
+}: {
+  projects: Project[];
+  onCancel: () => void;
+  onSubmit: (mod: ScenarioModification) => void;
+}) {
+  const [selected, setSelected] = useState("");
+  const [roleKey, setRoleKey] = useState("developer");
+  const [alloc, setAlloc] = useState(50);
+  const available = activeProjectsForSelect(projects);
+  const valid = selected && roleKey;
+
+  return (
+    <FormShell title="Change role allocation" onCancel={onCancel}>
+      <InputRow label="Which project?">
+        <select className={inputCls} value={selected} onChange={(e) => setSelected(e.target.value)}>
+          <option value="">— select a project —</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>{p.id} · {p.name}</option>
+          ))}
+        </select>
+      </InputRow>
+      <div className="grid grid-cols-2 gap-3">
+        <InputRow label="Role">
+          <select className={inputCls} value={roleKey} onChange={(e) => setRoleKey(e.target.value)}>
+            {ROLE_OPTIONS.map((r) => (<option key={r.key} value={r.key}>{r.label}</option>))}
+          </select>
+        </InputRow>
+        <InputRow label="New allocation %">
+          <input type="number" min={0} max={100} step={5} className={inputCls} value={alloc} onChange={(e) => setAlloc(parseFloat(e.target.value) || 0)} />
+        </InputRow>
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" disabled={!valid} onClick={() => valid && onSubmit({ type: "change_allocation", project_id: selected, role_key: roleKey, allocation: alloc / 100 })}>
+          <Plus className="h-3.5 w-3.5" /> Add to scenario
+        </Button>
+      </div>
+    </FormShell>
+  );
+}
+
+function ResizeProjectForm({
+  projects,
+  onCancel,
+  onSubmit,
+}: {
+  projects: Project[];
+  onCancel: () => void;
+  onSubmit: (mod: ScenarioModification) => void;
+}) {
+  const [selected, setSelected] = useState("");
+  const [hours, setHours] = useState(400);
+  const available = activeProjectsForSelect(projects);
+  const valid = selected && hours > 0;
+
+  return (
+    <FormShell title="Resize project scope" onCancel={onCancel}>
+      <InputRow label="Which project?">
+        <select className={inputCls} value={selected} onChange={(e) => setSelected(e.target.value)}>
+          <option value="">— select a project —</option>
+          {available.map((p) => (
+            <option key={p.id} value={p.id}>{p.id} · {p.name} ({p.est_hours}h)</option>
+          ))}
+        </select>
+      </InputRow>
+      <InputRow label="New estimated hours">
+        <input type="number" min={0} step={50} className={inputCls} value={hours} onChange={(e) => setHours(parseFloat(e.target.value) || 0)} />
+      </InputRow>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" disabled={!valid} onClick={() => valid && onSubmit({ type: "resize_project", project_id: selected, est_hours: hours })}>
+          <Plus className="h-3.5 w-3.5" /> Add to scenario
         </Button>
       </div>
     </FormShell>

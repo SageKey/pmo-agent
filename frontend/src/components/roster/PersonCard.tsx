@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { EyeOff } from "lucide-react";
-import type { PersonDemand } from "@/types/roster";
+import type { PersonAvailability, PersonDemand } from "@/types/roster";
 import { Card } from "@/components/ui/card";
 import { avatarTone, initials, pct } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -56,10 +56,12 @@ export function PersonCard({
   person,
   index = 0,
   onClick,
+  availability,
 }: {
   person: PersonDemand;
   index?: number;
   onClick?: () => void;
+  availability?: PersonAvailability;
 }) {
   const s = STATUS_STYLE[person.status] ?? STATUS_STYLE.GREEN;
   const width = Math.min(person.utilization_pct, 1.5) * 100;
@@ -126,9 +128,29 @@ export function PersonCard({
               <span className="tabular-nums">
                 {person.total_weekly_hrs.toFixed(0)} / {person.capacity_hrs.toFixed(0)} hrs/wk
               </span>
-              <span>
-                {person.project_count} project{person.project_count === 1 ? "" : "s"}
-              </span>
+              <div className="flex items-center gap-2">
+                {availability && !excluded && (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                      availability.available_now
+                        ? "bg-emerald-50 text-emerald-600"
+                        : availability.available_date
+                          ? "bg-sky-50 text-sky-600"
+                          : "bg-slate-100 text-slate-500",
+                    )}
+                  >
+                    {availability.available_now
+                      ? "Available now"
+                      : availability.available_in_weeks != null
+                        ? `Free ${availability.available_in_weeks.toFixed(0)}w`
+                        : "Committed"}
+                  </span>
+                )}
+                <span>
+                  {person.project_count} project{person.project_count === 1 ? "" : "s"}
+                </span>
+              </div>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
               <motion.div

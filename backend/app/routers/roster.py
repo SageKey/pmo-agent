@@ -92,6 +92,17 @@ def delete_member(
     return None
 
 
+@router.get("/availability")
+def person_availability(
+    threshold: float = 0.50,
+    engine: CapacityEngine = Depends(get_capacity),
+) -> list:
+    """For each team member, project forward to find when they'll be
+    available (utilization drops below threshold). Uses project end dates
+    to compute when each person's committed work tapers off."""
+    return engine.compute_person_availability(threshold_pct=threshold)
+
+
 @router.get("/demand", response_model=List[PersonDemandOut])
 def person_demand(
     engine: CapacityEngine = Depends(get_capacity),

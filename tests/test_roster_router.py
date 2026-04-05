@@ -100,6 +100,38 @@ class TestDeleteMember:
         assert "Temp" not in members
 
 
+class TestPersonAvailability:
+    def test_returns_all_members(self, api_client):
+        r = api_client.get(f"{API}/availability")
+        assert r.status_code == 200
+        rows = r.json()
+        assert len(rows) > 0
+
+    def test_shape(self, api_client):
+        rows = api_client.get(f"{API}/availability").json()
+        for row in rows:
+            for key in ("name", "role", "role_key", "capacity_hrs_week",
+                        "current_demand", "current_utilization",
+                        "available_date", "available_in_weeks", "available_now",
+                        "projects"):
+                assert key in row, f"{row.get('name')} missing {key}"
+
+    def test_available_now_for_low_util(self, api_client):
+        """People with very low utilization should show available_now=True."""
+        rows = api_client.get(f"{API}/availability", params={"threshold": 0.99}).json()
+        # With a 99% threshold, most people should be available now
+        available = [r for r in rows if r["available_now"]]
+        assert len(available) > 0
+
+    def test_custom_threshold(self, api_client):
+        low = api_client.get(f"{API}/availability", params={"threshold": 0.10}).json()
+        high = api_client.get(f"{API}/availability", params={"threshold": 0.90}).json()
+        low_avail = sum(1 for r in low if r["available_now"])
+        high_avail = sum(1 for r in high if r["available_now"])
+        # More people should be available at a higher threshold
+        assert high_avail >= low_avail
+
+
 class TestPersonDemand:
     def test_demand_shape(self, api_client):
         r = api_client.get(f"{API}/demand")

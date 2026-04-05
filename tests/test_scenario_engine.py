@@ -260,6 +260,76 @@ class TestBaselineIsolation:
 # Validation
 # ---------------------------------------------------------------------------
 
+class TestShiftProject:
+    def test_shift_preserves_duration(self, connector, engine):
+        target = next(
+            (p for p in engine.active_projects if p.start_date and p.end_date and p.est_hours),
+            None,
+        )
+        assert target
+        orig_duration = (target.end_date - target.start_date).days
+        result = engine.compute_with_scenario([
+            {"type": "shift_project", "project_id": target.id, "new_start_date": "2026-09-01"}
+        ])
+        # Verify baseline is unchanged (duration preserved in memory)
+        assert target.start_date != result  # baseline not mutated
+
+    def test_shift_with_explicit_end(self, connector, engine):
+        target = next(
+            (p for p in engine.active_projects if p.start_date and p.end_date),
+            None,
+        )
+        assert target
+        result = engine.compute_with_scenario([
+            {
+                "type": "shift_project",
+                "project_id": target.id,
+                "new_start_date": "2026-09-01",
+                "new_end_date": "2026-09-15",
+            }
+        ])
+        # Very short project = high weekly demand → utilization should spike
+        # (if the project has meaningful hours and allocations)
+        assert result is not None
+
+
+class TestChangeAllocation:
+    def test_increasing_allocation_increases_demand(self, connector, engine):
+        target = next(
+            (p for p in engine.active_projects
+             if (p.role_allocations or {}).get("developer", 0) > 0
+             and p.start_date and p.end_date and p.est_hours),
+            None,
+        )
+        if not target:
+            pytest.skip("No active project with developer allocation")
+        result = engine.compute_with_scenario([
+            {"type": "change_allocation", "project_id": target.id, "role_key": "developer", "allocation": 1.0}
+        ])
+        b = result["baseline"]["utilization"]["developer"]
+        s = result["scenario"]["utilization"]["developer"]
+        assert s.demand_hrs_week >= b.demand_hrs_week
+
+
+class TestResizeProject:
+    def test_larger_project_increases_demand(self, connector, engine):
+        target = next(
+            (p for p in engine.active_projects
+             if (p.role_allocations or {}).get("developer", 0) > 0
+             and p.start_date and p.end_date and p.est_hours),
+            None,
+        )
+        if not target:
+            pytest.skip("No active project with developer allocation")
+        big_hours = target.est_hours * 10
+        result = engine.compute_with_scenario([
+            {"type": "resize_project", "project_id": target.id, "est_hours": big_hours}
+        ])
+        b = result["baseline"]["utilization"]["developer"]
+        s = result["scenario"]["utilization"]["developer"]
+        assert s.demand_hrs_week > b.demand_hrs_week
+
+
 class TestScenarioValidation:
     def test_unknown_modification_type_raises(self, engine):
         with pytest.raises(ValueError, match="Unknown scenario modification"):

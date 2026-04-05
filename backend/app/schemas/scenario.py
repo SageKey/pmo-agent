@@ -65,7 +65,35 @@ class AddPersonMod(BaseModel):
     person: AddPersonPayload
 
 
-Modification = Union[AddProjectMod, CancelProjectMod, ExcludePersonMod, AddPersonMod]
+class ShiftProjectMod(BaseModel):
+    type: Literal["shift_project"]
+    project_id: str
+    new_start_date: Optional[str] = None  # ISO YYYY-MM-DD
+    new_end_date: Optional[str] = None
+
+
+class ChangeAllocationMod(BaseModel):
+    type: Literal["change_allocation"]
+    project_id: str
+    role_key: str
+    allocation: float = Field(ge=0.0, le=1.0)
+
+
+class ResizeProjectMod(BaseModel):
+    type: Literal["resize_project"]
+    project_id: str
+    est_hours: float = Field(ge=0.0)
+
+
+Modification = Union[
+    AddProjectMod,
+    CancelProjectMod,
+    ExcludePersonMod,
+    AddPersonMod,
+    ShiftProjectMod,
+    ChangeAllocationMod,
+    ResizeProjectMod,
+]
 
 
 # ---------------------------------------------------------------------------

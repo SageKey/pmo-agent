@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { PersonDemand, TeamMember } from "@/types/roster";
+import type { PersonAvailability, PersonDemand, TeamMember } from "@/types/roster";
 
 const rosterKeys = {
   all: ["roster"] as const,
   list: ["roster", "list"] as const,
   demand: ["roster", "demand"] as const,
+  availability: ["roster", "availability"] as const,
 };
 
 export function useRoster() {
@@ -23,6 +24,18 @@ export function usePersonDemand() {
     queryKey: rosterKeys.demand,
     queryFn: async () => {
       const { data } = await api.get<PersonDemand[]>("/roster/demand");
+      return data;
+    },
+  });
+}
+
+export function usePersonAvailability(threshold = 0.5) {
+  return useQuery({
+    queryKey: [...rosterKeys.availability, threshold],
+    queryFn: async () => {
+      const { data } = await api.get<PersonAvailability[]>("/roster/availability", {
+        params: { threshold },
+      });
       return data;
     },
   });

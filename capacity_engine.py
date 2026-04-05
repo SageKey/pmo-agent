@@ -223,6 +223,45 @@ def _apply_scenario_modifications(data: dict, modifications: list) -> None:
             )
             data["roster"].append(member)
 
+        elif mtype == "shift_project":
+            # Move an existing project's start/end dates while keeping its
+            # duration and allocations unchanged.
+            target_id = mod.get("project_id")
+            new_start = _parse_scenario_date(mod.get("new_start_date"))
+            new_end = _parse_scenario_date(mod.get("new_end_date"))
+            for p in data["portfolio"] + data["active_portfolio"]:
+                if p.id == target_id:
+                    if new_start is not None:
+                        old_duration = None
+                        if p.start_date and p.end_date:
+                            old_duration = (p.end_date - p.start_date).days
+                        p.start_date = new_start
+                        # If only new_start provided, preserve duration
+                        if new_end is not None:
+                            p.end_date = new_end
+                        elif old_duration is not None:
+                            from datetime import timedelta as _td
+                            p.end_date = new_start + _td(days=old_duration)
+                    elif new_end is not None:
+                        p.end_date = new_end
+
+        elif mtype == "change_allocation":
+            # Change a single role's allocation on an existing project.
+            target_id = mod.get("project_id")
+            role_key = mod.get("role_key")
+            new_alloc = float(mod.get("allocation", 0))
+            for p in data["portfolio"] + data["active_portfolio"]:
+                if p.id == target_id and role_key:
+                    p.role_allocations[role_key] = new_alloc
+
+        elif mtype == "resize_project":
+            # Change an existing project's estimated hours (scope change).
+            target_id = mod.get("project_id")
+            new_hours = float(mod.get("est_hours") or 0)
+            for p in data["portfolio"] + data["active_portfolio"]:
+                if p.id == target_id:
+                    p.est_hours = new_hours
+
         else:
             raise ValueError(f"Unknown scenario modification type: {mtype!r}")
 
@@ -301,6 +340,18 @@ class CapacityEngine:
         - {"type": "add_person", "person": {...}} — inject a hypothetical
           team member (for "what if we hire" scenarios). The person dict
           must have at minimum: name, role_key, weekly_hrs_available.
+
+        - {"type": "shift_project", "project_id": "DEMO-001",
+           "new_start_date": "2026-06-01"} — move an existing project's
+          start (and optionally end) dates. If only new_start_date is
+          given, the duration is preserved.
+
+        - {"type": "change_allocation", "project_id": "DEMO-001",
+           "role_key": "developer", "allocation": 0.8} — change a
+          specific role's allocation on a project.
+
+        - {"type": "resize_project", "project_id": "DEMO-001",
+           "est_hours": 1200} — change a project's estimated total hours.
 
         Returns a dict with:
             {
