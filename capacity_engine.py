@@ -118,6 +118,115 @@ def _utilization_status(pct: float, thresholds: Optional[dict] = None) -> str:
     return "GREEN"
 
 
+def _parse_scenario_date(val):
+    """Parse an ISO date string into a date object. Tolerates None and
+    already-parsed date/datetime values."""
+    from datetime import date as _date, datetime as _datetime
+    if val is None:
+        return None
+    if isinstance(val, _date):
+        return val
+    if isinstance(val, _datetime):
+        return val.date()
+    try:
+        return _date.fromisoformat(str(val))
+    except (ValueError, TypeError):
+        return None
+
+
+def _apply_scenario_modifications(data: dict, modifications: list) -> None:
+    """Mutate an engine data dict in-place according to a list of scenario
+    modifications. Used by CapacityEngine.compute_with_scenario.
+
+    The caller is responsible for passing a deep-copied data dict — this
+    function mutates freely and does not preserve the input.
+    """
+    from models import Project, TeamMember, ROLE_KEYS
+
+    for i, mod in enumerate(modifications or []):
+        mtype = mod.get("type")
+
+        if mtype == "add_project":
+            spec = mod.get("project") or {}
+            pid = spec.get("id") or f"__SCENARIO_P_{i}__"
+            start = _parse_scenario_date(spec.get("start_date"))
+            end = _parse_scenario_date(spec.get("end_date"))
+            role_allocs = {rk: 0.0 for rk in ROLE_KEYS}
+            for rk, alloc in (spec.get("role_allocations") or {}).items():
+                if rk in ROLE_KEYS:
+                    role_allocs[rk] = float(alloc)
+
+            proj = Project(
+                id=pid,
+                name=spec.get("name") or "Hypothetical Project",
+                type=spec.get("type"),
+                portfolio=spec.get("portfolio"),
+                sponsor=spec.get("sponsor"),
+                health="🟢 ON TRACK",
+                pct_complete=0.0,
+                priority=spec.get("priority") or "Medium",
+                start_date=start,
+                end_date=end,
+                actual_end=None,
+                team=None,
+                pm=None, ba=None,
+                functional_lead=None, technical_lead=None, developer_lead=None,
+                tshirt_size=None,
+                est_hours=float(spec.get("est_hours") or 0),
+                est_cost=None,
+                role_allocations=role_allocs,
+            )
+            data["portfolio"].append(proj)
+            # A hypothetical project is active by construction (0% complete,
+            # not postponed) so it goes into active_portfolio too.
+            data["active_portfolio"].append(proj)
+
+        elif mtype == "cancel_project":
+            target_id = mod.get("project_id")
+            data["active_portfolio"] = [
+                p for p in data["active_portfolio"] if p.id != target_id
+            ]
+            # Remove any assignments pointing at the cancelled project so
+            # the person-demand compute doesn't double-count.
+            if data.get("assignments"):
+                data["assignments"] = [
+                    a for a in data["assignments"] if a.project_id != target_id
+                ]
+
+        elif mtype == "exclude_person":
+            target_name = (mod.get("person_name") or "").strip().lower()
+            for m in data["roster"]:
+                if m.name.strip().lower() == target_name:
+                    m.include_in_capacity = False
+
+        elif mtype == "add_person":
+            spec = mod.get("person") or {}
+            weekly = float(spec.get("weekly_hrs_available") or 40)
+            reserve = float(spec.get("support_reserve_pct") or 0)
+            cap_pct = 1.0 - reserve
+            cap_hrs = weekly * cap_pct
+            role_key = spec.get("role_key") or "developer"
+
+            member = TeamMember(
+                name=spec.get("name") or f"Hypothetical Hire {i}",
+                role=spec.get("role") or role_key.title(),
+                role_key=role_key,
+                team=spec.get("team"),
+                vendor=spec.get("vendor"),
+                classification=spec.get("classification"),
+                rate_per_hour=float(spec.get("rate_per_hour") or 0),
+                weekly_hrs_available=weekly,
+                support_reserve_pct=reserve,
+                project_capacity_pct=cap_pct,
+                project_capacity_hrs=cap_hrs,
+                include_in_capacity=True,
+            )
+            data["roster"].append(member)
+
+        else:
+            raise ValueError(f"Unknown scenario modification type: {mtype!r}")
+
+
 class CapacityEngine:
     """Calculates resource utilization from PMO workbook data."""
 
@@ -162,6 +271,75 @@ class CapacityEngine:
             except Exception:
                 self._thresholds = DEFAULT_UTIL_THRESHOLDS
         return self._thresholds
+
+    # ------------------------------------------------------------------
+    # Scenario planning — apply hypothetical modifications, re-run
+    # ------------------------------------------------------------------
+    def compute_with_scenario(self, modifications: list) -> dict:
+        """Apply a list of scenario modifications in-memory and return both
+        the baseline utilization and the modified utilization.
+
+        Modifications are NEVER persisted — they live only for the duration
+        of this call. Uses a deep-copied data cache, swaps it in temporarily,
+        computes, and restores the original.
+
+        Each modification is a dict with a 'type' key and type-specific
+        payload fields. Supported types:
+
+        - {"type": "add_project", "project": {...}} — inject a hypothetical
+          active project. The project dict must have at minimum: id, name,
+          start_date (ISO), end_date (ISO), est_hours, role_allocations.
+
+        - {"type": "cancel_project", "project_id": "DEMO-001"} — remove an
+          active project from the scenario (its demand disappears).
+
+        - {"type": "exclude_person", "person_name": "Marcus Bell"} — flip
+          include_in_capacity=False on a roster member for the scenario
+          (their capacity disappears). Same semantics as the toggle on
+          the Team Roster page.
+
+        - {"type": "add_person", "person": {...}} — inject a hypothetical
+          team member (for "what if we hire" scenarios). The person dict
+          must have at minimum: name, role_key, weekly_hrs_available.
+
+        Returns a dict with:
+            {
+                "baseline": {<utilization map>, "person_demand": [...]},
+                "scenario": {<utilization map>, "person_demand": [...]},
+            }
+        """
+        import copy
+
+        # Ensure baseline is loaded + compute baseline numbers
+        self._load()
+        baseline_util = self.compute_utilization()
+        baseline_people = self.compute_person_demand()
+
+        # Snapshot state we're about to swap
+        orig_data = self._data
+
+        try:
+            # Deep-copy the loaded data so we can mutate freely
+            modified = copy.deepcopy(orig_data)
+            _apply_scenario_modifications(modified, modifications)
+            self._data = modified
+
+            scenario_util = self.compute_utilization()
+            scenario_people = self.compute_person_demand()
+        finally:
+            # Always restore — even if computation raised
+            self._data = orig_data
+
+        return {
+            "baseline": {
+                "utilization": baseline_util,
+                "person_demand": baseline_people,
+            },
+            "scenario": {
+                "utilization": scenario_util,
+                "person_demand": scenario_people,
+            },
+        }
 
     # ------------------------------------------------------------------
     # Supply calculation

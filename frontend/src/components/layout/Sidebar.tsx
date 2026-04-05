@@ -9,6 +9,7 @@ import {
   Users,
   Sparkles,
   Settings,
+  Lightbulb,
 } from "lucide-react";
 import { useHealth } from "@/hooks/useHealth";
 import { cn } from "@/lib/cn";
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/financials", label: "Financials", icon: DollarSign, publicSafe: true },
   { to: "/timesheets", label: "Timesheets", icon: Clock, publicSafe: true },
   { to: "/roster", label: "Team Roster", icon: Users, publicSafe: true },
+  { to: "/planning", label: "Planning", icon: Lightbulb, publicSafe: true },
   // Hidden when PUBLIC_MODE is on so shared visitors can't burn LLM credit
   { to: "/assistant", label: "AI Assistant", icon: Sparkles, publicSafe: false },
 ];

@@ -10,6 +10,7 @@ import { Financials } from "@/pages/Financials";
 import { Timesheets } from "@/pages/Timesheets";
 import { AIAssistant } from "@/pages/AIAssistant";
 import { Admin } from "@/pages/Admin";
+import { Planning } from "@/pages/Planning";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +26,7 @@ export const router = createBrowserRouter([
       { path: "financials", element: <Financials /> },
       { path: "timesheets", element: <Timesheets /> },
       { path: "roster", element: <TeamRoster /> },
+      { path: "planning", element: <Planning /> },
       { path: "assistant", element: <AIAssistant /> },
       { path: "admin", element: <Admin /> },
     ],
