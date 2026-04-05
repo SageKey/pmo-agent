@@ -101,6 +101,13 @@ export function ScheduleView() {
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
+                {/* Column headers */}
+                <div className="grid grid-cols-12 items-center gap-4 bg-slate-50 px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <div className="col-span-4">Project</div>
+                  <div className="col-span-3">Suggested dates</div>
+                  <div className="col-span-2 text-center">Wait</div>
+                  <div className="col-span-3 text-right">Bottleneck</div>
+                </div>
                 {result.projects.map((p, i) => (
                   <ProjectRow key={p.project_id} project={p} delay={i * 0.04} />
                 ))}
