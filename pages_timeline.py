@@ -6,8 +6,11 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
+import streamlit.components.v1 as components
+
 from components import (
-    section_header, render_gantt_html, capacity_heatmap,
+    section_header, render_gantt_html, estimate_gantt_height,
+    capacity_heatmap,
     NAVY, GREEN, YELLOW, RED, GRAY,
 )
 from data_layer import load_weekly_heatmap, get_file_mtime
@@ -164,9 +167,13 @@ def render(data: dict, utilization: dict, person_demand: list):
             }[sort_by],
             date_range=date_range,
         )
-        # Use st.html (not st.markdown) — raw HTML rendering, no markdown
-        # parsing that would mangle our CSS/grid layout.
-        st.html(gantt_html)
+        # Render inside an iframe via components.v1.html. Both st.markdown
+        # and st.html strip or mangle <style> blocks on some Streamlit
+        # versions, which caused raw HTML to leak onto the page. An iframe
+        # gives full CSS isolation and is the only reliable path.
+        group_key = group_by.lower()
+        iframe_height = estimate_gantt_height(filtered, group_by=group_key)
+        components.html(gantt_html, height=iframe_height, scrolling=False)
     else:
         st.info("No projects match the current filters.")
 

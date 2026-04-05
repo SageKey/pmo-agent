@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from components import render_gantt_html
+from components import render_gantt_html, estimate_gantt_height
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +321,67 @@ class TestBars:
         # Two diamonds per project (start + end)
         diamond_count = html.count('class="gantt-diamond"')
         assert diamond_count == 4
+
+
+class TestHeightEstimator:
+    """estimate_gantt_height must cover every rendered row + header/toolbar
+    so the components.v1.html iframe doesn't clip the chart."""
+
+    def test_height_scales_with_row_count(self):
+        h3 = estimate_gantt_height(_make_projects(3))
+        h10 = estimate_gantt_height(_make_projects(10))
+        assert h10 > h3
+        # Each additional row should add at least one row height (~38px)
+        assert h10 - h3 >= 7 * 30
+
+    def test_height_positive_for_empty(self):
+        # Even with nothing scheduled, we still render a small placeholder
+        assert estimate_gantt_height([]) > 0
+
+    def test_height_accounts_for_groups(self):
+        projects = _make_projects(6)
+        h_none = estimate_gantt_height(projects, group_by="none")
+        h_port = estimate_gantt_height(projects, group_by="portfolio")
+        # Grouping adds at least one extra group header row
+        assert h_port > h_none
+
+    def test_height_ignores_unscheduled(self):
+        scheduled = _make_projects(3)
+        unscheduled = [_FakeProject("ETE-U", "No dates", None, None)]
+        h = estimate_gantt_height(scheduled + unscheduled)
+        h_only = estimate_gantt_height(scheduled)
+        assert h == h_only
+
+
+class TestIframeSafety:
+    """The HTML must be self-contained and safe for an iframe srcdoc /
+    components.v1.html payload — no broken attributes, no <script>, and
+    the <style> block must survive intact."""
+
+    def test_style_block_is_intact(self):
+        html = render_gantt_html(_make_projects(3))
+        # Contains a complete <style>...</style> pair
+        assert html.count("<style>") == 1
+        assert html.count("</style>") == 1
+        # Style must come before any div (so CSS applies)
+        assert html.index("<style>") < html.index("<div")
+
+    def test_no_script_tags(self):
+        html = render_gantt_html(_make_projects(3))
+        assert "<script" not in html.lower()
+
+    def test_no_stray_double_quotes_breaking_attributes(self):
+        """Every attribute of the form key="value" must have a matching
+        close quote before the next > — no truncated attributes."""
+        html = render_gantt_html(_make_projects(5))
+        # Quick sanity: the count of '="' openers should equal the count
+        # of closing '"' that precede a space or > within tags. We use a
+        # simpler proxy: roundtrip via re finding all attrs.
+        attrs = re.findall(r'\w+="[^"]*"', html)
+        # Should find many attributes and NO raw unmatched quotes
+        assert len(attrs) > 20
+        # Count total double-quotes — must be even
+        assert html.count('"') % 2 == 0, "unbalanced double quotes in HTML"
 
 
 class TestIntegrationWithRealData:

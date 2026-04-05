@@ -649,6 +649,35 @@ def supply_demand_chart(utilization: dict) -> alt.Chart:
     return chart.configure_view(strokeWidth=0)
 
 
+def estimate_gantt_height(
+    projects: list,
+    group_by: str = "none",
+) -> int:
+    """Pixel height required to render the Gantt without scrolling.
+
+    Must stay in sync with the CSS constants in render_gantt_html:
+      toolbar ~44px, header 56px, row 38px, plus small padding.
+    """
+    scheduled = [p for p in projects if getattr(p, "start_date", None)
+                 and getattr(p, "end_date", None)]
+    n_rows = len(scheduled)
+    n_groups = 0
+    if group_by and group_by != "none":
+        def _g(p):
+            if group_by == "portfolio":
+                return getattr(p, "portfolio", None) or "Unassigned"
+            if group_by == "pm":
+                return p.pm or "Unassigned"
+            if group_by == "priority":
+                return p.priority or "Unknown"
+            if group_by == "health":
+                return (p.health or "Unknown").title()
+            return ""
+        n_groups = len({_g(p) for p in scheduled})
+    # toolbar + header + (rows + group headers) * row_h + padding
+    return 44 + 56 + (n_rows + n_groups) * 38 + 24
+
+
 def render_gantt_html(
     projects: list,
     color_by: str = "priority",
@@ -660,8 +689,9 @@ def render_gantt_html(
     alignment, month header, today line, progress overlay, milestone diamonds,
     clickable rows, and responsive width.
 
-    Returns a complete HTML string to be rendered via st.markdown(
-        unsafe_allow_html=True).
+    Returns a complete HTML string. MUST be rendered via
+    streamlit.components.v1.html (iframe) — st.markdown and st.html both
+    strip or mangle <style> blocks on some Streamlit versions.
     """
     import html as html_mod
     from datetime import date, timedelta
