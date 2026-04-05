@@ -68,6 +68,14 @@ def inject_css():
             background-color: #F8F9FA;
         }
 
+        /* Tighter main content padding so wide visuals (Gantt) fill the viewport */
+        .main .block-container,
+        [data-testid="stMainBlockContainer"] {
+            padding-left: 1.25rem !important;
+            padding-right: 1.25rem !important;
+            max-width: 100% !important;
+        }
+
         /* Sidebar styling */
         [data-testid="stSidebar"] {
             background-color: #1B3A5C;
@@ -641,22 +649,30 @@ def supply_demand_chart(utilization: dict) -> alt.Chart:
     return chart.configure_view(strokeWidth=0)
 
 
+GANTT_ROW_STEP = 42      # px per row in the chart (and HTML info panel)
+GANTT_TOP_PAD = 48       # px reserved above first row for legend/axis
+GANTT_BOTTOM_PAD = 32    # px reserved below last row for axis
+
+
 def gantt_chart(
     projects: list,
     color_by: str = "priority",
     group_by: str = "none",
     sort_by: str = "start",
     date_range: tuple = None,
-) -> alt.Chart:
+) -> dict:
     """World-class Gantt chart with today line, progress overlay, milestones,
-    grouping, and clickable bars.
+    grouping, and clickable bars. Returns a dict with the Altair chart plus
+    ordered row metadata so the caller can render a matching info panel.
 
-    Args:
-        projects: list of Project objects with start_date/end_date set.
-        color_by: "priority" | "health" | "portfolio"
-        group_by: "none" | "portfolio" | "pm" | "priority" | "health"
-        sort_by:  "start" | "end" | "priority" | "name"
-        date_range: optional (start_date, end_date) tuple to constrain x-axis.
+    Returns:
+        {
+            "chart": alt.LayerChart,          # gantt without y-axis labels
+            "rows": list[dict],               # ordered row metadata
+            "row_step": int,                  # px per row
+            "top_pad": int, "bottom_pad": int,
+            "total_height": int,
+        }
     """
     from datetime import date, timedelta
 
@@ -769,152 +785,236 @@ def gantt_chart(
     else:
         x_scale = alt.Undefined
 
-    # Row sizing — taller bars + generous row spacing for readability
-    bar_height = 26
-    row_step = 42  # total px per row (bar + padding)
-    total_height = max(420, len(df) * row_step + 80)
+    # Chart sizing locked to GANTT_ROW_STEP so HTML info panel aligns exactly
+    n = len(df)
+    bar_height = int(GANTT_ROW_STEP * 0.6)  # ~25 px
+    total_height = GANTT_TOP_PAD + (n * GANTT_ROW_STEP) + GANTT_BOTTOM_PAD
 
+    # Y-axis: labels HIDDEN — task info rendered by caller in left panel
     y_enc = alt.Y(
         "RowLabel:N",
         sort=row_order,
         title=None,
-        scale=alt.Scale(paddingInner=0.35, paddingOuter=0.25),
-        axis=alt.Axis(
-            labelFontSize=12, labelLimit=380, labelPadding=8,
-            ticks=False, domain=False, grid=True, gridOpacity=0.3,
-            labelColor="#1B3A5C", labelFontWeight=500,
-        ),
+        scale=alt.Scale(paddingInner=0.25, paddingOuter=0.1),
+        axis=alt.Axis(labels=False, ticks=False, domain=False,
+                      grid=True, gridOpacity=0.25),
     )
-    # Bottom x-axis (month labels)
-    x_enc = alt.X(
-        "Start:T",
-        title=None,
-        scale=x_scale,
-        axis=alt.Axis(
-            labelFontSize=11, format="%b %Y",
-            tickCount="month", grid=True, gridOpacity=0.4,
-            domain=False, labelPadding=6, orient="bottom",
-        ),
-    )
-    # Top x-axis (mirror of bottom, so users always see month refs)
-    x_enc_top = alt.X(
-        "Start:T",
-        title=None,
-        scale=x_scale,
-        axis=alt.Axis(
-            labelFontSize=11, format="%b %Y",
-            tickCount="month", grid=False,
-            domain=False, labelPadding=6, orient="top",
-        ),
-    )
+
+    # X-axis — single clean bottom axis. All layers share the same x/x2 with
+    # explicit title=None so no concatenated "StartProgressEnd" title artifact.
+    def _x(field="Start:T", orient="bottom", grid=True):
+        return alt.X(
+            field,
+            title=None,
+            scale=x_scale,
+            axis=alt.Axis(
+                labelFontSize=11, format="%b %Y",
+                tickCount="month", grid=grid, gridOpacity=0.35,
+                domain=False, labelPadding=6, orient=orient,
+                labelColor="#4A5A6E",
+            ),
+        )
+    x_enc = _x()
 
     layers = []
 
-    # Zebra-stripe background — alternating row tint for readability
-    stripe_df = df.copy()
-    stripe_df["_stripe"] = [i % 2 for i in range(len(stripe_df))]
-    stripes = alt.Chart(stripe_df[stripe_df["_stripe"] == 0]).mark_rect(
-        color="#F4F6F9", opacity=0.7,
-    ).encode(
-        y=alt.Y("RowLabel:N", sort=row_order,
-                scale=alt.Scale(paddingInner=0.0, paddingOuter=0.0)),
-    )
-    layers.append(stripes)
-
-    # Background bar = full duration, muted
+    # Background bar — full duration, muted
     bars_bg = alt.Chart(df).mark_bar(
         cornerRadius=5, height=bar_height, opacity=0.32, clip=True,
     ).encode(
-        y=y_enc, x=x_enc, x2="End:T",
+        y=y_enc, x=x_enc,
+        x2=alt.X2("End:T", title=""),
         color=color_enc,
         href=alt.Href("URL:N"),
         tooltip=tooltip,
     )
     layers.append(bars_bg)
 
-    # Progress overlay = start → progress_end, full opacity
+    # Progress overlay — start → progress_end, full opacity
     progress_df = df[df["PctComplete"] > 0]
     if not progress_df.empty:
         bars_progress = alt.Chart(progress_df).mark_bar(
             cornerRadius=5, height=bar_height, clip=True,
         ).encode(
-            y=alt.Y("RowLabel:N", sort=row_order),
-            x="Start:T", x2="ProgressEnd:T",
+            y=alt.Y("RowLabel:N", sort=row_order, title=None,
+                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
+            x=alt.X("Start:T", title=None, scale=x_scale,
+                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
+            x2=alt.X2("ProgressEnd:T", title=""),
             color=color_enc,
             href=alt.Href("URL:N"),
             tooltip=tooltip,
         )
         layers.append(bars_progress)
 
-    # Overdue outline (red stroke on bars past end date & not complete)
+    # Overdue outline — red stroke on bars past end date & not complete
     overdue_df = df[df["Overdue"]]
     if not overdue_df.empty:
         overdue_outline = alt.Chart(overdue_df).mark_bar(
             cornerRadius=5, height=bar_height, clip=True,
             fillOpacity=0, stroke=RED, strokeWidth=2.5,
         ).encode(
-            y=alt.Y("RowLabel:N", sort=row_order),
-            x="Start:T", x2="End:T",
+            y=alt.Y("RowLabel:N", sort=row_order, title=None,
+                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
+            x=alt.X("Start:T", title=None, scale=x_scale,
+                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
+            x2=alt.X2("End:T", title=""),
             tooltip=tooltip,
             href=alt.Href("URL:N"),
         )
         layers.append(overdue_outline)
 
-    # Start & End milestone diamonds
+    # Start & end milestone diamonds
     start_points = alt.Chart(df).mark_point(
-        shape="diamond", size=95, filled=True, color=NAVY,
+        shape="diamond", size=85, filled=True, color=NAVY,
         opacity=0.9, clip=True,
     ).encode(
-        y=alt.Y("RowLabel:N", sort=row_order),
-        x="Start:T",
+        y=alt.Y("RowLabel:N", sort=row_order, title=None,
+                axis=alt.Axis(labels=False, ticks=False, domain=False)),
+        x=alt.X("Start:T", title=None, scale=x_scale,
+                axis=alt.Axis(labels=False, ticks=False, domain=False)),
         tooltip=tooltip,
     )
     end_points = alt.Chart(df).mark_point(
-        shape="diamond", size=95, filled=True, color=NAVY,
+        shape="diamond", size=85, filled=True, color=NAVY,
         opacity=0.9, clip=True,
     ).encode(
-        y=alt.Y("RowLabel:N", sort=row_order),
-        x="End:T",
+        y=alt.Y("RowLabel:N", sort=row_order, title=None,
+                axis=alt.Axis(labels=False, ticks=False, domain=False)),
+        x=alt.X("End:T", title=None, scale=x_scale,
+                axis=alt.Axis(labels=False, ticks=False, domain=False)),
         tooltip=tooltip,
     )
     layers += [start_points, end_points]
 
-    # % Complete text — only shown when > 0, positioned at end of bar
+    # % Complete text — rendered at bar end when > 0
     pct_df = df[df["PctComplete"] > 0]
     if not pct_df.empty:
         pct_labels = alt.Chart(pct_df).mark_text(
             align="left", baseline="middle", dx=10, fontSize=11,
             fontWeight="bold", color=NAVY, clip=True,
         ).encode(
-            y=alt.Y("RowLabel:N", sort=row_order),
-            x="End:T",
+            y=alt.Y("RowLabel:N", sort=row_order, title=None,
+                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
+            x=alt.X("End:T", title=None, scale=x_scale,
+                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
             text="PctLabel:N",
         )
         layers.append(pct_labels)
 
     # Today line + label
-    today_df = pd.DataFrame({"date": [pd.to_datetime(today)],
-                             "label": ["TODAY"]})
+    today_df = pd.DataFrame({"date": [pd.to_datetime(today)]})
     today_rule = alt.Chart(today_df).mark_rule(
         color=RED, strokeWidth=2.5, strokeDash=[6, 4],
-    ).encode(x=alt.X("date:T", scale=x_scale))
+    ).encode(
+        x=alt.X("date:T", title=None, scale=x_scale,
+                axis=alt.Axis(labels=False, ticks=False, domain=False)),
+    )
     today_label = alt.Chart(today_df).mark_text(
         text="TODAY", align="center", dy=-6,
         fontSize=11, fontWeight="bold", color=RED,
-    ).encode(x=alt.X("date:T", scale=x_scale), y=alt.value(0))
+    ).encode(
+        x=alt.X("date:T", title=None, scale=x_scale,
+                axis=alt.Axis(labels=False, ticks=False, domain=False)),
+        y=alt.value(0),
+    )
     layers += [today_rule, today_label]
 
-    # Invisible helper layer providing the top (mirrored) month axis
-    top_axis_helper = alt.Chart(df.head(1)).mark_rule(opacity=0).encode(
-        x=x_enc_top,
-    )
-    layers.append(top_axis_helper)
-
-    chart = alt.layer(*layers).properties(height=total_height)
-
-    return chart.configure_view(strokeWidth=0).configure_axis(
+    chart = alt.layer(*layers).properties(
+        height=total_height,
+        padding={"left": 6, "right": 18, "top": 4, "bottom": 4},
+    ).configure_view(strokeWidth=0).configure_axis(
         labelColor="#4A5A6E", titleColor=NAVY,
     )
+
+    # Info rows for the caller's left panel
+    info_rows = []
+    for _, r in df.iterrows():
+        info_rows.append({
+            "id": r["ID"],
+            "name": r["Project"].split(": ", 1)[1] if ": " in r["Project"] else r["Project"],
+            "group": r["Group"],
+            "pm": r["PM"],
+            "priority": r["Priority"],
+            "health": r["Health"],
+            "pct": r["PctLabel"],
+            "start": r["Start"].strftime("%b %d"),
+            "end": r["End"].strftime("%b %d"),
+        })
+
+    return {
+        "chart": chart,
+        "rows": info_rows,
+        "row_step": GANTT_ROW_STEP,
+        "top_pad": GANTT_TOP_PAD,
+        "bottom_pad": GANTT_BOTTOM_PAD,
+        "total_height": total_height,
+        "grouped": group_by != "none",
+    }
+
+
+def gantt_info_panel_html(result: dict) -> str:
+    """Build the left-side task info panel that aligns row-by-row with the
+    Gantt chart returned by gantt_chart()."""
+    row_step = result["row_step"]
+    top_pad = result["top_pad"]
+    bottom_pad = result["bottom_pad"]
+    grouped = result.get("grouped", False)
+
+    css_grid = (
+        "display:grid; "
+        "grid-template-columns: 54px 1fr 44px; "
+        "column-gap:8px; align-items:center; "
+        f"height:{row_step}px; "
+        "padding:0 10px; "
+        "border-bottom:1px solid #EEF1F5; "
+        "text-decoration:none; color:#1B3A5C; "
+        "font-size:11.5px; line-height:1.15; "
+        "transition:background 0.15s;"
+    )
+    hover_js = "this.style.background='#F4F6F9'"
+    unhover_js = "this.style.background=''"
+
+    # Header strip sits inside top_pad (flush with chart top)
+    html = [
+        f'<div style="padding-top:{top_pad - 22}px;">',
+        '<div style="display:grid; grid-template-columns:54px 1fr 44px; '
+        'column-gap:8px; padding:0 10px 6px 10px; font-size:10px; '
+        'font-weight:700; color:#6C757D; text-transform:uppercase; '
+        'letter-spacing:0.06em; border-bottom:2px solid #C5CDD8;">'
+        '<div>ID</div><div>Project</div><div style="text-align:right;">%</div>'
+        '</div>',
+    ]
+
+    prev_group = None
+    for r in result["rows"]:
+        if grouped and r["group"] != prev_group:
+            # Group header row — occupies one row slot
+            html.append(
+                f'<div style="height:{row_step}px; display:flex; '
+                f'align-items:center; padding:0 10px; font-size:11px; '
+                f'font-weight:700; color:#1B3A5C; background:#EEF2F7; '
+                f'text-transform:uppercase; letter-spacing:0.04em; '
+                f'border-bottom:1px solid #C5CDD8;">{r["group"]}</div>'
+            )
+            prev_group = r["group"]
+        html.append(
+            f'<a href="?project={r["id"]}" target="_self" '
+            f'style="{css_grid}" '
+            f'onmouseover="{hover_js}" onmouseout="{unhover_js}" '
+            f'title="{r["name"]} — PM: {r["pm"]}, {r["priority"]} priority, '
+            f'{r["start"]} → {r["end"]}">'
+            f'<div style="font-weight:700; color:#1565C0;">{r["id"]}</div>'
+            f'<div style="overflow:hidden; text-overflow:ellipsis; '
+            f'white-space:nowrap;">{r["name"]}</div>'
+            f'<div style="text-align:right; font-weight:600; color:#4A5A6E;">'
+            f'{r["pct"]}</div>'
+            f'</a>'
+        )
+
+    html.append(f'<div style="height:{bottom_pad}px;"></div>')
+    html.append('</div>')
+    return "".join(html)
 
 
 def capacity_heatmap(heatmap_df: pd.DataFrame) -> alt.Chart:
