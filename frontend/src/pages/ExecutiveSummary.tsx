@@ -10,6 +10,17 @@ import { ResourceHealthHero } from "@/components/exec/ResourceHealthHero";
 import { PriorityProjectRow } from "@/components/exec/PriorityProjectRow";
 import { ChangesCard } from "@/components/exec/ChangesCard";
 
+const ROLE_LABEL: Record<string, string> = {
+  pm: "PM",
+  ba: "BA",
+  functional: "Functional",
+  technical: "Technical",
+  developer: "Developer",
+  infrastructure: "Infrastructure",
+  dba: "DBA",
+  wms: "WMS",
+};
+
 const PRIORITY_ORDER: Record<string, number> = {
   Highest: 0,
   High: 1,
@@ -26,10 +37,21 @@ export function ExecutiveSummary() {
   const utilEntries = Object.values(roles);
   const red = utilEntries.filter((r) => r.status === "RED").length;
   const yellow = utilEntries.filter((r) => r.status === "YELLOW").length;
-  const avgUtil =
-    utilEntries.length > 0
-      ? utilEntries.reduce((s, r) => s + r.utilization_pct, 0) / utilEntries.length
-      : 0;
+
+  // Weighted utilization across the whole team — total demand divided by
+  // total supply. This is the metric that actually moves when someone is
+  // excluded from capacity (supply drops, ratio rises). A simple average
+  // across the 8 roles gives WMS (14 hrs) the same weight as Developer
+  // (80 hrs), which masks real capacity shifts.
+  const totalDemand = utilEntries.reduce((s, r) => s + r.demand_hrs_week, 0);
+  const totalSupply = utilEntries.reduce((s, r) => s + r.supply_hrs_week, 0);
+  const avgUtil = totalSupply > 0 ? totalDemand / totalSupply : 0;
+
+  // Peak role (for subtitle context) — shows WHICH role is running hottest
+  // so the headline number has a "caused by" story.
+  const peakRole = utilEntries
+    .slice()
+    .sort((a, b) => b.utilization_pct - a.utilization_pct)[0];
 
   const activeCount = health.data?.active_project_count ?? 0;
   const totalCount = health.data?.project_count ?? 0;
@@ -80,14 +102,16 @@ export function ExecutiveSummary() {
             delay={0.05}
           />
           <KpiCard
-            label="Avg role utilization"
+            label="Team utilization"
             value={`${Math.round(avgUtil * 100)}%`}
             subvalue={
-              utilTone === "success"
-                ? "Comfortable — room to take on work"
-                : utilTone === "warning"
-                  ? "Approaching capacity"
-                  : "Over capacity — action needed"
+              peakRole
+                ? `Peak: ${ROLE_LABEL[peakRole.role_key] ?? peakRole.role_key} at ${Math.round(peakRole.utilization_pct * 100)}%`
+                : utilTone === "success"
+                  ? "Comfortable — room to take on work"
+                  : utilTone === "warning"
+                    ? "Approaching capacity"
+                    : "Over capacity — action needed"
             }
             icon={<Activity className="h-4 w-4" />}
             tone={utilTone}
