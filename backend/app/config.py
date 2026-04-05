@@ -6,10 +6,14 @@ repo-root SQLite database used by the existing Streamlit app.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple, Type
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 
 
 # Repo root = two levels up from this file (backend/app/config.py → backend/ → repo root)
@@ -33,12 +37,34 @@ class Settings(BaseSettings):
     jira_api_token: Optional[str] = None
     api_prefix: str = "/api/v1"
 
+    # --- Deployment-related ---
+    # When set, every request (except /meta/health) must carry this value in
+    # the `X-Share-Key` header. Unset = no auth (local dev default).
+    shared_password: Optional[str] = None
+    # When true, hides the AI Assistant page + disables /agent/* routes so
+    # shared deployments can't burn the host's Anthropic credit.
+    public_mode: bool = False
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",") if o.strip()]
         return v
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        # Put dotenv BEFORE env so backend/.env wins over shell env vars.
+        # The host shell sometimes sets ANTHROPIC_API_KEY="" as a safety
+        # measure, which would otherwise shadow the real key in .env.
+        return (init_settings, dotenv_settings, env_settings, file_secret_settings)
 
 
 settings = Settings()

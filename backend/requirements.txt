@@ -1,0 +1,17 @@
+# Backend-specific pinned requirements for the Railway deploy.
+# The repo-root requirements.txt is for the Streamlit app; this file is
+# what the Dockerfile installs.
+
+# Core engine dependencies (used by sqlite_connector + capacity_engine +
+# schedule_optimizer + pmo_agent + jira_sync + snapshot_store)
+pandas>=2.0.0
+openpyxl>=3.1.0
+ortools>=9.10.0
+anthropic>=0.80.0
+requests>=2.31.0
+
+# FastAPI layer
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.8
+pydantic-settings>=2.4

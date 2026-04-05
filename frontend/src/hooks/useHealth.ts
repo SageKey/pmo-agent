@@ -9,6 +9,8 @@ export interface HealthResponse {
   active_project_count: number;
   roster_count: number;
   version: string;
+  auth_required: boolean;
+  public_mode: boolean;
 }
 
 export function useHealth() {

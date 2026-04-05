@@ -8,13 +8,19 @@ processes open the same SQLite file in WAL mode so concurrent access is
 safe.
 """
 
+import logging
+import os
+import shutil
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Importing engines first runs the sys.path shim so subsequent router imports
 # can resolve `sqlite_connector`, `capacity_engine`, etc.
 from . import engines  # noqa: F401
-from .config import settings
+from .config import REPO_ROOT, settings
+from .middleware import ShareKeyMiddleware
 from .routers import (
     agent,
     assignments,
@@ -31,6 +37,56 @@ from .routers import (
     timesheets,
 )
 
+log = logging.getLogger("pmo.startup")
+
+
+def _seed_database_if_missing() -> None:
+    """If the configured DB doesn't exist or has no projects yet, populate
+    it from seed_data.sql. Safe to call on every boot — no-op once seeded."""
+    import sqlite3
+
+    db_path = Path(settings.db_path)
+    seed_sql = REPO_ROOT / "seed_data.sql"
+
+    need_seed = False
+    if not db_path.exists():
+        need_seed = True
+    else:
+        try:
+            conn = sqlite3.connect(str(db_path))
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='projects'"
+            ).fetchone()
+            if row is None:
+                need_seed = True
+            else:
+                row = conn.execute("SELECT COUNT(*) FROM projects").fetchone()
+                if row[0] == 0:
+                    need_seed = True
+            conn.close()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("DB probe failed (%s), will reseed", exc)
+            need_seed = True
+
+    if not need_seed:
+        return
+
+    if not seed_sql.exists():
+        log.warning("seed_data.sql not found at %s — skipping seed", seed_sql)
+        return
+
+    log.info("Seeding %s from %s", db_path, seed_sql)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists():
+        db_path.unlink()
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.executescript(seed_sql.read_text())
+        conn.commit()
+    finally:
+        conn.close()
+    log.info("Seed complete")
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -43,14 +99,36 @@ def create_app() -> FastAPI:
         ),
     )
 
+    # --- Startup: seed DB if needed (first boot on Railway with empty volume) ---
+    @app.on_event("startup")
+    async def on_startup() -> None:
+        _seed_database_if_missing()
+
+    # --- CORS ---
+    # Include localhost defaults + any production origin from env
+    origins = list(settings.cors_origins)
+    extra = os.environ.get("CORS_ORIGIN_PROD")
+    if extra:
+        for o in extra.split(","):
+            o = o.strip()
+            if o and o not in origins:
+                origins.append(o)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
+    # --- Shared-password gate (only when configured) ---
+    if settings.shared_password:
+        app.add_middleware(
+            ShareKeyMiddleware,
+            shared_password=settings.shared_password,
+        )
+
+    # --- Routers ---
     app.include_router(meta.router, prefix=settings.api_prefix)
     app.include_router(portfolio.router, prefix=settings.api_prefix)
     app.include_router(capacity.router, prefix=settings.api_prefix)
@@ -63,7 +141,11 @@ def create_app() -> FastAPI:
     app.include_router(timesheets.router, prefix=settings.api_prefix)
     app.include_router(jira.router, prefix=settings.api_prefix)
     app.include_router(snapshots.router, prefix=settings.api_prefix)
-    app.include_router(agent.router, prefix=settings.api_prefix)
+    # Agent routes are mounted only when not in public mode. The router
+    # itself enforces the Anthropic key check, but PUBLIC_MODE lets the
+    # host fully disable even the tool-list endpoint.
+    if not settings.public_mode:
+        app.include_router(agent.router, prefix=settings.api_prefix)
 
     return app
 

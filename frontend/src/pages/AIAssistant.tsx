@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Sparkles, Wrench, RotateCw, AlertCircle, Loader2 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
@@ -9,6 +10,7 @@ import {
   type AgentMessage,
   type ToolCall,
 } from "@/hooks/useAgentChat";
+import { useHealth } from "@/hooks/useHealth";
 import { avatarTone, initials } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -21,6 +23,7 @@ const SUGGESTIONS = [
 ];
 
 export function AIAssistant() {
+  const health = useHealth();
   const { messages, streaming, error, send, reset } = useAgentChat();
   const [input, setInput] = useState("");
   const [agentMeta, setAgentMeta] = useState<{
@@ -57,6 +60,12 @@ export function AIAssistant() {
   };
 
   const showSuggestions = messages.length === 0;
+
+  // Public deployments disable the agent entirely — redirect to Executive.
+  // Done after all hooks so the rules-of-hooks check is satisfied.
+  if (health.data?.public_mode) {
+    return <Navigate to="/executive" replace />;
+  }
 
   return (
     <>

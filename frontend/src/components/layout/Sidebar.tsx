@@ -9,20 +9,26 @@ import {
   Users,
   Sparkles,
 } from "lucide-react";
+import { useHealth } from "@/hooks/useHealth";
 import { cn } from "@/lib/cn";
 
 const NAV = [
-  { to: "/executive", label: "Executive", icon: LayoutDashboard },
-  { to: "/portfolio", label: "Portfolio", icon: FolderKanban },
-  { to: "/capacity", label: "Capacity", icon: Activity },
-  { to: "/timeline", label: "Timeline", icon: Calendar },
-  { to: "/financials", label: "Financials", icon: DollarSign },
-  { to: "/timesheets", label: "Timesheets", icon: Clock },
-  { to: "/roster", label: "Team Roster", icon: Users },
-  { to: "/assistant", label: "AI Assistant", icon: Sparkles },
+  { to: "/executive", label: "Executive", icon: LayoutDashboard, publicSafe: true },
+  { to: "/portfolio", label: "Portfolio", icon: FolderKanban, publicSafe: true },
+  { to: "/capacity", label: "Capacity", icon: Activity, publicSafe: true },
+  { to: "/timeline", label: "Timeline", icon: Calendar, publicSafe: true },
+  { to: "/financials", label: "Financials", icon: DollarSign, publicSafe: true },
+  { to: "/timesheets", label: "Timesheets", icon: Clock, publicSafe: true },
+  { to: "/roster", label: "Team Roster", icon: Users, publicSafe: true },
+  // Hidden when PUBLIC_MODE is on so shared visitors can't burn LLM credit
+  { to: "/assistant", label: "AI Assistant", icon: Sparkles, publicSafe: false },
 ];
 
 export function Sidebar() {
+  const { data } = useHealth();
+  const publicMode = data?.public_mode === true;
+  const items = NAV.filter((n) => n.publicSafe || !publicMode);
+
   return (
     <aside className="hidden w-60 shrink-0 border-r border-navy-900/10 bg-navy-950 text-slate-200 md:flex md:flex-col">
       <div className="px-5 py-6">
@@ -30,7 +36,7 @@ export function Sidebar() {
         <div className="mt-0.5 text-xs text-slate-400">Resource Planning</div>
       </div>
       <nav className="flex-1 space-y-0.5 px-2 pb-6">
-        {NAV.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -49,7 +55,7 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="px-5 pb-6 text-[11px] uppercase tracking-wide text-slate-500">
-        v0.1.0 · local dev
+        v0.1.0 {publicMode ? "· public" : "· local dev"}
       </div>
     </aside>
   );

@@ -28,4 +28,6 @@ def health(conn: SQLiteConnector = Depends(get_connector)) -> HealthResponse:
         project_count=len(portfolio),
         active_project_count=sum(1 for p in portfolio if p.is_active),
         roster_count=len(roster),
+        auth_required=bool(settings.shared_password),
+        public_mode=settings.public_mode,
     )

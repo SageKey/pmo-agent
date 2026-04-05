@@ -6,12 +6,15 @@ import { RouterProvider } from "react-router-dom";
 
 import { router } from "./router";
 import { queryClient } from "./lib/queryClient";
+import { ShareKeyGate } from "./components/auth/ShareKeyGate";
 import "./styles/globals.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <ShareKeyGate>
+        <RouterProvider router={router} />
+      </ShareKeyGate>
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   </React.StrictMode>,

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { getStoredShareKey } from "@/lib/api";
 
 export type AgentMessageRole = "user" | "assistant";
 
@@ -65,9 +66,15 @@ export function useAgentChat() {
       abortRef.current = controller;
 
       try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        const shareKey = getStoredShareKey();
+        if (shareKey) headers["X-Share-Key"] = shareKey;
+
         const res = await fetch(`${API_BASE}/agent/chat`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({ messages: history }),
           signal: controller.signal,
         });
@@ -185,6 +192,12 @@ export async function fetchAgentTools(): Promise<{
   configured: boolean;
   tools: { name: string; description: string }[];
 }> {
-  const res = await fetch(`${API_BASE}/agent/tools`);
+  const headers: Record<string, string> = {};
+  const shareKey = getStoredShareKey();
+  if (shareKey) headers["X-Share-Key"] = shareKey;
+  const res = await fetch(`${API_BASE}/agent/tools`, { headers });
+  if (!res.ok) {
+    return { model: "", configured: false, tools: [] };
+  }
   return res.json();
 }

@@ -32,9 +32,9 @@ CREATE TABLE projects (
 , budget REAL DEFAULT 0.0, actual_cost REAL DEFAULT 0.0, forecast_cost REAL DEFAULT 0.0);
 INSERT INTO projects VALUES('ETE-83','Customer Master Data Cleanup','Key Initiative','Sales & Distribution','Tom Vierling','🔵 NEEDS TECHNICAL SPEC',0.4000000000000000222,'High','2025-10-14','2026-06-01',NULL,'Systems Applications','Emily Fridley','Audrey Debaere',NULL,NULL,'Alex Young','XXL: > 640 Hours',1480.0,'Completed Q1',1,'2026-04-02 03:35:22','2026-04-02 15:19:42',0.0,74000.0,185000.0);
 INSERT INTO projects VALUES('ETE-48','System Connection Syteline-VKS','Key Initiative','Engineering','Ray Trumble','⚪ NOT STARTED',0.1000000000000000055,'High','2026-02-15','2026-06-30',NULL,'Synnergie','Emily Fridley','Jim Young','Ajay Kumar','Sangamesh Koti','Alex Young','L: 160-320 Hours',240.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,3000.0,30000.0);
-INSERT INTO projects VALUES('ETE-68','Catalog API Rust2Python','Key Initiative','Information Technology','Jim Koscielniak','🟢 ON TRACK',0.5,'High','2025-11-17','2026-04-24',NULL,'Systems Applications','Emily Fridley','Audrey Debaere',NULL,NULL,'Colin Olson','XXL: > 640 Hours',640.0,NULL,1,'2026-04-02 03:35:22','2026-04-02T07:28:54.815415',0.0,40000.0,80000.0);
+INSERT INTO projects VALUES('ETE-68','Catalog API Rust2Python','Key Initiative','Information Technology','Jim Koscielniak','🟢 ON TRACK',0.5,'High','2025-11-17','2026-04-24',NULL,'Systems Applications','Emily Fridley','Audrey Debaere',NULL,NULL,'Colin Olson','XXL: > 640 Hours',640.0,NULL,1,'2026-04-02 03:35:22','2026-04-05T08:54:24.640240',0.0,40000.0,80000.0);
 INSERT INTO projects VALUES('ETE-43','Data Security - Microsoft Purview','Key Initiative','Information Technology','Jim Koscielniak','🟢 ON TRACK',0.0,'High','2026-02-02','2026-06-30',NULL,'Infrastructure','Emily Fridley','Audrey Debaere','Deepak Gudwani','Sarath Yeturu','Alex Young',NULL,320.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 03:35:22',0.0,0.0,40000.0);
-INSERT INTO projects VALUES('ETE-19','Changes to AR Aging Report','Enhancement','Finance','Tom Newell','🔵 NEEDS TECHNICAL SPEC',0.0,'High','2026-02-23','2026-04-17',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','M: 80-160 Hours',120.0,NULL,1,'2026-04-02 03:35:22','2026-04-04 00:31:05',0.0,0.0,0.0);
+INSERT INTO projects VALUES('ETE-19','Changes to AR Aging Report','Enhancement','Finance','Tom Newell','🔵 NEEDS TECHNICAL SPEC',0.1000000000000000055,'High','2026-02-23','2026-04-17',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','M: 80-160 Hours',120.0,NULL,1,'2026-04-02 03:35:22','2026-04-05 15:07:38',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-49','Marketing: STE Rewards Tier','Enhancement','Sales & Distribution','Tom Vierling','🔵 NEEDS TECHNICAL SPEC',0.0,'Medium','2026-04-01','2026-09-16',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young','L: 160-320 Hours',240.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,30000.0);
 INSERT INTO projects VALUES('ETE-7','Outsourced Unit Core Accounting','Enhancement','Finance','Tom Newell','⚪ NOT STARTED',0.0,'Medium','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','XXL: > 640 Hours',640.0,'8-9 month project',1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,80000.0);
 INSERT INTO projects VALUES('ETE-52','SWIMS/Syteline Reporting','Enhancement','Supply Chain','Jon Besherse','⚪ NOT STARTED',0.0,'Medium','2026-04-01','2026-04-29',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young','S: < 80 Hours',40.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,0.0);
@@ -42,7 +42,7 @@ INSERT INTO projects VALUES('ETE-16','Partial Pay w/ CC from WMERP','Enhancement
 INSERT INTO projects VALUES('ETE-37','Magic Search in BuyETE','Enhancement','Sales & Distribution','Tom Vierling','🔵 NEEDS TECHNICAL SPEC',0.0,'Highest','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young','S: < 80 Hours',40.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-97','Standard Order Process Notifications','Enhancement','Sales & Distribution','Tom Vierling','⚪ NOT STARTED',0.0,'Highest','2026-04-01','2026-06-17',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Ajay Kumar','Bhavya Reddy','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,25000.0);
 INSERT INTO projects VALUES('ETE-100','ATSG Expired Members Self-Payment','Enhancement','Sales & Distribution','Tom Vierling','🔵 NEEDS FUNCTIONAL SPEC',0.0,'Medium','2026-04-01','2026-05-27',NULL,'Systems Applications','Emily Fridley','Audrey Debaere','Deepak Gudwani','Ravindra Reddy','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-03 19:53:49',0.0,0.0,25000.0);
-INSERT INTO projects VALUES('ETE-124','Clean Up Return Loads','Enhancement','Finance','Tom Newell','⚪ NOT STARTED',0.0,'Highest','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,25000.0);
+INSERT INTO projects VALUES('ETE-124','Clean Up Return Loads','Enhancement','Finance','Tom Newell','🟢 ON TRACK',0.0,'Highest','2026-04-01','2026-05-20',NULL,'Synnergie','Emily Fridley','Audrey Debaere','Ajay Kumar','Sarath Yeturu','Alex Young',NULL,200.0,NULL,1,'2026-04-02 03:35:22','2026-04-05 15:07:38',0.0,0.0,25000.0);
 INSERT INTO projects VALUES('ETE-58','Transfer Order Moved Items to Transit Location','Enhancement','Finance','Jim Young','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-09-23',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-51','RMA Credit Memo on Ghost Check-In','Enhancement','Finance','Tom Newell','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-08-26',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
 INSERT INTO projects VALUES('ETE-59','Reconcile BridgePay CC Transactions ','Enhancement','Finance','Tom Newell','⏸️ POSTPONED',0.0,NULL,'2026-04-01','2026-05-13',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0.0,NULL,2,'2026-04-02 03:35:22','2026-04-02 15:40:39',0.0,0.0,0.0);
@@ -435,7 +435,6 @@ INSERT INTO project_assignments VALUES(11,'ETE-68','Emily Fridley','pm',1.0);
 INSERT INTO project_assignments VALUES(12,'ETE-68','Audrey Debaere','ba',1.0);
 INSERT INTO project_assignments VALUES(13,'ETE-68','Ajay Kumar','functional',1.0);
 INSERT INTO project_assignments VALUES(14,'ETE-68','Colin Olson','technical',1.0);
-INSERT INTO project_assignments VALUES(15,'ETE-68','Alex Young','developer',1.0);
 INSERT INTO project_assignments VALUES(16,'ETE-43','Emily Fridley','pm',1.0);
 INSERT INTO project_assignments VALUES(17,'ETE-43','Audrey Debaere','ba',1.0);
 INSERT INTO project_assignments VALUES(18,'ETE-43','Deepak Gudwani','functional',1.0);
@@ -757,7 +756,7 @@ INSERT INTO vendor_timesheets VALUES(99,3,'2026-03-19','SSE-526','Changes to Acc
 INSERT INTO vendor_timesheets VALUES(100,3,'2026-03-20','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Functional Testing','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(101,3,'2026-03-23','SSE-553','Change GL Acct to 20410 for WEX Payments from Service Orders Module','Functional Testing','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(102,3,'2026-03-24','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
-INSERT INTO vendor_timesheets VALUES(103,3,'2026-03-25','SSE-598','Urgent Task: GL account Voucher Clean up','Functional Testing','Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(103,3,'2026-03-25',unistr('SSE-598\u000a\u000a\u000a'),'Urgent Task: GL account Voucher Clean up','Functional Testing','Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(104,3,'2026-03-25','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(105,3,'2026-03-26','SSE-526','Changes to Accounts Receivable Aging Report','Functional Testing','Project',4.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(106,3,'2026-03-26','SSE-526','Question on RMA Return Transaction journal entries created from wmerp rma daily returns workbench','Analysis the Issue/Questions','Project',4.0,'Clarification provided for the Journal Entries','2026-04-03 21:49:01','2026-04-03 21:49:01');
@@ -871,7 +870,7 @@ INSERT INTO vendor_timesheets VALUES(213,7,'2026-03-25','#INC-58949','Request fo
 INSERT INTO vendor_timesheets VALUES(214,7,'2026-03-27',NULL,NULL,'Disk Space addition on ETE-ERPDB','Support',2.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(215,7,'2026-03-27','#INC-59011',NULL,'Log shipping Jobs verified and worked on Backup failures on ETE-ERPDB','Support',6.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(216,7,'2026-03-30',NULL,NULL,'Performed systematic review of SQL Agent job execution histories, including backup, maintenance, and monitoring jobs, and proactively addressed failures to prevent operational disruptions.','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
-INSERT INTO vendor_timesheets VALUES(217,7,'2026-03-31',NULL,NULL,'Investigated log shipping delays and validated restore and recovery times on secondary server','Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
+INSERT INTO vendor_timesheets VALUES(217,7,'2026-03-31',NULL,NULL,unistr('Investigated log shipping delays and validated restore and recovery times on secondary server\u0009'),'Support',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(218,8,'2026-03-02','SSE-545','Installed New Return Type MFDN','Development','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(219,8,'2026-03-03','SSE-545','Installed New Return Type MFDN','Development','Project',8.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
 INSERT INTO vendor_timesheets VALUES(220,8,'2026-03-04','SSE-545','Installed New Return Type MFDN','Development','Project',3.0,NULL,'2026-04-03 21:49:01','2026-04-03 21:49:01');
@@ -1084,6 +1083,15 @@ INSERT INTO project_audit_log VALUES(19,'ETE-48','task_added','Brett Anderson',N
 INSERT INTO project_audit_log VALUES(20,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'Post Go-Live Review — Planning','2026-04-04 00:45:47');
 INSERT INTO project_audit_log VALUES(21,'ETE-48','task_added','Brett Anderson',NULL,NULL,NULL,'test','2026-04-04 00:46:39');
 INSERT INTO project_audit_log VALUES(22,'ETE-68','milestones_seeded','Brett Anderson',NULL,NULL,NULL,'SDLC template (8 milestones)','2026-04-04 01:22:35');
+INSERT INTO project_audit_log VALUES(23,'ETE-68','comment_added','Test',NULL,NULL,NULL,'smoke-test comment','2026-04-05 13:48:54');
+INSERT INTO project_audit_log VALUES(24,'ETE-68','comment_added','Brett Anderson',NULL,NULL,NULL,'E2E smoke test comment','2026-04-05 13:53:38');
+INSERT INTO project_audit_log VALUES(25,'ETE-68','milestone_added','System',NULL,NULL,NULL,'smoke-test milestone','2026-04-05 14:02:39');
+INSERT INTO project_audit_log VALUES(26,'ETE-68','milestone_updated','System',NULL,NULL,NULL,'smoke-test milestone (renamed)','2026-04-05 14:02:39');
+INSERT INTO project_audit_log VALUES(27,'ETE-68','milestone_completed','WebUI',NULL,NULL,NULL,'smoke-test milestone (renamed)','2026-04-05 14:02:39');
+INSERT INTO project_audit_log VALUES(28,'ETE-68','milestone_deleted','WebUI',NULL,NULL,NULL,'smoke-test milestone (renamed)','2026-04-05 14:02:39');
+INSERT INTO project_audit_log VALUES(29,'ETE-19','milestone_added','System',NULL,NULL,NULL,'E2E smoke milestone','2026-04-05 14:08:52');
+INSERT INTO project_audit_log VALUES(30,'ETE-19','milestone_completed','WebUI',NULL,NULL,NULL,'E2E smoke milestone','2026-04-05 14:09:17');
+INSERT INTO project_audit_log VALUES(31,'ETE-19','milestone_deleted','WebUI',NULL,NULL,NULL,'E2E smoke milestone','2026-04-05 14:09:26');
 CREATE TABLE project_milestones (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id      TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -1168,15 +1176,15 @@ CREATE TABLE task_dependencies (
     depends_on_id   INTEGER NOT NULL REFERENCES project_tasks(id) ON DELETE CASCADE,
     dependency_type TEXT NOT NULL DEFAULT 'finish_to_start'
 );
-INSERT INTO sqlite_sequence VALUES('project_assignments',129);
-INSERT INTO sqlite_sequence VALUES('vendor_consultants',9);
-INSERT INTO sqlite_sequence VALUES('vendor_timesheets',274);
+INSERT INTO sqlite_sequence VALUES('project_assignments',131);
+INSERT INTO sqlite_sequence VALUES('vendor_consultants',10);
+INSERT INTO sqlite_sequence VALUES('vendor_timesheets',275);
 INSERT INTO sqlite_sequence VALUES('approved_work',31);
-INSERT INTO sqlite_sequence VALUES('vendor_invoices',1);
+INSERT INTO sqlite_sequence VALUES('vendor_invoices',2);
 INSERT INTO sqlite_sequence VALUES('project_mapping',25);
-INSERT INTO sqlite_sequence VALUES('project_comments',1);
-INSERT INTO sqlite_sequence VALUES('project_audit_log',22);
-INSERT INTO sqlite_sequence VALUES('project_milestones',24);
+INSERT INTO sqlite_sequence VALUES('project_comments',3);
+INSERT INTO sqlite_sequence VALUES('project_audit_log',31);
+INSERT INTO sqlite_sequence VALUES('project_milestones',26);
 INSERT INTO sqlite_sequence VALUES('project_tasks',17);
 CREATE INDEX idx_vt_consultant ON vendor_timesheets(consultant_id);
 CREATE INDEX idx_vt_date ON vendor_timesheets(entry_date);
