@@ -164,7 +164,9 @@ def render(data: dict, utilization: dict, person_demand: list):
             }[sort_by],
             date_range=date_range,
         )
-        st.markdown(gantt_html, unsafe_allow_html=True)
+        # Use st.html (not st.markdown) — raw HTML rendering, no markdown
+        # parsing that would mangle our CSS/grid layout.
+        st.html(gantt_html)
     else:
         st.info("No projects match the current filters.")
 

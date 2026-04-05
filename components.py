@@ -829,187 +829,50 @@ def render_gantt_html(
     )
 
     # --- CSS (scoped via unique class) ---
+    # CRITICAL: no leading whitespace on lines — st.markdown treats 4+ space
+    # indented blocks as code. Use st.html() to render to be safe.
     ROW_H = 38
     HEADER_H = 56
     INFO_COL_W = 320  # px fixed left info panel
 
-    css = f"""
-    <style>
-    .gantt-wrap {{
-      font-family: 'Inter', -apple-system, sans-serif;
-      border-radius: 10px;
-      background: #FFFFFF;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-      overflow: hidden;
-      border: 1px solid #E8ECF1;
-    }}
-    .gantt-toolbar {{
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 10px 16px;
-      background: #F8FAFC;
-      border-bottom: 1px solid #E8ECF1;
-    }}
-    .gantt-legend {{ font-size: 11px; }}
-    .gantt-grid {{
-      display: grid;
-      grid-template-columns: {INFO_COL_W}px 1fr;
-    }}
-    /* Header row */
-    .gantt-info-head {{
-      display: grid; grid-template-columns: 58px 1fr 42px;
-      align-items: center; gap: 8px;
-      padding: 0 12px;
-      height: {HEADER_H}px;
-      background: #F8FAFC;
-      border-bottom: 2px solid #C5CDD8;
-      font-size: 10px; font-weight: 700; color: #6C757D;
-      text-transform: uppercase; letter-spacing: 0.06em;
-    }}
-    .gantt-info-head > div:last-child {{ text-align: right; }}
-    .gantt-month-head {{
-      position: relative;
-      height: {HEADER_H}px;
-      background: #F8FAFC;
-      border-bottom: 2px solid #C5CDD8;
-      border-left: 1px solid #E8ECF1;
-    }}
-    .gantt-month {{
-      position: absolute;
-      top: 0; bottom: 0;
-      border-right: 1px solid #E8ECF1;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 600; color: #4A5A6E;
-    }}
-    .gantt-month-year {{
-      font-size: 9px; font-weight: 500; color: #94A3B8;
-      text-transform: uppercase; letter-spacing: 0.05em;
-    }}
-    .gantt-month.q-start {{ border-left: 2px solid #C5CDD8; }}
-    /* Body */
-    .gantt-info-body, .gantt-timeline-body {{
-      position: relative;
-    }}
-    .gantt-timeline-body {{
-      border-left: 1px solid #E8ECF1;
-    }}
-    .gantt-row-info {{
-      display: grid; grid-template-columns: 58px 1fr 42px;
-      align-items: center; gap: 8px;
-      padding: 0 12px;
-      height: {ROW_H}px;
-      border-bottom: 1px solid #F1F4F8;
-      text-decoration: none; color: #1B3A5C;
-      font-size: 12px;
-      transition: background 0.12s;
-    }}
-    .gantt-row-info:hover {{ background: #EEF2F7; }}
-    .gantt-row-info:nth-child(odd) {{ background: #FAFBFD; }}
-    .gantt-row-info:nth-child(odd):hover {{ background: #EEF2F7; }}
-    .gantt-row-id {{ font-weight: 700; color: #1565C0; font-size: 11px; }}
-    .gantt-row-name {{
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      font-weight: 500;
-    }}
-    .gantt-row-pct {{
-      text-align: right; font-weight: 600; color: #4A5A6E;
-      font-size: 11px; font-variant-numeric: tabular-nums;
-    }}
-    .gantt-row-timeline {{
-      position: relative;
-      height: {ROW_H}px;
-      border-bottom: 1px solid #F1F4F8;
-    }}
-    .gantt-row-timeline:nth-child(odd) {{ background: #FAFBFD; }}
-    .gantt-group-info, .gantt-group-timeline {{
-      height: {ROW_H}px;
-      background: #EEF2F7;
-      border-bottom: 1px solid #C5CDD8;
-      border-top: 1px solid #C5CDD8;
-      display: flex; align-items: center;
-      padding: 0 12px;
-      font-size: 11px; font-weight: 700; color: #1B3A5C;
-      text-transform: uppercase; letter-spacing: 0.05em;
-    }}
-    /* Bar */
-    .gantt-bar {{
-      position: absolute;
-      top: 50%; transform: translateY(-50%);
-      height: 22px;
-      border-radius: 5px;
-      opacity: 0.35;
-      cursor: pointer;
-      transition: opacity 0.15s, transform 0.15s;
-    }}
-    .gantt-bar:hover {{ opacity: 0.6; }}
-    .gantt-progress {{
-      position: absolute;
-      top: 50%; transform: translateY(-50%);
-      height: 22px;
-      border-radius: 5px;
-      cursor: pointer;
-      transition: filter 0.15s;
-    }}
-    .gantt-progress:hover {{ filter: brightness(1.1); }}
-    .gantt-bar-overdue {{
-      position: absolute;
-      top: 50%; transform: translateY(-50%);
-      height: 22px;
-      border: 2px solid #DC3545;
-      border-radius: 5px;
-      pointer-events: none;
-      box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15);
-    }}
-    .gantt-diamond {{
-      position: absolute;
-      top: 50%;
-      width: 9px; height: 9px;
-      background: #1B3A5C;
-      transform: translate(-50%, -50%) rotate(45deg);
-      pointer-events: none;
-    }}
-    .gantt-pct-label {{
-      position: absolute;
-      top: 50%; transform: translateY(-50%);
-      font-size: 10px; font-weight: 700;
-      color: #1B3A5C;
-      padding-left: 6px;
-      pointer-events: none;
-      white-space: nowrap;
-    }}
-    /* Today line */
-    .gantt-today-line {{
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 0;
-      border-left: 2px dashed #DC3545;
-      pointer-events: none;
-      z-index: 5;
-    }}
-    .gantt-today-label {{
-      position: absolute;
-      top: 4px;
-      transform: translateX(-50%);
-      background: #DC3545;
-      color: white;
-      font-size: 9px; font-weight: 700;
-      padding: 1px 6px;
-      border-radius: 3px;
-      letter-spacing: 0.05em;
-      pointer-events: none;
-      z-index: 6;
-    }}
-    /* Vertical grid lines for months */
-    .gantt-grid-line {{
-      position: absolute;
-      top: 0; bottom: 0;
-      width: 1px;
-      background: #F1F4F8;
-      pointer-events: none;
-    }}
-    .gantt-grid-line.q-line {{ background: #E0E6ED; }}
-    </style>
-    """
+    import textwrap as _tw
+    css = _tw.dedent(f"""\
+<style>
+.gantt-wrap {{ font-family:'Inter',-apple-system,sans-serif; border-radius:10px; background:#FFFFFF; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden; border:1px solid #E8ECF1; }}
+.gantt-toolbar {{ display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:#F8FAFC; border-bottom:1px solid #E8ECF1; }}
+.gantt-legend {{ font-size:11px; }}
+.gantt-grid {{ display:grid; grid-template-columns:{INFO_COL_W}px 1fr; }}
+.gantt-info-head {{ display:grid; grid-template-columns:58px 1fr 42px; align-items:center; gap:8px; padding:0 12px; height:{HEADER_H}px; background:#F8FAFC; border-bottom:2px solid #C5CDD8; font-size:10px; font-weight:700; color:#6C757D; text-transform:uppercase; letter-spacing:0.06em; }}
+.gantt-info-head > div:last-child {{ text-align:right; }}
+.gantt-month-head {{ position:relative; height:{HEADER_H}px; background:#F8FAFC; border-bottom:2px solid #C5CDD8; border-left:1px solid #E8ECF1; }}
+.gantt-month {{ position:absolute; top:0; bottom:0; border-right:1px solid #E8ECF1; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:#4A5A6E; }}
+.gantt-month-year {{ font-size:9px; font-weight:500; color:#94A3B8; text-transform:uppercase; letter-spacing:0.05em; }}
+.gantt-month.q-start {{ border-left:2px solid #C5CDD8; }}
+.gantt-info-body, .gantt-timeline-body {{ position:relative; }}
+.gantt-timeline-body {{ border-left:1px solid #E8ECF1; }}
+.gantt-row-info {{ display:grid; grid-template-columns:58px 1fr 42px; align-items:center; gap:8px; padding:0 12px; height:{ROW_H}px; border-bottom:1px solid #F1F4F8; text-decoration:none; color:#1B3A5C; font-size:12px; transition:background 0.12s; }}
+.gantt-row-info:hover {{ background:#EEF2F7; }}
+.gantt-row-info:nth-child(odd) {{ background:#FAFBFD; }}
+.gantt-row-info:nth-child(odd):hover {{ background:#EEF2F7; }}
+.gantt-row-id {{ font-weight:700; color:#1565C0; font-size:11px; }}
+.gantt-row-name {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }}
+.gantt-row-pct {{ text-align:right; font-weight:600; color:#4A5A6E; font-size:11px; font-variant-numeric:tabular-nums; }}
+.gantt-row-timeline {{ position:relative; height:{ROW_H}px; border-bottom:1px solid #F1F4F8; }}
+.gantt-row-timeline:nth-child(odd) {{ background:#FAFBFD; }}
+.gantt-group-info, .gantt-group-timeline {{ height:{ROW_H}px; background:#EEF2F7; border-bottom:1px solid #C5CDD8; border-top:1px solid #C5CDD8; display:flex; align-items:center; padding:0 12px; font-size:11px; font-weight:700; color:#1B3A5C; text-transform:uppercase; letter-spacing:0.05em; }}
+.gantt-bar {{ position:absolute; top:50%; transform:translateY(-50%); height:22px; border-radius:5px; opacity:0.35; cursor:pointer; transition:opacity 0.15s, transform 0.15s; }}
+.gantt-bar:hover {{ opacity:0.6; }}
+.gantt-progress {{ position:absolute; top:50%; transform:translateY(-50%); height:22px; border-radius:5px; cursor:pointer; transition:filter 0.15s; }}
+.gantt-progress:hover {{ filter:brightness(1.1); }}
+.gantt-bar-overdue {{ position:absolute; top:50%; transform:translateY(-50%); height:22px; border:2px solid #DC3545; border-radius:5px; pointer-events:none; box-shadow:0 0 0 2px rgba(220,53,69,0.15); }}
+.gantt-diamond {{ position:absolute; top:50%; width:9px; height:9px; background:#1B3A5C; transform:translate(-50%,-50%) rotate(45deg); pointer-events:none; }}
+.gantt-pct-label {{ position:absolute; top:50%; transform:translateY(-50%); font-size:10px; font-weight:700; color:#1B3A5C; padding-left:6px; pointer-events:none; white-space:nowrap; }}
+.gantt-today-line {{ position:absolute; top:0; bottom:0; width:0; border-left:2px dashed #DC3545; pointer-events:none; z-index:5; }}
+.gantt-today-label {{ position:absolute; top:4px; transform:translateX(-50%); background:#DC3545; color:white; font-size:9px; font-weight:700; padding:1px 6px; border-radius:3px; letter-spacing:0.05em; pointer-events:none; z-index:6; }}
+.gantt-grid-line {{ position:absolute; top:0; bottom:0; width:1px; background:#F1F4F8; pointer-events:none; }}
+.gantt-grid-line.q-line {{ background:#E0E6ED; }}
+</style>
+""")
 
     # --- Build toolbar (legend) ---
     toolbar = f'<div class="gantt-toolbar"><div class="gantt-legend">{legend_html}</div></div>'
@@ -1052,13 +915,16 @@ def render_gantt_html(
 
         # Info row
         pct_label = f"{int(round(r['pct'] * 100))}%"
-        tooltip = (
-            f'{html_mod.escape(r["id"])}: {html_mod.escape(r["name"])}\n'
-            f'PM: {html_mod.escape(r["pm"])}\n'
-            f'Priority: {html_mod.escape(r["priority"])} | '
-            f'Health: {html_mod.escape(r["health"])}\n'
-            f'{r["start"].strftime("%b %d, %Y")} → {r["end"].strftime("%b %d, %Y")}\n'
-            f'{pct_label} complete'
+        # Tooltip via title attr — quotes escaped, no newlines (they break
+        # attribute parsing in some renderers). Use · separators.
+        tooltip = html_mod.escape(
+            f'{r["id"]}: {r["name"]}  ·  '
+            f'PM: {r["pm"]}  ·  '
+            f'{r["priority"]} priority  ·  '
+            f'Health: {r["health"]}  ·  '
+            f'{r["start"].strftime("%b %d, %Y")} → {r["end"].strftime("%b %d, %Y")}  ·  '
+            f'{pct_label} complete',
+            quote=True,
         )
         info_rows_html.append(
             f'<a class="gantt-row-info" href="?project={r["id"]}" target="_self" '
