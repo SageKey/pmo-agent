@@ -41,8 +41,17 @@ def render(data: dict, utilization: dict, person_demand: list):
                     "Priority": p.priority or "",
                     "Est Hours": p.est_hours,
                     "PM": p.pm or "",
+                    "Open": f"?project={p.id}",
                 })
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            st.dataframe(
+                pd.DataFrame(rows),
+                column_config={
+                    "Open": st.column_config.LinkColumn(
+                        "Open", display_text="View →", width="small"),
+                },
+                hide_index=True,
+                use_container_width=True,
+            )
 
     # --- Capacity Heatmap ---
     section_header("Weekly Capacity Heatmap (26 Weeks)")

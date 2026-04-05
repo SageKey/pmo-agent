@@ -468,9 +468,14 @@ def _render_team(availability: list):
                         "Role": p["role"],
                         "Weekly Hours": p["weekly_hours"],
                         "End Date": p["end_date"] or "—",
+                        "Open": f"?project={p['project_id']}",
                     })
                 st.dataframe(
                     pd.DataFrame(proj_rows),
+                    column_config={
+                        "Open": st.column_config.LinkColumn(
+                            "Open", display_text="View →", width="small"),
+                    },
                     hide_index=True,
                     use_container_width=True,
                 )

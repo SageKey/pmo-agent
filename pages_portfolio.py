@@ -216,6 +216,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             index=default_index,
             label_visibility="collapsed",
             placeholder="Search or select a project...",
+            key="portfolio_project_selectbox",
         )
     with btn_col:
         if selected_label is not None:
@@ -246,5 +247,16 @@ def render(data: dict, utilization: dict, person_demand: list):
     if not project:
         st.error("Project not found.")
         return
+
+    # Back button — clears selection and returns to portfolio tables
+    back_col, _ = st.columns([1, 5])
+    with back_col:
+        if st.button("← Back to Portfolio", use_container_width=True, key="portfolio_back_btn"):
+            st.session_state["selected_project_id"] = None
+            st.session_state["edit_mode"] = False
+            st.session_state["new_project"] = False
+            st.session_state.pop("portfolio_project_selectbox", None)
+            st.query_params.clear()
+            st.rerun()
 
     render_project_detail(project, data, utilization, person_demand)
