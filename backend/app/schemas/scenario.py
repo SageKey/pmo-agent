@@ -156,6 +156,11 @@ class SchedulePortfolioRequest(BaseModel):
     Wraps CapacityEngine.simulate_portfolio_schedule. All fields optional;
     defaults use the admin utilization threshold from app_settings if set,
     otherwise 0.85.
+
+    When `modifications` is non-empty, the scheduler runs against the
+    modified data instead of the baseline — so adding a project or
+    excluding a person in the What-If tab flows through to the
+    scheduling output.
     """
     max_util_pct: Optional[float] = Field(
         None,
@@ -172,6 +177,10 @@ class SchedulePortfolioRequest(BaseModel):
     exclude_ids: List[str] = Field(
         default_factory=list,
         description="Project IDs to skip in the schedule (e.g. already committed out-of-band).",
+    )
+    modifications: List[Modification] = Field(
+        default_factory=list,
+        description="Scenario modifications to apply before running the scheduler. Same types as /scenarios/evaluate.",
     )
 
 

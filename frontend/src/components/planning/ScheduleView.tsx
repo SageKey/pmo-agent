@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { useSchedulePortfolio } from "@/hooks/useScenario";
+import type { ScenarioModification } from "@/types/scenario";
 
 const ROLE_LABEL: Record<string, string> = {
   pm: "PM",
@@ -31,14 +32,19 @@ const PRIORITY_BG: Record<string, string> = {
   Low: "bg-slate-50 text-slate-500",
 };
 
-export function ScheduleView() {
+export function ScheduleView({
+  modifications = [],
+}: {
+  modifications?: ScenarioModification[];
+}) {
   const schedule = useSchedulePortfolio();
+  const hasMods = modifications.length > 0;
 
-  // Auto-run on mount
+  // Auto-run on mount AND whenever modifications change
   useEffect(() => {
-    schedule.mutate({});
+    schedule.mutate(hasMods ? { modifications } : {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [JSON.stringify(modifications)]);
 
   const result = schedule.data;
   const loading = schedule.isPending;
@@ -48,19 +54,24 @@ export function ScheduleView() {
       {/* Run button */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-800">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
             Capacity-based project scheduling
+            {hasMods && (
+              <span className="rounded-full bg-navy-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-navy-700">
+                {modifications.length} what-if mod{modifications.length !== 1 ? "s" : ""} applied
+              </span>
+            )}
           </div>
           <p className="mt-0.5 text-xs text-slate-500">
-            The engine scans forward through time, placing each plannable
-            project at the earliest week where all required roles stay under
-            the utilization ceiling. Higher-priority projects get first pick.
+            {hasMods
+              ? "Scheduling against your modified scenario — add or change modifications on the What-If tab."
+              : "The engine scans forward through time, placing each plannable project at the earliest week where all required roles stay under the utilization ceiling."}
           </p>
         </div>
         <Button
           variant="default"
           size="sm"
-          onClick={() => schedule.mutate({})}
+          onClick={() => schedule.mutate(hasMods ? { modifications } : {})}
           disabled={loading}
         >
           {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}

@@ -92,6 +92,7 @@ export interface SchedulePortfolioRequest {
   max_util_pct?: number;
   horizon_weeks?: number;
   exclude_ids?: string[];
+  modifications?: ScenarioModification[];
 }
 
 export interface ScheduledProject {

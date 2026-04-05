@@ -1183,6 +1183,27 @@ class CapacityEngine:
 
         return grid
 
+    def simulate_portfolio_schedule_with_scenario(
+        self,
+        modifications: list,
+        **kwargs,
+    ) -> list:
+        """Apply scenario modifications, then run simulate_portfolio_schedule.
+
+        Same deep-copy + swap pattern as compute_with_scenario but runs the
+        greedy scheduler instead of utilization. Returns the scheduler's
+        result list (same shape as simulate_portfolio_schedule).
+        """
+        import copy
+        self._load()
+        orig = self._data
+        try:
+            self._data = copy.deepcopy(orig)
+            _apply_scenario_modifications(self._data, modifications)
+            return self.simulate_portfolio_schedule(**kwargs)
+        finally:
+            self._data = orig
+
     def simulate_portfolio_schedule(
         self,
         max_util_pct: float = 0.85,

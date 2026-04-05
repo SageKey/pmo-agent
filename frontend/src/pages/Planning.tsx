@@ -44,6 +44,7 @@ export function Planning() {
             onClick={() => setTab("schedule")}
             icon={<CalendarClock className="h-4 w-4" />}
             label="Auto-Schedule"
+            badge={hasMods ? modifications.length : undefined}
           />
           <TabButton
             active={tab === "scenario"}
@@ -54,7 +55,7 @@ export function Planning() {
         </div>
 
         {/* Tab content */}
-        {tab === "schedule" && <ScheduleView />}
+        {tab === "schedule" && <ScheduleView modifications={modifications} />}
 
         {tab === "scenario" && (
           <>
@@ -118,11 +119,13 @@ function TabButton({
   onClick,
   icon,
   label,
+  badge,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
+  badge?: number;
 }) {
   return (
     <button
@@ -137,6 +140,11 @@ function TabButton({
     >
       {icon}
       {label}
+      {badge != null && badge > 0 && (
+        <span className="rounded-full bg-navy-700 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+          {badge}
+        </span>
+      )}
       {active && (
         <motion.div
           layoutId="planning-tab-indicator"

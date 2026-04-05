@@ -205,11 +205,23 @@ def schedule_portfolio(
         except Exception:
             max_util = 0.85
 
-    results = engine.simulate_portfolio_schedule(
+    schedule_kwargs = dict(
         max_util_pct=max_util,
         horizon_weeks=payload.horizon_weeks,
         exclude_ids=payload.exclude_ids,
     )
+
+    if payload.modifications:
+        mods_as_dicts = [m.model_dump() for m in payload.modifications]
+        try:
+            results = engine.simulate_portfolio_schedule_with_scenario(
+                modifications=mods_as_dicts,
+                **schedule_kwargs,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    else:
+        results = engine.simulate_portfolio_schedule(**schedule_kwargs)
 
     projects = [ScheduledProject(**r) for r in results]
 
