@@ -42,14 +42,15 @@ export function ChangesCard({ delay = 0 }: { delay?: number }) {
   };
 
   const c = changes.data;
+  const len = (arr: unknown): number => (Array.isArray(arr) ? arr.length : 0);
   const totalChanges = c
-    ? c.new_projects.length +
-      c.removed_projects.length +
-      c.status_changes.length +
-      c.progress_changes.length +
-      c.date_changes.length +
-      c.priority_changes.length +
-      c.hours_changes.length
+    ? len(c.new_projects) +
+      len(c.removed_projects) +
+      len(c.status_changes) +
+      len(c.progress_changes) +
+      len(c.date_changes) +
+      len(c.priority_changes) +
+      len(c.hours_changes)
     : 0;
 
   return (
@@ -122,13 +123,13 @@ export function ChangesCard({ delay = 0 }: { delay?: number }) {
                 change{totalChanges === 1 ? "" : "s"} across{" "}
                 {
                   [
-                    c.new_projects.length && "new",
-                    c.removed_projects.length && "removed",
-                    c.status_changes.length && "status",
-                    c.progress_changes.length && "progress",
-                    c.date_changes.length && "dates",
-                    c.priority_changes.length && "priority",
-                    c.hours_changes.length && "hours",
+                    len(c.new_projects) && "new",
+                    len(c.removed_projects) && "removed",
+                    len(c.status_changes) && "status",
+                    len(c.progress_changes) && "progress",
+                    len(c.date_changes) && "dates",
+                    len(c.priority_changes) && "priority",
+                    len(c.hours_changes) && "hours",
                   ]
                     .filter(Boolean)
                     .join(" · ")
@@ -137,14 +138,14 @@ export function ChangesCard({ delay = 0 }: { delay?: number }) {
 
               <Section
                 title="New projects"
-                items={c.new_projects}
+                items={c.new_projects ?? []}
                 tone="emerald"
                 icon={<Plus className="h-3 w-3" />}
                 renderLabel={(e) => `${e.project_id} · ${e.project_name}`}
               />
               <Section
                 title="Status changes"
-                items={c.status_changes}
+                items={c.status_changes ?? []}
                 tone="amber"
                 renderLabel={(e) =>
                   `${e.project_id} · ${e.old_value ?? "—"} → ${e.new_value ?? "—"}`
@@ -152,7 +153,7 @@ export function ChangesCard({ delay = 0 }: { delay?: number }) {
               />
               <Section
                 title="Progress updates"
-                items={c.progress_changes}
+                items={c.progress_changes ?? []}
                 tone="sky"
                 renderLabel={(e) =>
                   `${e.project_id} · ${Math.round((e.old_value as number ?? 0) * 100)}% → ${Math.round((e.new_value as number ?? 0) * 100)}%`
@@ -160,7 +161,7 @@ export function ChangesCard({ delay = 0 }: { delay?: number }) {
               />
               <Section
                 title="Priority changes"
-                items={c.priority_changes}
+                items={c.priority_changes ?? []}
                 tone="violet"
                 renderLabel={(e) =>
                   `${e.project_id} · ${e.old_value ?? "—"} → ${e.new_value ?? "—"}`
@@ -168,7 +169,7 @@ export function ChangesCard({ delay = 0 }: { delay?: number }) {
               />
               <Section
                 title="Date changes"
-                items={c.date_changes}
+                items={c.date_changes ?? []}
                 tone="slate"
                 renderLabel={(e) =>
                   `${e.project_id} · ${e.field ?? "date"}: ${e.old_value ?? "—"} → ${e.new_value ?? "—"}`
