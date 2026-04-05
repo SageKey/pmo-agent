@@ -649,34 +649,41 @@ def supply_demand_chart(utilization: dict) -> alt.Chart:
     return chart.configure_view(strokeWidth=0)
 
 
-GANTT_ROW_STEP = 42      # px per row in the chart (and HTML info panel)
-GANTT_TOP_PAD = 72       # px reserved above first row for legend + top month axis
-GANTT_BOTTOM_PAD = 16    # px reserved below last row (axis is on top)
-
-
-def gantt_chart(
+def render_gantt_html(
     projects: list,
     color_by: str = "priority",
     group_by: str = "none",
     sort_by: str = "start",
     date_range: tuple = None,
-) -> dict:
-    """World-class Gantt chart with today line, progress overlay, milestones,
-    grouping, and clickable bars. Returns a dict with the Altair chart plus
-    ordered row metadata so the caller can render a matching info panel.
+) -> str:
+    """Pure HTML/CSS Gantt chart — world-class layout with perfect row
+    alignment, month header, today line, progress overlay, milestone diamonds,
+    clickable rows, and responsive width.
 
-    Returns:
-        {
-            "chart": alt.LayerChart,          # gantt without y-axis labels
-            "rows": list[dict],               # ordered row metadata
-            "row_step": int,                  # px per row
-            "top_pad": int, "bottom_pad": int,
-            "total_height": int,
-        }
+    Returns a complete HTML string to be rendered via st.markdown(
+        unsafe_allow_html=True).
     """
+    import html as html_mod
     from datetime import date, timedelta
 
+    if not projects:
+        return '<div style="padding:2rem; color:#6C757D;">No projects to display.</div>'
+
     priority_weight = {"Highest": 0, "High": 1, "Medium": 2, "Low": 3}
+    priority_color = {
+        "Highest": "#DC3545", "High": "#E67E22",
+        "Medium": "#4A90D9", "Low": "#94A3B8",
+        "Unknown": "#CBD5E1",
+    }
+    health_color = {
+        "Green": "#28A745", "Yellow": "#FFC107",
+        "Red": "#DC3545", "Unknown": "#94A3B8",
+    }
+    # Deterministic palette for portfolios
+    portfolio_palette = [
+        "#4A90D9", "#E67E22", "#28A745", "#8E44AD", "#16A085",
+        "#D35400", "#2980B9", "#C0392B", "#27AE60", "#7F8C8D",
+    ]
 
     def _group_value(p):
         if group_by == "portfolio":
@@ -690,331 +697,469 @@ def gantt_chart(
         return ""
 
     today = date.today()
+
+    # --- Build row records ---
     rows = []
     for p in projects:
         if not p.start_date or not p.end_date:
             continue
-        pct = p.pct_complete or 0.0
-        duration = (p.end_date - p.start_date).days or 1
-        progress_days = int(duration * max(0.0, min(1.0, pct)))
-        progress_end = p.start_date + timedelta(days=progress_days)
-        overdue = (p.end_date < today and pct < 1.0)
-        group = _group_value(p)
-        label = f"{p.id}: {p.name}"
+        pct = max(0.0, min(1.0, p.pct_complete or 0.0))
+        priority = p.priority or "Unknown"
+        health = (p.health or "Unknown").title()
+        portfolio = getattr(p, "portfolio", None) or "Unassigned"
         rows.append({
-            "ID": p.id,
-            "Project": label,
-            "Group": group,
-            "Start": pd.to_datetime(p.start_date),
-            "End": pd.to_datetime(p.end_date),
-            "ProgressEnd": pd.to_datetime(progress_end),
-            "Priority": p.priority or "Unknown",
-            "Health": (p.health or "Unknown").title(),
-            "Portfolio": getattr(p, "portfolio", None) or "Unassigned",
-            "PM": p.pm or "—",
-            "PctComplete": pct,
-            "PctLabel": f"{pct:.0%}",
-            "Overdue": overdue,
-            "URL": f"?project={p.id}",
-            "_priority_rank": priority_weight.get(p.priority, 4),
+            "id": p.id,
+            "name": p.name,
+            "group": _group_value(p),
+            "start": p.start_date,
+            "end": p.end_date,
+            "pct": pct,
+            "priority": priority,
+            "health": health,
+            "portfolio": portfolio,
+            "pm": p.pm or "—",
+            "overdue": (p.end_date < today and pct < 1.0),
+            "_priority_rank": priority_weight.get(priority, 4),
         })
 
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return None
+    if not rows:
+        return '<div style="padding:2rem; color:#6C757D;">No scheduled projects.</div>'
 
-    # Sort: group first (if any), then by chosen sort
-    sort_cols = []
+    # --- Sort ---
+    sort_keys = []
     if group_by != "none":
-        sort_cols.append("Group")
+        sort_keys.append(lambda r: r["group"])
     if sort_by == "start":
-        sort_cols.append("Start")
+        sort_keys.append(lambda r: r["start"])
     elif sort_by == "end":
-        sort_cols.append("End")
+        sort_keys.append(lambda r: r["end"])
     elif sort_by == "priority":
-        sort_cols += ["_priority_rank", "Start"]
+        sort_keys += [lambda r: r["_priority_rank"], lambda r: r["start"]]
     elif sort_by == "name":
-        sort_cols.append("Project")
-    df = df.sort_values(sort_cols).reset_index(drop=True)
+        sort_keys.append(lambda r: r["name"])
 
-    # Build ordered y-axis labels (prepend group when grouping)
-    if group_by != "none":
-        df["RowLabel"] = df["Group"] + "  •  " + df["Project"]
-    else:
-        df["RowLabel"] = df["Project"]
-    row_order = list(df["RowLabel"])
+    from functools import cmp_to_key
 
-    # Color encoding
-    if color_by == "priority":
-        color_enc = alt.Color(
-            "Priority:N",
-            scale=alt.Scale(
-                domain=["Highest", "High", "Medium", "Low", "Unknown"],
-                range=[RED, "#E67E22", BLUE, GRAY, LIGHT_GRAY]),
-            legend=alt.Legend(title=None, orient="top", labelFontSize=11))
-    elif color_by == "health":
-        color_enc = alt.Color(
-            "Health:N",
-            scale=alt.Scale(
-                domain=["Green", "Yellow", "Red", "Unknown"],
-                range=[GREEN, YELLOW, RED, GRAY]),
-            legend=alt.Legend(title=None, orient="top", labelFontSize=11))
-    else:  # portfolio
-        color_enc = alt.Color(
-            "Portfolio:N",
-            legend=alt.Legend(title=None, orient="top", labelFontSize=11))
+    def _cmp(a, b):
+        for k in sort_keys:
+            av, bv = k(a), k(b)
+            if av < bv:
+                return -1
+            if av > bv:
+                return 1
+        return 0
+    rows.sort(key=cmp_to_key(_cmp))
 
-    # Shared tooltip
-    tooltip = [
-        alt.Tooltip("Project:N", title="Project"),
-        alt.Tooltip("Portfolio:N", title="Portfolio"),
-        alt.Tooltip("Priority:N"),
-        alt.Tooltip("Health:N"),
-        alt.Tooltip("PM:N", title="PM"),
-        alt.Tooltip("Start:T", title="Start", format="%b %d, %Y"),
-        alt.Tooltip("End:T", title="End", format="%b %d, %Y"),
-        alt.Tooltip("PctLabel:N", title="% Complete"),
-    ]
-
-    # X-axis domain (time range filter)
+    # --- Determine date range ---
     if date_range:
-        x_scale = alt.Scale(domain=[
-            pd.to_datetime(date_range[0]).isoformat(),
-            pd.to_datetime(date_range[1]).isoformat(),
-        ])
+        range_start = date_range[0]
+        range_end = date_range[1]
     else:
-        x_scale = alt.Undefined
+        range_start = min(r["start"] for r in rows) - timedelta(days=7)
+        range_end = max(r["end"] for r in rows) + timedelta(days=7)
+    # Clamp range_start to start-of-month for clean month header
+    range_start = date(range_start.year, range_start.month, 1)
+    # Extend range_end to end-of-month
+    next_m = (date(range_end.year, range_end.month, 1)
+              + timedelta(days=32)).replace(day=1)
+    range_end = next_m - timedelta(days=1)
+    total_days = max(1, (range_end - range_start).days + 1)
 
-    # Chart sizing locked to GANTT_ROW_STEP so HTML info panel aligns exactly
-    n = len(df)
-    bar_height = int(GANTT_ROW_STEP * 0.6)  # ~25 px
-    total_height = GANTT_TOP_PAD + (n * GANTT_ROW_STEP) + GANTT_BOTTOM_PAD
+    def pct(d):
+        """Convert a date to a percentage of the range width."""
+        if d < range_start:
+            return 0.0
+        if d > range_end:
+            return 100.0
+        return ((d - range_start).days / total_days) * 100.0
 
-    # Y-axis: labels HIDDEN — task info rendered by caller in left panel
-    y_enc = alt.Y(
-        "RowLabel:N",
-        sort=row_order,
-        title=None,
-        scale=alt.Scale(paddingInner=0.25, paddingOuter=0.1),
-        axis=alt.Axis(labels=False, ticks=False, domain=False,
-                      grid=True, gridOpacity=0.25),
-    )
-
-    # X-axis — single clean bottom axis. All layers share the same x/x2 with
-    # explicit title=None so no concatenated "StartProgressEnd" title artifact.
-    def _x(field="Start:T", orient="top", grid=True):
-        return alt.X(
-            field,
-            title=None,
-            scale=x_scale,
-            axis=alt.Axis(
-                labelFontSize=11, format="%b %Y",
-                tickCount="month", grid=grid, gridOpacity=0.35,
-                domain=False, labelPadding=6, orient=orient,
-                labelColor="#4A5A6E",
-            ),
-        )
-    x_enc = _x()
-
-    layers = []
-
-    # Background bar — full duration, muted
-    bars_bg = alt.Chart(df).mark_bar(
-        cornerRadius=5, height=bar_height, opacity=0.32, clip=True,
-    ).encode(
-        y=y_enc, x=x_enc,
-        x2=alt.X2("End:T", title=""),
-        color=color_enc,
-        href=alt.Href("URL:N"),
-        tooltip=tooltip,
-    )
-    layers.append(bars_bg)
-
-    # Progress overlay — start → progress_end, full opacity
-    progress_df = df[df["PctComplete"] > 0]
-    if not progress_df.empty:
-        bars_progress = alt.Chart(progress_df).mark_bar(
-            cornerRadius=5, height=bar_height, clip=True,
-        ).encode(
-            y=alt.Y("RowLabel:N", sort=row_order, title=None,
-                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
-            x=alt.X("Start:T", title=None, scale=x_scale,
-                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
-            x2=alt.X2("ProgressEnd:T", title=""),
-            color=color_enc,
-            href=alt.Href("URL:N"),
-            tooltip=tooltip,
-        )
-        layers.append(bars_progress)
-
-    # Overdue outline — red stroke on bars past end date & not complete
-    overdue_df = df[df["Overdue"]]
-    if not overdue_df.empty:
-        overdue_outline = alt.Chart(overdue_df).mark_bar(
-            cornerRadius=5, height=bar_height, clip=True,
-            fillOpacity=0, stroke=RED, strokeWidth=2.5,
-        ).encode(
-            y=alt.Y("RowLabel:N", sort=row_order, title=None,
-                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
-            x=alt.X("Start:T", title=None, scale=x_scale,
-                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
-            x2=alt.X2("End:T", title=""),
-            tooltip=tooltip,
-            href=alt.Href("URL:N"),
-        )
-        layers.append(overdue_outline)
-
-    # Start & end milestone diamonds
-    start_points = alt.Chart(df).mark_point(
-        shape="diamond", size=85, filled=True, color=NAVY,
-        opacity=0.9, clip=True,
-    ).encode(
-        y=alt.Y("RowLabel:N", sort=row_order, title=None,
-                axis=alt.Axis(labels=False, ticks=False, domain=False)),
-        x=alt.X("Start:T", title=None, scale=x_scale,
-                axis=alt.Axis(labels=False, ticks=False, domain=False)),
-        tooltip=tooltip,
-    )
-    end_points = alt.Chart(df).mark_point(
-        shape="diamond", size=85, filled=True, color=NAVY,
-        opacity=0.9, clip=True,
-    ).encode(
-        y=alt.Y("RowLabel:N", sort=row_order, title=None,
-                axis=alt.Axis(labels=False, ticks=False, domain=False)),
-        x=alt.X("End:T", title=None, scale=x_scale,
-                axis=alt.Axis(labels=False, ticks=False, domain=False)),
-        tooltip=tooltip,
-    )
-    layers += [start_points, end_points]
-
-    # % Complete text — rendered at bar end when > 0
-    pct_df = df[df["PctComplete"] > 0]
-    if not pct_df.empty:
-        pct_labels = alt.Chart(pct_df).mark_text(
-            align="left", baseline="middle", dx=10, fontSize=11,
-            fontWeight="bold", color=NAVY, clip=True,
-        ).encode(
-            y=alt.Y("RowLabel:N", sort=row_order, title=None,
-                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
-            x=alt.X("End:T", title=None, scale=x_scale,
-                    axis=alt.Axis(labels=False, ticks=False, domain=False)),
-            text="PctLabel:N",
-        )
-        layers.append(pct_labels)
-
-    # Today line + label
-    today_df = pd.DataFrame({"date": [pd.to_datetime(today)]})
-    today_rule = alt.Chart(today_df).mark_rule(
-        color=RED, strokeWidth=2.5, strokeDash=[6, 4],
-    ).encode(
-        x=alt.X("date:T", title=None, scale=x_scale,
-                axis=alt.Axis(labels=False, ticks=False, domain=False)),
-    )
-    today_label = alt.Chart(today_df).mark_text(
-        text="TODAY", align="center", dy=12,
-        fontSize=10, fontWeight="bold", color=RED,
-    ).encode(
-        x=alt.X("date:T", title=None, scale=x_scale,
-                axis=alt.Axis(labels=False, ticks=False, domain=False)),
-        y=alt.value(0),
-    )
-    layers += [today_rule, today_label]
-
-    chart = alt.layer(*layers).properties(
-        height=total_height,
-        padding={"left": 6, "right": 18, "top": 4, "bottom": 4},
-    ).configure_view(strokeWidth=0).configure_axis(
-        labelColor="#4A5A6E", titleColor=NAVY,
-    )
-
-    # Info rows for the caller's left panel
-    info_rows = []
-    for _, r in df.iterrows():
-        info_rows.append({
-            "id": r["ID"],
-            "name": r["Project"].split(": ", 1)[1] if ": " in r["Project"] else r["Project"],
-            "group": r["Group"],
-            "pm": r["PM"],
-            "priority": r["Priority"],
-            "health": r["Health"],
-            "pct": r["PctLabel"],
-            "start": r["Start"].strftime("%b %d"),
-            "end": r["End"].strftime("%b %d"),
+    # --- Build month header segments ---
+    months = []
+    cursor = date(range_start.year, range_start.month, 1)
+    while cursor <= range_end:
+        next_cursor = (cursor + timedelta(days=32)).replace(day=1)
+        m_start = max(cursor, range_start)
+        m_end = min(next_cursor - timedelta(days=1), range_end)
+        left = pct(m_start)
+        right = pct(m_end) + (1 / total_days) * 100  # include last day
+        months.append({
+            "label": cursor.strftime("%b"),
+            "year_label": cursor.strftime("%Y"),
+            "left": left,
+            "width": right - left,
+            "is_q_start": cursor.month in (1, 4, 7, 10),
         })
+        cursor = next_cursor
 
-    return {
-        "chart": chart,
-        "rows": info_rows,
-        "row_step": GANTT_ROW_STEP,
-        "top_pad": GANTT_TOP_PAD,
-        "bottom_pad": GANTT_BOTTOM_PAD,
-        "total_height": total_height,
-        "grouped": group_by != "none",
-    }
+    # --- Color resolver ---
+    portfolio_color_map = {}
+    unique_portfolios = sorted({r["portfolio"] for r in rows})
+    for i, pf in enumerate(unique_portfolios):
+        portfolio_color_map[pf] = portfolio_palette[i % len(portfolio_palette)]
 
+    def _bar_color(r):
+        if color_by == "priority":
+            return priority_color.get(r["priority"], priority_color["Unknown"])
+        if color_by == "health":
+            return health_color.get(r["health"], health_color["Unknown"])
+        return portfolio_color_map.get(r["portfolio"], "#4A90D9")
 
-def gantt_info_panel_html(result: dict) -> str:
-    """Build the left-side task info panel that aligns row-by-row with the
-    Gantt chart returned by gantt_chart()."""
-    row_step = result["row_step"]
-    top_pad = result["top_pad"]
-    bottom_pad = result["bottom_pad"]
-    grouped = result.get("grouped", False)
+    # --- Legend ---
+    if color_by == "priority":
+        legend_items = [("Highest", priority_color["Highest"]),
+                        ("High", priority_color["High"]),
+                        ("Medium", priority_color["Medium"]),
+                        ("Low", priority_color["Low"])]
+    elif color_by == "health":
+        legend_items = [("On Track", health_color["Green"]),
+                        ("At Risk", health_color["Yellow"]),
+                        ("Critical", health_color["Red"])]
+    else:
+        legend_items = [(pf, portfolio_color_map[pf])
+                        for pf in unique_portfolios]
 
-    css_grid = (
-        "display:grid; "
-        "grid-template-columns: 54px 1fr 44px; "
-        "column-gap:8px; align-items:center; "
-        f"height:{row_step}px; "
-        "padding:0 10px; "
-        "border-bottom:1px solid #EEF1F5; "
-        "text-decoration:none; color:#1B3A5C; "
-        "font-size:11.5px; line-height:1.15; "
-        "transition:background 0.15s;"
+    legend_html = ''.join(
+        f'<span style="display:inline-flex; align-items:center; '
+        f'margin-right:14px; font-size:11px; color:#4A5A6E; '
+        f'font-weight:500;">'
+        f'<span style="display:inline-block; width:12px; height:12px; '
+        f'background:{color}; border-radius:3px; margin-right:5px;"></span>'
+        f'{html_mod.escape(label)}</span>'
+        for label, color in legend_items
     )
-    hover_js = "this.style.background='#F4F6F9'"
-    unhover_js = "this.style.background=''"
 
-    # Header strip sits inside top_pad (flush with chart top)
-    html = [
-        f'<div style="padding-top:{top_pad - 22}px;">',
-        '<div style="display:grid; grid-template-columns:54px 1fr 44px; '
-        'column-gap:8px; padding:0 10px 6px 10px; font-size:10px; '
-        'font-weight:700; color:#6C757D; text-transform:uppercase; '
-        'letter-spacing:0.06em; border-bottom:2px solid #C5CDD8;">'
-        '<div>ID</div><div>Project</div><div style="text-align:right;">%</div>'
-        '</div>',
-    ]
+    # --- CSS (scoped via unique class) ---
+    ROW_H = 38
+    HEADER_H = 56
+    INFO_COL_W = 320  # px fixed left info panel
 
+    css = f"""
+    <style>
+    .gantt-wrap {{
+      font-family: 'Inter', -apple-system, sans-serif;
+      border-radius: 10px;
+      background: #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      overflow: hidden;
+      border: 1px solid #E8ECF1;
+    }}
+    .gantt-toolbar {{
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px;
+      background: #F8FAFC;
+      border-bottom: 1px solid #E8ECF1;
+    }}
+    .gantt-legend {{ font-size: 11px; }}
+    .gantt-grid {{
+      display: grid;
+      grid-template-columns: {INFO_COL_W}px 1fr;
+    }}
+    /* Header row */
+    .gantt-info-head {{
+      display: grid; grid-template-columns: 58px 1fr 42px;
+      align-items: center; gap: 8px;
+      padding: 0 12px;
+      height: {HEADER_H}px;
+      background: #F8FAFC;
+      border-bottom: 2px solid #C5CDD8;
+      font-size: 10px; font-weight: 700; color: #6C757D;
+      text-transform: uppercase; letter-spacing: 0.06em;
+    }}
+    .gantt-info-head > div:last-child {{ text-align: right; }}
+    .gantt-month-head {{
+      position: relative;
+      height: {HEADER_H}px;
+      background: #F8FAFC;
+      border-bottom: 2px solid #C5CDD8;
+      border-left: 1px solid #E8ECF1;
+    }}
+    .gantt-month {{
+      position: absolute;
+      top: 0; bottom: 0;
+      border-right: 1px solid #E8ECF1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: #4A5A6E;
+    }}
+    .gantt-month-year {{
+      font-size: 9px; font-weight: 500; color: #94A3B8;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }}
+    .gantt-month.q-start {{ border-left: 2px solid #C5CDD8; }}
+    /* Body */
+    .gantt-info-body, .gantt-timeline-body {{
+      position: relative;
+    }}
+    .gantt-timeline-body {{
+      border-left: 1px solid #E8ECF1;
+    }}
+    .gantt-row-info {{
+      display: grid; grid-template-columns: 58px 1fr 42px;
+      align-items: center; gap: 8px;
+      padding: 0 12px;
+      height: {ROW_H}px;
+      border-bottom: 1px solid #F1F4F8;
+      text-decoration: none; color: #1B3A5C;
+      font-size: 12px;
+      transition: background 0.12s;
+    }}
+    .gantt-row-info:hover {{ background: #EEF2F7; }}
+    .gantt-row-info:nth-child(odd) {{ background: #FAFBFD; }}
+    .gantt-row-info:nth-child(odd):hover {{ background: #EEF2F7; }}
+    .gantt-row-id {{ font-weight: 700; color: #1565C0; font-size: 11px; }}
+    .gantt-row-name {{
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-weight: 500;
+    }}
+    .gantt-row-pct {{
+      text-align: right; font-weight: 600; color: #4A5A6E;
+      font-size: 11px; font-variant-numeric: tabular-nums;
+    }}
+    .gantt-row-timeline {{
+      position: relative;
+      height: {ROW_H}px;
+      border-bottom: 1px solid #F1F4F8;
+    }}
+    .gantt-row-timeline:nth-child(odd) {{ background: #FAFBFD; }}
+    .gantt-group-info, .gantt-group-timeline {{
+      height: {ROW_H}px;
+      background: #EEF2F7;
+      border-bottom: 1px solid #C5CDD8;
+      border-top: 1px solid #C5CDD8;
+      display: flex; align-items: center;
+      padding: 0 12px;
+      font-size: 11px; font-weight: 700; color: #1B3A5C;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }}
+    /* Bar */
+    .gantt-bar {{
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      height: 22px;
+      border-radius: 5px;
+      opacity: 0.35;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.15s;
+    }}
+    .gantt-bar:hover {{ opacity: 0.6; }}
+    .gantt-progress {{
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      height: 22px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }}
+    .gantt-progress:hover {{ filter: brightness(1.1); }}
+    .gantt-bar-overdue {{
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      height: 22px;
+      border: 2px solid #DC3545;
+      border-radius: 5px;
+      pointer-events: none;
+      box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.15);
+    }}
+    .gantt-diamond {{
+      position: absolute;
+      top: 50%;
+      width: 9px; height: 9px;
+      background: #1B3A5C;
+      transform: translate(-50%, -50%) rotate(45deg);
+      pointer-events: none;
+    }}
+    .gantt-pct-label {{
+      position: absolute;
+      top: 50%; transform: translateY(-50%);
+      font-size: 10px; font-weight: 700;
+      color: #1B3A5C;
+      padding-left: 6px;
+      pointer-events: none;
+      white-space: nowrap;
+    }}
+    /* Today line */
+    .gantt-today-line {{
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 0;
+      border-left: 2px dashed #DC3545;
+      pointer-events: none;
+      z-index: 5;
+    }}
+    .gantt-today-label {{
+      position: absolute;
+      top: 4px;
+      transform: translateX(-50%);
+      background: #DC3545;
+      color: white;
+      font-size: 9px; font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.05em;
+      pointer-events: none;
+      z-index: 6;
+    }}
+    /* Vertical grid lines for months */
+    .gantt-grid-line {{
+      position: absolute;
+      top: 0; bottom: 0;
+      width: 1px;
+      background: #F1F4F8;
+      pointer-events: none;
+    }}
+    .gantt-grid-line.q-line {{ background: #E0E6ED; }}
+    </style>
+    """
+
+    # --- Build toolbar (legend) ---
+    toolbar = f'<div class="gantt-toolbar"><div class="gantt-legend">{legend_html}</div></div>'
+
+    # --- Build month header ---
+    month_cells = []
+    for m in months:
+        q_cls = " q-start" if m["is_q_start"] else ""
+        month_cells.append(
+            f'<div class="gantt-month{q_cls}" '
+            f'style="left:{m["left"]:.3f}%; width:{m["width"]:.3f}%;">'
+            f'<div>{m["label"]}</div>'
+            f'<div class="gantt-month-year">{m["year_label"]}</div>'
+            f'</div>'
+        )
+    month_head_html = (
+        '<div class="gantt-month-head">'
+        + ''.join(month_cells)
+        + '</div>'
+    )
+
+    info_head = (
+        '<div class="gantt-info-head">'
+        '<div>ID</div><div>Project</div><div>%</div>'
+        '</div>'
+    )
+
+    # --- Build body rows (info panel + timeline) ---
+    # We render two parallel columns inside the grid so rows align perfectly.
+    info_rows_html = []
+    timeline_rows_html = []
     prev_group = None
-    for r in result["rows"]:
-        if grouped and r["group"] != prev_group:
-            # Group header row — occupies one row slot
-            html.append(
-                f'<div style="height:{row_step}px; display:flex; '
-                f'align-items:center; padding:0 10px; font-size:11px; '
-                f'font-weight:700; color:#1B3A5C; background:#EEF2F7; '
-                f'text-transform:uppercase; letter-spacing:0.04em; '
-                f'border-bottom:1px solid #C5CDD8;">{r["group"]}</div>'
+    for r in rows:
+        if group_by != "none" and r["group"] != prev_group:
+            info_rows_html.append(
+                f'<div class="gantt-group-info">{html_mod.escape(r["group"])}</div>'
             )
+            timeline_rows_html.append('<div class="gantt-group-timeline"></div>')
             prev_group = r["group"]
-        html.append(
-            f'<a href="?project={r["id"]}" target="_self" '
-            f'style="{css_grid}" '
-            f'onmouseover="{hover_js}" onmouseout="{unhover_js}" '
-            f'title="{r["name"]} — PM: {r["pm"]}, {r["priority"]} priority, '
-            f'{r["start"]} → {r["end"]}">'
-            f'<div style="font-weight:700; color:#1565C0;">{r["id"]}</div>'
-            f'<div style="overflow:hidden; text-overflow:ellipsis; '
-            f'white-space:nowrap;">{r["name"]}</div>'
-            f'<div style="text-align:right; font-weight:600; color:#4A5A6E;">'
-            f'{r["pct"]}</div>'
+
+        # Info row
+        pct_label = f"{int(round(r['pct'] * 100))}%"
+        tooltip = (
+            f'{html_mod.escape(r["id"])}: {html_mod.escape(r["name"])}\n'
+            f'PM: {html_mod.escape(r["pm"])}\n'
+            f'Priority: {html_mod.escape(r["priority"])} | '
+            f'Health: {html_mod.escape(r["health"])}\n'
+            f'{r["start"].strftime("%b %d, %Y")} → {r["end"].strftime("%b %d, %Y")}\n'
+            f'{pct_label} complete'
+        )
+        info_rows_html.append(
+            f'<a class="gantt-row-info" href="?project={r["id"]}" target="_self" '
+            f'title="{tooltip}">'
+            f'<div class="gantt-row-id">{r["id"]}</div>'
+            f'<div class="gantt-row-name">{html_mod.escape(r["name"])}</div>'
+            f'<div class="gantt-row-pct">{pct_label}</div>'
             f'</a>'
         )
 
-    html.append(f'<div style="height:{bottom_pad}px;"></div>')
-    html.append('</div>')
-    return "".join(html)
+        # Timeline row
+        bar_left = pct(r["start"])
+        bar_right = pct(r["end"] + timedelta(days=1))
+        bar_width = max(0.3, bar_right - bar_left)  # min visible width
+        progress_width = bar_width * r["pct"]
+        color = _bar_color(r)
+
+        bar_html_parts = [
+            f'<a href="?project={r["id"]}" target="_self" '
+            f'title="{tooltip}" style="position:absolute; inset:0; '
+            f'text-decoration:none; display:block;">',
+            f'<div class="gantt-bar" '
+            f'style="left:{bar_left:.3f}%; width:{bar_width:.3f}%; '
+            f'background:{color};"></div>',
+        ]
+        if r["pct"] > 0:
+            bar_html_parts.append(
+                f'<div class="gantt-progress" '
+                f'style="left:{bar_left:.3f}%; width:{progress_width:.3f}%; '
+                f'background:{color};"></div>'
+            )
+        if r["overdue"]:
+            bar_html_parts.append(
+                f'<div class="gantt-bar-overdue" '
+                f'style="left:{bar_left:.3f}%; width:{bar_width:.3f}%;"></div>'
+            )
+        # Milestone diamonds
+        bar_html_parts.append(
+            f'<div class="gantt-diamond" style="left:{bar_left:.3f}%;"></div>'
+        )
+        bar_html_parts.append(
+            f'<div class="gantt-diamond" style="left:{bar_right:.3f}%;"></div>'
+        )
+        # % label at bar end (only when progress > 0)
+        if r["pct"] > 0:
+            bar_html_parts.append(
+                f'<div class="gantt-pct-label" style="left:{bar_right:.3f}%;">'
+                f'{pct_label}</div>'
+            )
+        bar_html_parts.append('</a>')
+
+        timeline_rows_html.append(
+            f'<div class="gantt-row-timeline">'
+            + ''.join(bar_html_parts)
+            + '</div>'
+        )
+
+    # --- Grid lines and today marker in timeline body ---
+    today_left = pct(today) if range_start <= today <= range_end else None
+    today_marker_html = ''
+    if today_left is not None:
+        today_marker_html = (
+            f'<div class="gantt-today-line" style="left:{today_left:.3f}%;"></div>'
+            f'<div class="gantt-today-label" style="left:{today_left:.3f}%;">TODAY</div>'
+        )
+
+    # Month vertical grid lines (inside the timeline body, behind bars)
+    grid_lines_html = ''.join(
+        f'<div class="gantt-grid-line'
+        f'{" q-line" if m["is_q_start"] else ""}" '
+        f'style="left:{m["left"]:.3f}%;"></div>'
+        for m in months if m["left"] > 0
+    )
+
+    # Wrap the timeline body with grid lines and today marker as overlay
+    timeline_body_html = (
+        '<div class="gantt-timeline-body" style="position:relative;">'
+        + grid_lines_html
+        + ''.join(timeline_rows_html)
+        + today_marker_html
+        + '</div>'
+    )
+    info_body_html = (
+        '<div class="gantt-info-body">'
+        + ''.join(info_rows_html)
+        + '</div>'
+    )
+
+    # --- Assemble ---
+    html = (
+        css
+        + '<div class="gantt-wrap">'
+        + toolbar
+        + '<div class="gantt-grid">'
+        + info_head
+        + month_head_html
+        + info_body_html
+        + timeline_body_html
+        + '</div></div>'
+    )
+    return html
 
 
 def capacity_heatmap(heatmap_df: pd.DataFrame) -> alt.Chart:

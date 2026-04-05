@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from components import (
-    section_header, gantt_chart, gantt_info_panel_html, capacity_heatmap,
+    section_header, render_gantt_html, capacity_heatmap,
     NAVY, GREEN, YELLOW, RED, GRAY,
 )
 from data_layer import load_weekly_heatmap, get_file_mtime
@@ -152,7 +152,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             f"Solid fill = % complete · Red outline = overdue · "
             f"Diamonds = start/end milestones."
         )
-        result = gantt_chart(
+        gantt_html = render_gantt_html(
             filtered,
             color_by=color_by.lower(),
             group_by=group_by.lower(),
@@ -164,18 +164,7 @@ def render(data: dict, utilization: dict, person_demand: list):
             }[sort_by],
             date_range=date_range,
         )
-        if result:
-            # Split layout: task info grid on the left (Smartsheet-style),
-            # Gantt timeline on the right.
-            info_col, chart_col = st.columns([3, 9], gap="small")
-            with info_col:
-                st.markdown(
-                    gantt_info_panel_html(result),
-                    unsafe_allow_html=True,
-                )
-            with chart_col:
-                st.altair_chart(
-                    result["chart"], use_container_width=True)
+        st.markdown(gantt_html, unsafe_allow_html=True)
     else:
         st.info("No projects match the current filters.")
 
