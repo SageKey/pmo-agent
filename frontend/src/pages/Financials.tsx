@@ -1,15 +1,26 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { DollarSign, FileText, PieChart, TrendingUp } from "lucide-react";
+import {
+  DollarSign,
+  FileText,
+  PieChart,
+  Plus,
+  TrendingUp,
+  UserPlus,
+} from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import { InvoiceDialog } from "@/components/financials/InvoiceDialog";
+import { VendorDialog } from "@/components/financials/VendorDialog";
 import {
   useInvoices,
   useMonthlyCosts,
   useProjectCosts,
   useVendors,
 } from "@/hooks/useFinancials";
+import type { Invoice } from "@/types/financials";
 import { currency, shortDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -30,10 +41,23 @@ const MONTHS = [
 
 export function Financials() {
   const [year, setYear] = useState<number>(2026);
+  const [invoiceDialog, setInvoiceDialog] = useState<{
+    open: boolean;
+    editing: Invoice | null;
+  }>({ open: false, editing: null });
+  const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
+
   const vendors = useVendors(true);
   const invoices = useInvoices(year);
   const monthly = useMonthlyCosts(year);
   const byProject = useProjectCosts(year);
+
+  const defaultInvoiceMonth = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear() === year ? year : year;
+    const m = d.getFullYear() === year ? d.getMonth() + 1 : 1;
+    return `${y}-${String(m).padStart(2, "0")}`;
+  }, [year]);
 
   // Build a monthly bar data array [{month: "Jan", msa, tm, total}] for the year
   const monthlyBars = useMemo(() => {
@@ -89,9 +113,25 @@ export function Financials() {
               </button>
             ))}
           </div>
-          <div className="ml-auto text-xs text-slate-500">
-            {vendors.data?.length ?? 0} active vendors · {invoices.data?.length ?? 0}{" "}
-            invoices
+          <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
+            <span>
+              {vendors.data?.length ?? 0} vendors · {invoices.data?.length ?? 0} invoices
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setVendorDialogOpen(true)}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              New vendor
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setInvoiceDialog({ open: true, editing: null })}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New invoice
+            </Button>
           </div>
         </div>
 
@@ -250,7 +290,13 @@ export function Financials() {
                       .slice()
                       .sort((a, b) => b.month.localeCompare(a.month))
                       .map((inv) => (
-                        <TR key={inv.id}>
+                        <TR
+                          key={inv.id}
+                          onClick={() =>
+                            setInvoiceDialog({ open: true, editing: inv })
+                          }
+                          className="cursor-pointer"
+                        >
                           <TD className="whitespace-nowrap font-medium">{inv.month}</TD>
                           <TD className="whitespace-nowrap text-xs text-slate-600">
                             {inv.invoice_number ?? "—"}
@@ -282,6 +328,19 @@ export function Financials() {
           </Card>
         </div>
       </div>
+
+      <InvoiceDialog
+        invoice={invoiceDialog.editing}
+        defaultMonth={defaultInvoiceMonth}
+        open={invoiceDialog.open}
+        onOpenChange={(open) =>
+          setInvoiceDialog((s) => ({ ...s, open }))
+        }
+      />
+      <VendorDialog
+        open={vendorDialogOpen}
+        onOpenChange={setVendorDialogOpen}
+      />
     </>
   );
 }

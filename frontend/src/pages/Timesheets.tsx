@@ -1,10 +1,16 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Search } from "lucide-react";
+import { Plus, Search, Trash2 } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { useTimesheetEntries, useTimesheetSummary } from "@/hooks/useTimesheets";
+import { LogEntryDialog } from "@/components/timesheets/LogEntryDialog";
+import {
+  useDeleteTimesheetEntry,
+  useTimesheetEntries,
+  useTimesheetSummary,
+} from "@/hooks/useTimesheets";
 import { avatarTone, currency, initials, shortDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -36,9 +42,11 @@ function nextMonth(ym: string): string {
 export function Timesheets() {
   const [month, setMonth] = useState<string>(currentMonth());
   const [search, setSearch] = useState("");
+  const [logOpen, setLogOpen] = useState(false);
 
   const summary = useTimesheetSummary({ month });
   const entries = useTimesheetEntries({ month });
+  const deleteMutation = useDeleteTimesheetEntry();
 
   const rows = summary.data ?? [];
   const totalHours = rows.reduce((s, r) => s + r.total_hours, 0);
@@ -86,8 +94,14 @@ export function Timesheets() {
           >
             This month
           </button>
-          <div className="ml-auto text-xs text-slate-500">
-            {rows.length} consultants · {filteredEntries.length} entries
+          <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
+            <span>
+              {rows.length} consultants · {filteredEntries.length} entries
+            </span>
+            <Button size="sm" onClick={() => setLogOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Log entry
+            </Button>
           </div>
         </div>
 
@@ -262,6 +276,7 @@ export function Timesheets() {
                     <TH>Task</TH>
                     <TH>Type</TH>
                     <TH className="text-right">Hrs</TH>
+                    <TH className="w-10"></TH>
                   </TR>
                 </THead>
                 <TBody>
@@ -270,7 +285,7 @@ export function Timesheets() {
                     .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
                     .slice(0, 200)
                     .map((e) => (
-                      <TR key={e.id}>
+                      <TR key={e.id} className="group">
                         <TD className="whitespace-nowrap text-slate-600">
                           {shortDate(e.entry_date)}
                         </TD>
@@ -305,6 +320,20 @@ export function Timesheets() {
                         <TD className="whitespace-nowrap text-right tabular-nums text-slate-700">
                           {e.hours.toFixed(1)}
                         </TD>
+                        <TD>
+                          <button
+                            onClick={() => {
+                              if (confirm("Delete this entry?")) {
+                                deleteMutation.mutate(e.id);
+                              }
+                            }}
+                            disabled={deleteMutation.isPending}
+                            className="rounded p-1 text-slate-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                            title="Delete entry"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </TD>
                       </TR>
                     ))}
                 </TBody>
@@ -313,6 +342,12 @@ export function Timesheets() {
           </CardContent>
         </Card>
       </div>
+
+      <LogEntryDialog
+        defaultMonth={month}
+        open={logOpen}
+        onOpenChange={setLogOpen}
+      />
     </>
   );
 }

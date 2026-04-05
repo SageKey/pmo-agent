@@ -1,12 +1,13 @@
-"""Timesheets router — vendor timesheet entries + summary."""
+"""Timesheets router — vendor timesheet entries + summary + writes."""
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..deps import get_connector
 from ..engines import SQLiteConnector
 from ..schemas.timesheet import TimesheetEntryOut, TimesheetSummaryOut
+from ..schemas.timesheet_write import TimesheetEntryWrite
 
 router = APIRouter(prefix="/timesheets", tags=["timesheets"])
 
@@ -30,3 +31,25 @@ def summary(
 ) -> List[TimesheetSummaryOut]:
     rows = conn.get_timesheet_summary(month=month, year=year)
     return [TimesheetSummaryOut(**r) for r in rows]
+
+
+@router.post("/", status_code=201)
+def create_entry(
+    payload: TimesheetEntryWrite,
+    conn: SQLiteConnector = Depends(get_connector),
+) -> dict:
+    err = conn.save_timesheet_entry(payload.model_dump(exclude_unset=False))
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return {"status": "ok"}
+
+
+@router.delete("/{entry_id}", status_code=204)
+def delete_entry(
+    entry_id: int,
+    conn: SQLiteConnector = Depends(get_connector),
+) -> None:
+    err = conn.delete_timesheet_entry(entry_id)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return None
