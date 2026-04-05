@@ -105,17 +105,27 @@ def create_app() -> FastAPI:
         _seed_database_if_missing()
 
     # --- CORS ---
-    # Include localhost defaults + any production origin from env
-    origins = list(settings.cors_origins)
+    # Include localhost defaults + any production origin from env. We also
+    # use allow_origin_regex to match Vercel preview deployments and strip
+    # trailing slashes that Railway's UI auto-appends to env var values.
+    def _norm(o: str) -> str:
+        return o.strip().rstrip("/")
+
+    origins = [_norm(o) for o in settings.cors_origins]
     extra = os.environ.get("CORS_ORIGIN_PROD")
     if extra:
         for o in extra.split(","):
-            o = o.strip()
+            o = _norm(o)
             if o and o not in origins:
                 origins.append(o)
+
+    # Any *.vercel.app subdomain also matches so Vercel preview deploys
+    # (git-main-<user>.vercel.app, <commit>-<user>.vercel.app, etc.) all
+    # work without manually listing each one.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
+        allow_origin_regex=r"https://[a-zA-Z0-9-]+\.vercel\.app",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
