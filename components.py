@@ -650,8 +650,8 @@ def supply_demand_chart(utilization: dict) -> alt.Chart:
 
 
 GANTT_ROW_STEP = 42      # px per row in the chart (and HTML info panel)
-GANTT_TOP_PAD = 48       # px reserved above first row for legend/axis
-GANTT_BOTTOM_PAD = 32    # px reserved below last row for axis
+GANTT_TOP_PAD = 72       # px reserved above first row for legend + top month axis
+GANTT_BOTTOM_PAD = 16    # px reserved below last row (axis is on top)
 
 
 def gantt_chart(
@@ -802,7 +802,7 @@ def gantt_chart(
 
     # X-axis — single clean bottom axis. All layers share the same x/x2 with
     # explicit title=None so no concatenated "StartProgressEnd" title artifact.
-    def _x(field="Start:T", orient="bottom", grid=True):
+    def _x(field="Start:T", orient="top", grid=True):
         return alt.X(
             field,
             title=None,
@@ -911,8 +911,8 @@ def gantt_chart(
                 axis=alt.Axis(labels=False, ticks=False, domain=False)),
     )
     today_label = alt.Chart(today_df).mark_text(
-        text="TODAY", align="center", dy=-6,
-        fontSize=11, fontWeight="bold", color=RED,
+        text="TODAY", align="center", dy=12,
+        fontSize=10, fontWeight="bold", color=RED,
     ).encode(
         x=alt.X("date:T", title=None, scale=x_scale,
                 axis=alt.Axis(labels=False, ticks=False, domain=False)),
