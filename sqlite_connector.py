@@ -10,20 +10,36 @@ from pathlib import Path
 from typing import Optional
 
 from models import (
-    Project, TeamMember, RMAssumptions, ProjectAssignment,
+    Project, TeamMember, RMAssumptions, ProjectAssignment, Initiative,
     SDLC_PHASES, ROLE_KEYS, _to_date,
 )
 
 DEFAULT_DB = "pmo_data.db"
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
     key     TEXT PRIMARY KEY,
     value   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS initiatives (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    description     TEXT,
+    sponsor         TEXT,
+    status          TEXT NOT NULL DEFAULT 'Active',
+    it_involvement  INTEGER NOT NULL DEFAULT 0,
+    priority        TEXT,
+    target_start    TEXT,
+    target_end      TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_init_status ON initiatives(status);
 
 CREATE TABLE IF NOT EXISTS projects (
     id              TEXT PRIMARY KEY,
@@ -50,6 +66,8 @@ CREATE TABLE IF NOT EXISTS projects (
     actual_cost     REAL DEFAULT 0.0,
     forecast_cost   REAL DEFAULT 0.0,
     sort_order      INTEGER,
+    initiative_id   TEXT REFERENCES initiatives(id),
+    planned_it_start TEXT,
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now'))
 );
@@ -448,6 +466,15 @@ class SQLiteConnector:
             )
         except Exception:
             pass  # Column already exists
+        # Add initiative_id FK + planned_it_start to projects (v6 migration)
+        for col, col_type in [
+            ("initiative_id", "TEXT REFERENCES initiatives(id)"),
+            ("planned_it_start", "TEXT"),
+        ]:
+            try:
+                self._conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
         # Seed default app_settings rows (idempotent — INSERT OR IGNORE on key)
         self._seed_default_settings()
         self._conn.commit()
@@ -593,12 +620,100 @@ class SQLiteConnector:
         return datetime.fromtimestamp(Path(self.db_path).stat().st_mtime)
 
     # ------------------------------------------------------------------
+    # Initiatives
+    # ------------------------------------------------------------------
+    def get_initiatives(self, status: Optional[str] = None,
+                        it_only: Optional[bool] = None) -> list[dict]:
+        conn = self._open()
+        sql = "SELECT * FROM initiatives"
+        conditions, params = [], []
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if it_only is True:
+            conditions.append("it_involvement = 1")
+        elif it_only is False:
+            conditions.append("it_involvement = 0")
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY sort_order, name"
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def get_initiative(self, initiative_id: str) -> Optional[dict]:
+        conn = self._open()
+        row = conn.execute(
+            "SELECT * FROM initiatives WHERE id = ?", (initiative_id,)
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        # Attach linked projects (lightweight summary)
+        proj_rows = conn.execute(
+            """SELECT id, name, health, pct_complete, priority, planned_it_start
+               FROM projects WHERE initiative_id = ?
+               ORDER BY sort_order, name""",
+            (initiative_id,),
+        ).fetchall()
+        result["projects"] = [dict(r) for r in proj_rows]
+        result["project_count"] = len(result["projects"])
+        return result
+
+    def save_initiative(self, fields: dict, is_new: bool = False) -> Optional[str]:
+        conn = self._open()
+        iid = fields.get("id")
+        if is_new:
+            if not iid:
+                return "Initiative ID is required."
+            cols = [k for k in fields if k != "id"]
+            placeholders = ", ".join(["?"] * (len(cols) + 1))
+            col_names = "id, " + ", ".join(cols)
+            values = [iid] + [fields[c] for c in cols]
+            conn.execute(
+                f"INSERT INTO initiatives ({col_names}) VALUES ({placeholders})",
+                values,
+            )
+        else:
+            if not iid:
+                return "Initiative ID is required for update."
+            sets = []
+            values = []
+            for k, v in fields.items():
+                if k == "id":
+                    continue
+                sets.append(f"{k} = ?")
+                values.append(v)
+            if not sets:
+                return None
+            sets.append("updated_at = datetime('now')")
+            values.append(iid)
+            conn.execute(
+                f"UPDATE initiatives SET {', '.join(sets)} WHERE id = ?",
+                values,
+            )
+        conn.commit()
+        return None
+
+    def delete_initiative(self, initiative_id: str) -> Optional[str]:
+        conn = self._open()
+        # Unlink any projects pointing at this initiative (don't cascade-delete projects)
+        conn.execute(
+            "UPDATE projects SET initiative_id = NULL WHERE initiative_id = ?",
+            (initiative_id,),
+        )
+        conn.execute("DELETE FROM initiatives WHERE id = ?", (initiative_id,))
+        conn.commit()
+        return None
+
+    # ------------------------------------------------------------------
     # Project Portfolio
     # ------------------------------------------------------------------
     def read_portfolio(self) -> list[Project]:
         conn = self._open()
         rows = conn.execute(
-            "SELECT * FROM projects ORDER BY sort_order, priority, name"
+            """SELECT p.*, i.name AS initiative_name
+               FROM projects p
+               LEFT JOIN initiatives i ON p.initiative_id = i.id
+               ORDER BY p.sort_order, p.priority, p.name"""
         ).fetchall()
 
         projects = []
@@ -613,6 +728,20 @@ class SQLiteConnector:
             # Ensure all roles present
             for rk in ROLE_KEYS:
                 role_allocs.setdefault(rk, 0.0)
+
+            # Legacy-safe reads for new columns
+            try:
+                init_id = row["initiative_id"]
+            except (IndexError, KeyError):
+                init_id = None
+            try:
+                planned = row["planned_it_start"]
+            except (IndexError, KeyError):
+                planned = None
+            try:
+                init_name = row["initiative_name"]
+            except (IndexError, KeyError):
+                init_name = None
 
             projects.append(Project(
                 id=pid,
@@ -641,6 +770,9 @@ class SQLiteConnector:
                 role_allocations=role_allocs,
                 notes=row["notes"],
                 sort_order=row["sort_order"],
+                initiative_id=init_id,
+                initiative_name=init_name,
+                planned_it_start=planned,
             ))
 
         return projects

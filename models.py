@@ -63,6 +63,7 @@ ROLE_KEYS = ["pm", "ba", "functional", "technical", "developer",
 HEALTH_OPTIONS = [
     "🟢 ON TRACK", "🟡 AT RISK", "🔴 NEEDS HELP",
     "⚪ NOT STARTED", "🔵 NEEDS FUNCTIONAL SPEC", "🔵 NEEDS TECHNICAL SPEC",
+    "📋 PIPELINE",
     "✅ COMPLETE", "⏸️ POSTPONED",
 ]
 
@@ -83,8 +84,11 @@ HEALTH_EMOJI_MAP = {
     "AT RISK":               "🟡 AT RISK",
     "NEEDS HELP":            "🔴 NEEDS HELP",
     "COMPLETE":              "✅ COMPLETE",
+    "PIPELINE":              "📋 PIPELINE",
     "POSTPONED":             "⏸️ POSTPONED",
 }
+
+INITIATIVE_STATUS_OPTIONS = ["Active", "Complete", "On Hold"]
 
 
 def clean_health(health: str) -> str:
@@ -104,6 +108,23 @@ def clean_health(health: str) -> str:
 # ---------------------------------------------------------------------------
 # Data Classes
 # ---------------------------------------------------------------------------
+
+@dataclass
+class Initiative:
+    """A key business initiative — the strategic level above projects."""
+    id: str
+    name: str
+    description: Optional[str] = None
+    sponsor: Optional[str] = None
+    status: str = "Active"           # Active, Complete, On Hold
+    it_involvement: bool = False
+    priority: Optional[str] = None
+    target_start: Optional[date] = None
+    target_end: Optional[date] = None
+    sort_order: int = 0
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
 
 @dataclass
 class ProjectAssignment:
@@ -142,10 +163,15 @@ class Project:
     role_allocations: dict = field(default_factory=dict)  # canonical_role_key → float (0.0-1.0)
     notes: Optional[str] = None
     sort_order: Optional[int] = None
+    initiative_id: Optional[str] = None         # FK → initiatives.id
+    initiative_name: Optional[str] = None        # denormalized for display
+    planned_it_start: Optional[str] = None       # e.g. "2026-Q3" for pipeline projects
 
     @property
     def is_active(self) -> bool:
         if self.health and "POSTPONED" in self.health:
+            return False
+        if self.health and "PIPELINE" in self.health:
             return False
         if self.pct_complete >= 1.0:
             return False

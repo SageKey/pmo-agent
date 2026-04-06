@@ -49,7 +49,35 @@ class TestSeedData:
         conn = sqlite3.connect(fresh_db)
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         conn.close()
-        assert count == 38, f"Expected 38 projects, got {count}"
+        assert count == 41, f"Expected 41 projects (38 + 3 pipeline), got {count}"
+
+    def test_initiative_count(self, fresh_db):
+        conn = sqlite3.connect(fresh_db)
+        count = conn.execute("SELECT COUNT(*) FROM initiatives").fetchone()[0]
+        conn.close()
+        assert count == 31, f"Expected 31 initiatives, got {count}"
+
+    def test_initiative_project_links_valid(self, fresh_db):
+        """Every non-null initiative_id in projects must reference a valid initiative."""
+        conn = sqlite3.connect(fresh_db)
+        orphans = conn.execute(
+            """SELECT p.id, p.initiative_id FROM projects p
+               WHERE p.initiative_id IS NOT NULL
+                 AND p.initiative_id NOT IN (SELECT id FROM initiatives)"""
+        ).fetchall()
+        conn.close()
+        assert len(orphans) == 0, f"Orphan initiative links: {orphans}"
+
+    def test_pipeline_projects_have_planned_start(self, fresh_db):
+        conn = sqlite3.connect(fresh_db)
+        rows = conn.execute(
+            """SELECT id, planned_it_start FROM projects
+               WHERE health LIKE '%PIPELINE%'"""
+        ).fetchall()
+        conn.close()
+        assert len(rows) > 0, "Seed must have pipeline projects"
+        for row in rows:
+            assert row[1] is not None, f"Pipeline project {row[0]} missing planned_it_start"
 
     def test_team_member_count(self, fresh_db):
         conn = sqlite3.connect(fresh_db)

@@ -25,6 +25,9 @@ export interface Project {
   role_allocations: Record<string, number>;
   notes: string | null;
   sort_order: number | null;
+  initiative_id: string | null;
+  initiative_name: string | null;
+  planned_it_start: string | null;
   is_active: boolean;
   duration_weeks: number | null;
 }

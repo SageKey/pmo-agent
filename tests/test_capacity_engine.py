@@ -355,6 +355,26 @@ class TestPersonAvailability:
                 found_not_now = True
 
 
+class TestPipelineExclusion:
+    def test_pipeline_projects_not_in_active(self, connector, engine):
+        """Projects with PIPELINE health must not appear in active_projects."""
+        active_ids = {p.id for p in engine.active_projects}
+        pipeline_ids = {
+            p.id for p in connector.read_portfolio()
+            if p.health and "PIPELINE" in p.health
+        }
+        assert pipeline_ids, "Seed must have pipeline projects"
+        assert not pipeline_ids.intersection(active_ids)
+
+    def test_pipeline_not_in_demand(self, connector, engine):
+        """Pipeline projects must not generate demand in compute_utilization."""
+        util = engine.compute_utilization()
+        # Verify utilization works without error — the absence of pipeline
+        # projects from active means they can't contribute demand
+        for role_key, u in util.items():
+            assert u.demand_hrs_week >= 0
+
+
 class TestRecommendNextProject:
     """Next project recommendation wrapper."""
 

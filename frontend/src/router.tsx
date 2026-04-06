@@ -11,6 +11,7 @@ import { Timesheets } from "@/pages/Timesheets";
 import { AIAssistant } from "@/pages/AIAssistant";
 import { Admin } from "@/pages/Admin";
 import { Planning } from "@/pages/Planning";
+import { Initiatives } from "@/pages/Initiatives";
 
 export const router = createBrowserRouter([
   {
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/executive" replace /> },
       { path: "executive", element: <ExecutiveSummary /> },
+      { path: "initiatives", element: <Initiatives /> },
       { path: "portfolio", element: <Portfolio /> },
       { path: "portfolio/:projectId", element: <ProjectDetail /> },
       { path: "capacity", element: <Capacity /> },
