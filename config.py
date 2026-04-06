@@ -8,31 +8,35 @@ constants live here. Import get_config() wherever you need them.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 _ROOT = Path(__file__).parent
 
 
-def _env(key: str, default: str = "") -> str:
-    """Read from os.environ, then .env file, then default.
-    Writes result back to os.environ so subprocesses see it.
-    """
-    val = os.environ.get(key)
-    if val:
-        return val
+def _parse_dotenv() -> dict[str, str]:
+    """Parse .env file once at import time into a key→value dict."""
     env_path = _ROOT / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line.startswith(f"{key}="):
-                val = line.split("=", 1)[1].strip().strip("'\"")
-                os.environ[key] = val
-                return val
-    return default
+    if not env_path.exists():
+        return {}
+    result = {}
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            result[k.strip()] = v.strip().strip("'\"")
+    return result
 
 
-@dataclass
+_DOTENV: dict[str, str] = _parse_dotenv()
+
+
+def _env(key: str, default: str = "") -> str:
+    """Read from os.environ, then .env file cache, then default."""
+    return os.environ.get(key) or _DOTENV.get(key, default)
+
+
+@dataclass(frozen=True)
 class Config:
     # --- API keys ---
     anthropic_api_key: str = field(default_factory=lambda: _env("ANTHROPIC_API_KEY"))
@@ -76,3 +80,13 @@ def get_config() -> Config:
     if _config is None:
         _config = Config()
     return _config
+
+
+def set_config(cfg: Config) -> None:
+    """Replace the singleton (e.g. after user provides credentials at runtime).
+
+    Use dataclasses.replace() to produce the new Config:
+        set_config(replace(get_config(), anthropic_api_key=new_key))
+    """
+    global _config
+    _config = cfg
