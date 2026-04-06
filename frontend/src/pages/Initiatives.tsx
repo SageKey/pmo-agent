@@ -12,6 +12,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Card } from "@/components/ui/card";
 import { useInitiatives } from "@/hooks/useInitiatives";
 import { cn } from "@/lib/cn";
+import { shortMonthYear } from "@/lib/format";
 import type { Initiative, InitiativeProjectSummary } from "@/types/initiative";
 
 const PRIORITY_BG: Record<string, string> = {
@@ -228,7 +229,7 @@ function InitiativeRow({
         <div className="col-span-2 text-xs text-slate-500 tabular-nums">
           {init.target_start && init.target_end ? (
             <>
-              {init.target_start.slice(0, 7)} → {init.target_end.slice(0, 7)}
+              {shortMonthYear(init.target_start)} → {shortMonthYear(init.target_end)}
             </>
           ) : (
             "—"

@@ -22,11 +22,19 @@ export function shortDate(iso?: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const yyyy = d.getUTCFullYear();
+  return `${mm}-${dd}-${yyyy}`;
+}
+
+/** Month + year only, e.g. "04-2026". */
+export function shortMonthYear(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${mm}-${d.getUTCFullYear()}`;
 }
 
 /** "Alex Young" → "AY", "Emily Fridley" → "EF", null → "—" */

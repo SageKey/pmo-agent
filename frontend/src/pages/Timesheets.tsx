@@ -21,10 +21,7 @@ function currentMonth(): string {
 
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
+  return `${String(m).padStart(2, "0")}-${y}`;
 }
 
 function prevMonth(ym: string): string {
