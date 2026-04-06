@@ -6,10 +6,13 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { TopBar } from "@/components/layout/TopBar";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { InitiativeDialog } from "@/components/initiatives/InitiativeDialog";
 import { useInitiatives } from "@/hooks/useInitiatives";
 import { cn } from "@/lib/cn";
 import { shortMonthYear } from "@/lib/format";
@@ -26,6 +29,8 @@ const PRIORITY_BG: Record<string, string> = {
 export function Initiatives() {
   const { data, isLoading } = useInitiatives();
   const initiatives = data ?? [];
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Initiative | null>(null);
 
   // Group by status
   const grouped = useMemo(() => {
@@ -53,6 +58,22 @@ export function Initiatives() {
         subtitle={`${initiatives.length} strategic initiatives driving the business forward.`}
       />
       <div className="space-y-6 p-8">
+        {/* Toolbar */}
+        <div className="flex items-center justify-between">
+          <div />
+          <Button onClick={() => { setEditTarget(null); setDialogOpen(true); }}>
+            <Plus className="h-4 w-4" />
+            New initiative
+          </Button>
+        </div>
+
+        {/* Dialog for create + edit */}
+        <InitiativeDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          initiative={editTarget}
+        />
+
         {/* Summary strip */}
         <div className="grid gap-4 md:grid-cols-3">
           <SummaryCard
@@ -104,7 +125,12 @@ export function Initiatives() {
                 <div className="col-span-2 text-right">IT Projects</div>
               </div>
               {list.map((init, i) => (
-                <InitiativeRow key={init.id} initiative={init} delay={i * 0.03} />
+                <InitiativeRow
+                  key={init.id}
+                  initiative={init}
+                  delay={i * 0.03}
+                  onEdit={(i) => { setEditTarget(i); setDialogOpen(true); }}
+                />
               ))}
             </Card>
           </section>
@@ -158,9 +184,11 @@ function SummaryCard({
 function InitiativeRow({
   initiative: init,
   delay,
+  onEdit,
 }: {
   initiative: Initiative;
   delay: number;
+  onEdit: (i: Initiative) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasProjects = init.project_count > 0;
@@ -191,7 +219,11 @@ function InitiativeRow({
             <span className="w-3.5" />
           )}
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-slate-800">
+            <div
+              className="truncate text-sm font-semibold text-slate-800 hover:text-navy-700 cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); onEdit(init); }}
+              title="Click to edit"
+            >
               {init.name}
             </div>
             <div className="mt-0.5 text-[11px] text-slate-500 font-mono">

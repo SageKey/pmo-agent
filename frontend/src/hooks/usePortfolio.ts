@@ -55,6 +55,8 @@ export type ProjectPatch = Partial<{
   forecast_cost: number;
   notes: string | null;
   role_allocations: Record<string, number>;
+  initiative_id: string | null;
+  planned_it_start: string | null;
 }>;
 
 export function useUpdateProject(projectId: string | undefined) {
@@ -87,6 +89,8 @@ export interface ProjectCreatePayload {
   budget?: number;
   notes?: string | null;
   role_allocations?: Record<string, number>;
+  initiative_id?: string | null;
+  planned_it_start?: string | null;
 }
 
 export function useCreateProject() {

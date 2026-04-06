@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCreateProject, type ProjectCreatePayload } from "@/hooks/usePortfolio";
+import { useInitiatives } from "@/hooks/useInitiatives";
 
 const PRIORITY_OPTIONS = ["Highest", "High", "Medium", "Low"] as const;
 
@@ -21,6 +22,12 @@ const HEALTH_OPTIONS = [
   "⚪ NOT STARTED",
   "🔵 NEEDS FUNCTIONAL SPEC",
   "🔵 NEEDS TECHNICAL SPEC",
+  "📋 PIPELINE",
+];
+
+const QUARTER_OPTIONS = [
+  "2026-Q1", "2026-Q2", "2026-Q3", "2026-Q4",
+  "2027-Q1", "2027-Q2", "2027-Q3", "2027-Q4",
 ];
 
 interface Props {
@@ -39,6 +46,8 @@ type FormState = {
   end_date: string;
   est_hours: string;
   budget: string;
+  initiative_id: string;
+  planned_it_start: string;
 };
 
 function blank(): FormState {
@@ -53,12 +62,16 @@ function blank(): FormState {
     end_date: "",
     est_hours: "",
     budget: "",
+    initiative_id: "",
+    planned_it_start: "",
   };
 }
 
 export function NewProjectDialog({ open, onOpenChange }: Props) {
   const [form, setForm] = useState<FormState>(blank);
   const mutation = useCreateProject();
+  const initQuery = useInitiatives();
+  const initiatives = initQuery.data ?? [];
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -87,6 +100,8 @@ export function NewProjectDialog({ open, onOpenChange }: Props) {
       end_date: form.end_date || null,
       est_hours: Number.parseFloat(form.est_hours) || 0,
       budget: Number.parseFloat(form.budget) || 0,
+      initiative_id: form.initiative_id || null,
+      planned_it_start: form.planned_it_start || null,
     };
     try {
       const created = await mutation.mutateAsync(payload);
@@ -187,6 +202,37 @@ export function NewProjectDialog({ open, onOpenChange }: Props) {
                 onChange={(v) => set("end_date", v)}
               />
             </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Initiative (optional)">
+              <select
+                value={form.initiative_id}
+                onChange={(e) => set("initiative_id", e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
+              >
+                <option value="">— none —</option>
+                {initiatives.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.id} · {i.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {form.health.includes("PIPELINE") && (
+              <Field label="Planned IT start">
+                <select
+                  value={form.planned_it_start}
+                  onChange={(e) => set("planned_it_start", e.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
+                >
+                  <option value="">— select quarter —</option>
+                  {QUARTER_OPTIONS.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
