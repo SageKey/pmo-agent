@@ -90,7 +90,7 @@ export function InitiativeDialog({ open, onOpenChange, initiative }: Props) {
       name: form.name.trim(),
       description: form.description || null,
       sponsor: form.sponsor || null,
-      status: form.status,
+      status: form.status as "Active" | "Complete" | "On Hold",
       it_involvement: form.it_involvement,
       priority: form.priority || null,
       target_start: form.target_start || null,
