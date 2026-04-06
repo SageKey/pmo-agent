@@ -11,10 +11,11 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Optional
 
+from config import get_config
 from models import Project
 from sqlite_connector import SQLiteConnector
 
-DB_PATH = Path(__file__).parent / "pmo_snapshots.db"
+DB_PATH = Path(get_config().snapshot_db_path)
 
 
 def _json_serial(obj):

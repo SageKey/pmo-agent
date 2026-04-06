@@ -9,12 +9,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from config import get_config
 from models import (
     Project, TeamMember, RMAssumptions, ProjectAssignment,
     SDLC_PHASES, ROLE_KEYS, _to_date,
 )
 
-DEFAULT_DB = "pmo_data.db"
+DEFAULT_DB = get_config().db_path
 
 # Schema version — bump when schema changes
 SCHEMA_VERSION = 5

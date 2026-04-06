@@ -13,15 +13,13 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from sqlite_connector import SQLiteConnector, DEFAULT_DB
+from config import get_config
+from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
 from models import SDLC_PHASES, clean_health as _clean_health
 
 
-DB_PATH = os.environ.get(
-    "PMO_DB_PATH",
-    str(Path(__file__).parent / DEFAULT_DB),
-)
+DB_PATH = get_config().db_path
 
 SEED_SQL = Path(__file__).parent / "seed_data.sql"
 

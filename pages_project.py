@@ -4,6 +4,8 @@ import os
 from collections import defaultdict
 from datetime import datetime, date
 
+from config import get_config
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -319,7 +321,7 @@ def _render_new_project_form(data):
             st.error(result, icon="🚫")
         else:
             # Push health to Jira if token available
-            jira_token = os.environ.get("JIRA_API_TOKEN", "")
+            jira_token = get_config().jira_api_token
             if jira_token and fields.get("health"):
                 from jira_sync import push_health_to_jira
                 jira_err = push_health_to_jira(proj_id.strip(), fields["health"], jira_token)
@@ -601,7 +603,7 @@ def _render_edit_form(project, data):
             st.error(result, icon="🚫")
         else:
             # Push health to Jira if token available
-            jira_token = os.environ.get("JIRA_API_TOKEN", "")
+            jira_token = get_config().jira_api_token
             if jira_token and fields.get("health"):
                 from jira_sync import push_health_to_jira
                 jira_err = push_health_to_jira(project.id, fields["health"], jira_token)

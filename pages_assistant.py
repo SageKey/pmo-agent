@@ -1,32 +1,23 @@
 """AI Assistant page for the ETE PMO Dashboard."""
 
 import json
-import os
 import time
-from pathlib import Path
 
 import streamlit as st
 
+from config import get_config
+
 
 def _get_api_key() -> str:
-    """Get API key from env, .env file, or Streamlit secrets."""
-    key = os.environ.get("ANTHROPIC_API_KEY")
+    """Get API key from config, falling back to Streamlit secrets."""
+    key = get_config().anthropic_api_key
     if key:
         return key
-
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("ANTHROPIC_API_KEY="):
-                return line.split("=", 1)[1].strip().strip("'\"")
-
     try:
         if hasattr(st, "secrets") and "ANTHROPIC_API_KEY" in st.secrets:
             return st.secrets["ANTHROPIC_API_KEY"]
     except Exception:
         pass
-
     return ""
 
 

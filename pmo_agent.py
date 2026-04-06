@@ -13,32 +13,11 @@ from typing import Optional
 
 import anthropic
 
+from config import get_config
 from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
 from snapshot_store import SnapshotStore
 from schedule_optimizer import ScheduleOptimizer
-
-# ---------------------------------------------------------------------------
-# Load API key from env or .env file
-# ---------------------------------------------------------------------------
-def _load_api_key() -> str:
-    key = os.environ.get("ANTHROPIC_API_KEY")
-    if key:
-        return key
-
-    env_path = Path(__file__).parent / ".env"
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("ANTHROPIC_API_KEY="):
-                key = line.split("=", 1)[1].strip().strip("'\"")
-                os.environ["ANTHROPIC_API_KEY"] = key
-                return key
-
-    print("ERROR: No API key found.")
-    print("Set ANTHROPIC_API_KEY env var or create a .env file with:")
-    print("  ANTHROPIC_API_KEY=sk-ant-...")
-    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -999,10 +978,15 @@ class PMOTools:
 # ---------------------------------------------------------------------------
 # Chat Loop
 # ---------------------------------------------------------------------------
-MODEL = "claude-sonnet-4-6"
+MODEL = get_config().anthropic_model
 
 def run_chat():
-    api_key = _load_api_key()
+    api_key = get_config().anthropic_api_key
+    if not api_key:
+        print("ERROR: No API key found.")
+        print("Set ANTHROPIC_API_KEY env var or create a .env file with:")
+        print("  ANTHROPIC_API_KEY=sk-ant-...")
+        sys.exit(1)
     client = anthropic.Anthropic(api_key=api_key)
     tools = PMOTools()
     messages = []
