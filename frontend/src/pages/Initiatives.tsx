@@ -21,11 +21,6 @@ const PRIORITY_BG: Record<string, string> = {
   Low: "bg-slate-50 text-slate-500",
 };
 
-const STATUS_STYLE: Record<string, { bg: string; text: string }> = {
-  Active: { bg: "bg-emerald-50", text: "text-emerald-700" },
-  Complete: { bg: "bg-slate-100", text: "text-slate-600" },
-  "On Hold": { bg: "bg-amber-50", text: "text-amber-700" },
-};
 
 export function Initiatives() {
   const { data, isLoading } = useInitiatives();
