@@ -1563,7 +1563,7 @@ class CapacityEngine:
         print("-" * 60)
 
         for role in ["pm", "dba", "ba", "functional", "technical", "developer",
-                      "infrastructure", "wms"]:
+                      "infrastructure", "erp"]:
             if role not in utilization:
                 continue
             u = utilization[role]
@@ -1577,7 +1577,7 @@ class CapacityEngine:
         print("=" * 72)
 
         for role in ["pm", "dba", "ba", "functional", "technical", "developer",
-                      "infrastructure", "wms"]:
+                      "infrastructure", "erp"]:
             if role not in utilization:
                 continue
             u = utilization[role]

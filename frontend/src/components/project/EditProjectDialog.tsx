@@ -46,7 +46,7 @@ const ROLE_KEYS = [
   "developer",
   "infrastructure",
   "dba",
-  "wms",
+  "erp",
 ] as const;
 
 const ROLE_LABEL: Record<string, string> = {
@@ -57,7 +57,7 @@ const ROLE_LABEL: Record<string, string> = {
   developer: "Developer",
   infrastructure: "Infrastructure",
   dba: "DBA",
-  wms: "WMS",
+  erp: "ERP",
 };
 
 interface Props {

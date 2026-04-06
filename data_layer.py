@@ -421,7 +421,7 @@ def load_weekly_heatmap(_mtime: float, weeks: int = 26) -> pd.DataFrame:
                         demand_grid[role_key][week_idx] += snap.role_demand_hrs
 
         role_order = ["pm", "ba", "functional", "technical", "developer",
-                      "infrastructure", "dba", "wms"]
+                      "infrastructure", "dba", "erp"]
         week_labels = [
             (scan_start + timedelta(weeks=i)).strftime("%b %d")
             for i in range(weeks)

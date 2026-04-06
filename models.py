@@ -26,7 +26,7 @@ PORTFOLIO_ROLE_COLUMNS = {
     "Y": (25, "infrastructure"),
     "Z": (26, "dba"),
     "AA": (27, "pm"),
-    "AB": (28, "wms"),
+    "AB": (28, "erp"),
 }
 
 # RM_Assumptions role labels → canonical keys
@@ -38,7 +38,7 @@ ASSUMPTIONS_ROLE_MAP = {
     "IT Tech Analyst/Developer": "technical",
     "Developer": "developer",
     "Infrastructure": "infrastructure",
-    "WMS Consultant": "wms",
+    "ERP Consultant": "erp",
 }
 
 # Roster role names → canonical keys
@@ -50,11 +50,11 @@ ROSTER_ROLE_MAP = {
     "Technical": "technical",
     "Developer": "developer",
     "Infrastructure": "infrastructure",
-    "WMS Consultant": "wms",
+    "ERP Consultant": "erp",
 }
 
 ROLE_KEYS = ["pm", "ba", "functional", "technical", "developer",
-             "infrastructure", "dba", "wms"]
+             "infrastructure", "dba", "erp"]
 
 # ---------------------------------------------------------------------------
 # Form / Display Constants

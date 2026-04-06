@@ -27,7 +27,7 @@ const ROLE_OPTIONS = [
   { key: "developer", label: "Developer" },
   { key: "infrastructure", label: "Infrastructure" },
   { key: "dba", label: "DBA" },
-  { key: "wms", label: "WMS" },
+  { key: "erp", label: "ERP" },
 ];
 
 type BuilderMode = "closed" | "add_project" | "cancel_project" | "exclude_person" | "add_person" | "shift_project" | "change_allocation" | "resize_project";

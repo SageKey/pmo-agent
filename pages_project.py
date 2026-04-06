@@ -195,7 +195,7 @@ def _render_new_project_form(data):
         extra_roles = [
             ("Infrastructure", "infrastructure", "alloc_infrastructure"),
             ("DBA", "dba", "alloc_dba"),
-            ("WMS Consultant", "wms", "alloc_wms"),
+            ("ERP Consultant", "erp", "alloc_wms"),
         ]
         er_cols = st.columns(3)
         for i, (label, role_key, alloc_key) in enumerate(extra_roles):
@@ -464,7 +464,7 @@ def _render_edit_form(project, data):
         extra_roles = [
             ("Infrastructure", "infrastructure", "alloc_infrastructure"),
             ("DBA", "dba", "alloc_dba"),
-            ("WMS Consultant", "wms", "alloc_wms"),
+            ("ERP Consultant", "erp", "alloc_wms"),
         ]
         er_cols = st.columns(3)
         for i, (label, role_key, alloc_key) in enumerate(extra_roles):
@@ -1154,7 +1154,7 @@ def _dlg_add_task(project, milestones: list):
             t_hours = st.number_input("Est Hours", min_value=0.0, step=4.0)
         t_role = st.selectbox("Role",
             ["pm", "ba", "functional", "technical", "developer",
-             "infrastructure", "dba", "wms"],
+             "infrastructure", "dba", "erp"],
             format_func=lambda x: ROLE_DISPLAY.get(x, x))
         t_desc = st.text_input("Description (optional)")
         bc1, bc2 = st.columns(2)

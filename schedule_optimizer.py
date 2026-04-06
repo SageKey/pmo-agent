@@ -394,7 +394,7 @@ class ScheduleOptimizer:
                          f"{'Util%':>8} {'Peak Week':>10} {'Status':<8}")
             lines.append("  " + "-" * 70)
             for role in ["pm", "dba", "ba", "functional", "technical",
-                         "developer", "infrastructure", "wms"]:
+                         "developer", "infrastructure", "erp"]:
                 if role not in result.utilization_after:
                     continue
                 u = result.utilization_after[role]

@@ -14,7 +14,7 @@ const ROLE_LABEL: Record<string, string> = {
   developer: "Developer",
   infrastructure: "Infrastructure",
   dba: "DBA",
-  wms: "WMS",
+  erp: "ERP",
 };
 
 const STATUS_STYLE: Record<string, string> = {

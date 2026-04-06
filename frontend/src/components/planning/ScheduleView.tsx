@@ -24,7 +24,7 @@ const ROLE_LABEL: Record<string, string> = {
   developer: "Developer",
   infrastructure: "Infrastructure",
   dba: "DBA",
-  wms: "WMS",
+  erp: "ERP",
 };
 
 const PRIORITY_BG: Record<string, string> = {

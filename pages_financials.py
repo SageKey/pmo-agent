@@ -541,7 +541,7 @@ def render(data: dict, utilization: dict, person_demand: list):
         "pm": "Project Manager", "ba": "Business Analyst",
         "functional": "Functional", "technical": "Technical",
         "developer": "Developer", "infrastructure": "Infrastructure",
-        "dba": "DBA", "wms": "WMS Consultant",
+        "dba": "DBA", "erp": "ERP Consultant",
     }
 
     insight_rows = []
