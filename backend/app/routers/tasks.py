@@ -45,7 +45,7 @@ def create_task(
         title=payload.title,
         milestone_id=payload.milestone_id,
         parent_task_id=payload.parent_task_id,
-        description=payload.description,
+        notes=payload.notes,
         assignee=payload.assignee,
         role_key=payload.role_key,
         start_date=payload.start_date,
@@ -57,6 +57,7 @@ def create_task(
         jira_key=payload.jira_key,
         sort_order=payload.sort_order,
         actor="WebUI",
+        updated_by=payload.updated_by,
     )
     return TaskOut(**_find_task(conn, task_id))
 
@@ -81,7 +82,7 @@ def update_task(
         title=merged["title"],
         milestone_id=merged.get("milestone_id"),
         parent_task_id=merged.get("parent_task_id"),
-        description=merged.get("description"),
+        notes=merged.get("notes"),
         assignee=merged.get("assignee"),
         role_key=merged.get("role_key"),
         start_date=merged.get("start_date"),
@@ -94,6 +95,7 @@ def update_task(
         sort_order=merged.get("sort_order") or 0,
         task_id=task_id,
         actor="WebUI",
+        updated_by=merged.get("updated_by"),
     )
     return TaskOut(**_find_task(conn, task_id))
 

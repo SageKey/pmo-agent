@@ -16,7 +16,7 @@ import { EditTaskDialog } from "@/components/project/EditTaskDialog";
 import { useMilestones, useAddMilestone } from "@/hooks/useMilestones";
 import { useTasks, useCompleteTask } from "@/hooks/useTasks";
 import { cn } from "@/lib/cn";
-import { shortDate } from "@/lib/format";
+import { shortDate, timeAgo } from "@/lib/format";
 import type { Milestone } from "@/types/milestone";
 import type { Task } from "@/types/task";
 
@@ -459,14 +459,24 @@ function TaskRow({
         >
           <StatusIcon className="h-4 w-4" />
         </button>
-        <span
-          className={cn(
-            "truncate font-medium text-slate-800",
-            isComplete && "line-through text-slate-500",
+        <div className="min-w-0 flex-1">
+          <div
+            className={cn(
+              "truncate font-medium text-slate-800",
+              isComplete && "line-through text-slate-500",
+            )}
+          >
+            {t.title}
+          </div>
+          {t.updated_at && t.updated_by && (
+            <div
+              className="mt-0.5 truncate text-[10px] text-slate-400"
+              title={`Updated ${new Date(t.updated_at).toLocaleString()}`}
+            >
+              Updated by {t.updated_by} · {timeAgo(t.updated_at)}
+            </div>
           )}
-        >
-          {t.title}
-        </span>
+        </div>
       </div>
 
       {/* Assignee */}

@@ -4,7 +4,7 @@ export interface Task {
   milestone_id: number | null;
   parent_task_id: number | null;
   title: string;
-  description: string | null;
+  notes: string | null; // Rich HTML (renamed from description in v7)
   assignee: string | null;
   role_key: string | null;
   start_date: string | null;
@@ -18,4 +18,5 @@ export interface Task {
   sort_order: number | null;
   created_at: string | null;
   updated_at: string | null;
+  updated_by: string | null;
 }

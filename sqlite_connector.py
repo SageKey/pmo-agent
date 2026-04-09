@@ -17,7 +17,7 @@ from models import (
 DEFAULT_DB = "pmo_data.db"
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
@@ -268,7 +268,7 @@ CREATE TABLE IF NOT EXISTS project_tasks (
     milestone_id    INTEGER REFERENCES project_milestones(id) ON DELETE SET NULL,
     parent_task_id  INTEGER REFERENCES project_tasks(id) ON DELETE CASCADE,
     title           TEXT NOT NULL,
-    description     TEXT,
+    notes           TEXT,
     assignee        TEXT,
     role_key        TEXT,
     start_date      TEXT,
@@ -281,7 +281,8 @@ CREATE TABLE IF NOT EXISTS project_tasks (
     jira_key        TEXT,
     sort_order      INTEGER DEFAULT 0,
     created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
+    updated_at      TEXT DEFAULT (datetime('now')),
+    updated_by      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pt_project ON project_tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_pt_milestone ON project_tasks(milestone_id);
@@ -475,6 +476,20 @@ class SQLiteConnector:
                 self._conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {col_type}")
             except Exception:
                 pass
+        # Task rename description → notes + new updated_by column (v7 migration).
+        # Rename is idempotent: SELECT probe checks which column exists.
+        try:
+            cols = [r[1] for r in self._conn.execute("PRAGMA table_info(project_tasks)").fetchall()]
+            if "description" in cols and "notes" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE project_tasks RENAME COLUMN description TO notes"
+                )
+            if "updated_by" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE project_tasks ADD COLUMN updated_by TEXT"
+                )
+        except Exception:
+            pass
         # Seed default app_settings rows (idempotent — INSERT OR IGNORE on key)
         self._seed_default_settings()
         self._conn.commit()
@@ -1813,23 +1828,32 @@ class SQLiteConnector:
                   est_hours: float = 0.0, status: str = "not_started",
                   progress_pct: float = 0.0, priority: str = "Medium",
                   jira_key: str = None, sort_order: int = 0,
-                  description: str = None, task_id: int = None,
-                  actor: str = "System") -> int:
-        """Create or update a task. Returns task ID."""
+                  notes: str = None, task_id: int = None,
+                  actor: str = "System",
+                  updated_by: str = None) -> int:
+        """Create or update a task. Returns task ID.
+
+        `notes` replaces the old `description` field (v7 rename — stored in
+        the `notes` column). `updated_by` is a display name string captured
+        on every write so the UI can show "updated by X".
+        """
         conn = self._open()
+        # Default updated_by to actor for backward compat — explicit value
+        # from the router takes precedence
+        who = updated_by or actor
         if task_id:
             conn.execute(
                 """UPDATE project_tasks SET
                    title=?, milestone_id=?, parent_task_id=?,
                    assignee=?, role_key=?, start_date=?, end_date=?,
                    est_hours=?, status=?, progress_pct=?, priority=?,
-                   jira_key=?, sort_order=?, description=?,
-                   updated_at=datetime('now')
+                   jira_key=?, sort_order=?, notes=?,
+                   updated_at=datetime('now'), updated_by=?
                    WHERE id=?""",
                 (title, milestone_id, parent_task_id,
                  assignee, role_key, start_date, end_date,
                  est_hours, status, progress_pct, priority,
-                 jira_key, sort_order, description, task_id),
+                 jira_key, sort_order, notes, who, task_id),
             )
             self._log_audit(project_id, "task_updated", actor, details=title)
             conn.commit()
@@ -1840,12 +1864,12 @@ class SQLiteConnector:
                    (project_id, title, milestone_id, parent_task_id,
                     assignee, role_key, start_date, end_date,
                     est_hours, status, progress_pct, priority,
-                    jira_key, sort_order, description)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    jira_key, sort_order, notes, updated_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (project_id, title, milestone_id, parent_task_id,
                  assignee, role_key, start_date, end_date,
                  est_hours, status, progress_pct, priority,
-                 jira_key, sort_order, description),
+                 jira_key, sort_order, notes, who),
             )
             tid = cur.lastrowid
             self._log_audit(project_id, "task_added", actor, details=title)

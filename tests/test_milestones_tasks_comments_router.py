@@ -167,6 +167,46 @@ class TestTasksRouter:
         r = api_client.delete(f"{T_API}/id/99999")
         assert r.status_code == 404
 
+    def test_task_notes_field(self, api_client, project_id):
+        """v7 rename: description → notes. Rich HTML stored in notes column."""
+        r = api_client.post(
+            f"{T_API}/{project_id}",
+            json={
+                "title": "Task with notes",
+                "notes": "<p>Some <strong>rich</strong> text</p>",
+            },
+        )
+        assert r.status_code == 201
+        assert r.json()["notes"] == "<p>Some <strong>rich</strong> text</p>"
+
+    def test_task_updated_by_on_create(self, api_client, project_id):
+        """updated_by captured on POST."""
+        r = api_client.post(
+            f"{T_API}/{project_id}",
+            json={"title": "By test", "updated_by": "Marcus Bell"},
+        )
+        assert r.status_code == 201
+        assert r.json()["updated_by"] == "Marcus Bell"
+
+    def test_task_updated_by_on_update(self, api_client, project_id):
+        """updated_by captured on PATCH — should reflect the latest editor."""
+        created = api_client.post(
+            f"{T_API}/{project_id}",
+            json={"title": "Initial", "updated_by": "Alice"},
+        ).json()
+        assert created["updated_by"] == "Alice"
+
+        r = api_client.patch(
+            f"{T_API}/id/{created['id']}",
+            json={
+                "project_id": project_id,
+                "title": "Renamed",
+                "updated_by": "Bob",
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["updated_by"] == "Bob"
+
 
 # ---------------------------------------------------------------------------
 # Comments

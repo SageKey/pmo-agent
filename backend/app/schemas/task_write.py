@@ -10,7 +10,7 @@ class TaskCreate(BaseModel):
     title: str
     milestone_id: Optional[int] = None
     parent_task_id: Optional[int] = None
-    description: Optional[str] = None
+    notes: Optional[str] = None  # Rich HTML
     assignee: Optional[str] = None
     role_key: Optional[str] = None
     start_date: Optional[str] = None
@@ -21,6 +21,7 @@ class TaskCreate(BaseModel):
     priority: str = "Medium"
     jira_key: Optional[str] = None
     sort_order: int = 0
+    updated_by: Optional[str] = None  # Display name of the user making this change
 
 
 class TaskUpdate(BaseModel):
@@ -30,7 +31,7 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     milestone_id: Optional[int] = None
     parent_task_id: Optional[int] = None
-    description: Optional[str] = None
+    notes: Optional[str] = None  # Rich HTML
     assignee: Optional[str] = None
     role_key: Optional[str] = None
     start_date: Optional[str] = None
@@ -41,6 +42,7 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     jira_key: Optional[str] = None
     sort_order: Optional[int] = None
+    updated_by: Optional[str] = None
     # project_id is required so save_task() has audit context when the
     # only thing we know is the task_id
     project_id: str

@@ -22,7 +22,7 @@ export interface TaskCreatePayload {
   title: string;
   milestone_id?: number | null;
   parent_task_id?: number | null;
-  description?: string | null;
+  notes?: string | null; // Rich HTML
   assignee?: string | null;
   role_key?: string | null;
   start_date?: string | null;
@@ -32,6 +32,7 @@ export interface TaskCreatePayload {
   progress_pct?: number;
   priority?: string;
   sort_order?: number;
+  updated_by?: string | null;
 }
 
 export interface TaskUpdatePayload extends Partial<TaskCreatePayload> {

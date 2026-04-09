@@ -15,6 +15,8 @@ import {
   useUpdateTask,
 } from "@/hooks/useTasks";
 import { useRoster } from "@/hooks/useRoster";
+import { useDisplayName } from "@/hooks/useDisplayName";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import type { Task } from "@/types/task";
 import type { Milestone } from "@/types/milestone";
 
@@ -47,7 +49,7 @@ type FormState = {
   start_date: string;
   end_date: string;
   est_hours: string;
-  description: string;
+  notes: string; // Rich HTML
 };
 
 function blank(defaultMilestoneId?: number | null): FormState {
@@ -60,7 +62,7 @@ function blank(defaultMilestoneId?: number | null): FormState {
     start_date: "",
     end_date: "",
     est_hours: "",
-    description: "",
+    notes: "",
   };
 }
 
@@ -74,7 +76,7 @@ function fromTask(t: Task): FormState {
     start_date: t.start_date ?? "",
     end_date: t.end_date ?? "",
     est_hours: t.est_hours?.toString() ?? "",
-    description: t.description ?? "",
+    notes: t.notes ?? "",
   };
 }
 
@@ -94,6 +96,7 @@ export function EditTaskDialog({
   const mutation = isEdit ? updateMut : createMut;
   const rosterQuery = useRoster();
   const roster = rosterQuery.data ?? [];
+  const [displayName] = useDisplayName();
 
   useEffect(() => {
     if (open) {
@@ -120,7 +123,8 @@ export function EditTaskDialog({
       start_date: form.start_date || null,
       end_date: form.end_date || null,
       est_hours: parseFloat(form.est_hours) || 0,
-      description: form.description || null,
+      notes: form.notes || null,
+      updated_by: displayName || null,
     };
     try {
       if (isEdit && task) {
@@ -260,13 +264,10 @@ export function EditTaskDialog({
             </Field>
           </div>
 
-          <Field label="Description">
-            <textarea
-              value={form.description}
-              onChange={(e) => set("description", e.target.value)}
-              rows={2}
-              placeholder="Optional context"
-              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
+          <Field label="Notes">
+            <RichTextEditor
+              value={form.notes}
+              onChange={(html) => set("notes", html)}
             />
           </Field>
 

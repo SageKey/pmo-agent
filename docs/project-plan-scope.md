@@ -125,6 +125,64 @@ Open any project on the live site after deploy and:
 
 ---
 
+## Iteration 3 — Rich-text notes + updated-by indicator (shipped, awaiting review)
+
+Tester feedback pulled in:
+1. Description field needs WYSIWYG (bold, italic, bullets) — rename to "Notes" so it reads like running task updates
+2. Show when and by whom the task was last updated, inline
+
+### Data model (v7 migration)
+
+| Item | Status | Notes |
+|---|---|---|
+| `project_tasks.description` renamed to `notes` | 🟢 | Idempotent ALTER TABLE RENAME COLUMN |
+| New `project_tasks.updated_by` column | 🟢 | TEXT, nullable, captured on every save |
+| SCHEMA_VERSION bumped 6 → 7 | 🟢 | |
+
+### Backend
+
+| Item | Status | Notes |
+|---|---|---|
+| `save_task()` signature: `description` → `notes`, added `updated_by` param | 🟢 🧪 | |
+| TaskOut schema: `description` → `notes`, added `updated_by` | 🟢 🧪 | |
+| TaskCreate + TaskUpdate schemas: renamed field, added `updated_by` | 🟢 🧪 | |
+| Router POST + PATCH pass new fields through | 🟢 🧪 | |
+| 3 new backend tests: notes field roundtrip, updated_by on create, updated_by on update | 🟢 🧪 | |
+
+### Frontend
+
+| Item | Status | Notes |
+|---|---|---|
+| TipTap packages added to package.json (`@tiptap/react`, `@tiptap/starter-kit`) | 🟢 | |
+| `dompurify` + `@types/dompurify` added (available for future HTML sanitization) | 🟢 | |
+| New `RichTextEditor` component with toolbar (B / I / H / • / 1. / undo / redo) | 🟢 | `frontend/src/components/ui/RichTextEditor.tsx` |
+| `Task` type: `description` → `notes`, added `updated_by` | 🟢 | |
+| `TaskCreatePayload`: same rename + `updated_by` | 🟢 | |
+| EditTaskDialog: "Description" textarea replaced with RichTextEditor labeled "Notes" | 🟢 | |
+| EditTaskDialog: `updated_by` populated from `useDisplayName` on every save | 🟢 | Uses existing display name hook (localStorage-backed) |
+| PlanPanel task row: "Updated by {name} · {time ago}" under title | 🟢 | Full ISO timestamp shown in tooltip on hover |
+| New `timeAgo()` helper in `lib/format.ts` | 🟢 | Returns "just now" / "5m ago" / "2h ago" / "3d ago" / "MM-DD" |
+
+### CI / infra
+
+| Item | Status | Notes |
+|---|---|---|
+| Changed GitHub Actions from `npm ci` to `npm install` | 🟢 | `npm ci` requires package-lock.json to be pre-updated; `npm install` resolves and installs the new TipTap packages on the fly |
+
+### Awaiting Brett's approval
+
+After deploy lands:
+- [ ] Open any project, add or open a task
+- [ ] Notes field shows a toolbar (B / I / H / • / 1. / undo / redo)
+- [ ] Click Bold, type text → appears bold
+- [ ] Click bullet list, type multiple lines → bulleted list
+- [ ] Save the task, reopen it → formatting persists
+- [ ] Task row shows "Updated by Brett Anderson · just now" under the title
+- [ ] Hover the "updated" text → tooltip shows full timestamp with time of day
+- [ ] Old tasks without an update history show no "updated by" line (only shows when both updated_at and updated_by are set)
+
+---
+
 ## Explicitly out of scope for Iteration 1 (decide later)
 
 Each of these is a concrete future iteration. Brett decides if/when to implement.
@@ -177,3 +235,4 @@ After each iteration ships:
 | 2026-04-09 | Iteration 2 | Brett picked inline editing + phase rollups. Shipped: 4 inline editor primitives (InlineText/Select/Date/Number), all task columns editable in place, rollup strip on every phase header with count/hours/%/dates + progress bar. 273 tests passing. Awaiting review. |
 | 2026-04-09 | Iteration 2.1 | Brett reviewed: inline editing didn't work (dropdowns clipped by Card's overflow-hidden), auto-save-on-change philosophy wrong, assignee should be roster-sourced, rollup stats hidden when tasks lack hours/dates. FIX: reverted all inline editing back to modal-only, roster dropdown replaces free-text assignee, rollup strip always renders with empty-state placeholders, % complete falls back to count-based when hours=0, full row click opens modal. 273 tests still passing. |
 | 2026-04-09 | Iteration 2.1 | ✅ Brett approved on the live site. Rollup strip showing correctly, assignee dropdown working, modal editing working, row click opens modal. Ready to pick next items from deferred list. |
+| 2026-04-09 | Iteration 3 | Tester (Brett's colleague) feedback: task notes need rich text (bold, italic, bullets), task row should show when/who last updated. Shipped: SCHEMA_VERSION bumped 6→7, `description` column renamed to `notes`, new `updated_by` column, TipTap-based RichTextEditor component, EditTaskDialog uses it, PlanPanel shows "Updated by X · time ago" under each task title. 276 backend tests passing. |
