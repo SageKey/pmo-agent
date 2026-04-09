@@ -28,8 +28,21 @@ export function RichTextEditor({
     editorProps: {
       attributes: {
         class: cn(
-          "prose prose-sm max-w-none focus:outline-none",
-          "text-slate-800",
+          "max-w-none text-sm text-slate-800 focus:outline-none",
+          // List + heading + inline-formatting styles (Tailwind doesn't
+          // add these by default — typography plugin would, but we
+          // don't want to add another dependency)
+          "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6",
+          "[&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6",
+          "[&_li]:my-0.5",
+          "[&_h1]:my-2 [&_h1]:text-2xl [&_h1]:font-bold",
+          "[&_h2]:my-2 [&_h2]:text-xl [&_h2]:font-bold",
+          "[&_h3]:my-1.5 [&_h3]:text-base [&_h3]:font-semibold",
+          "[&_p]:my-1",
+          "[&_strong]:font-bold",
+          "[&_em]:italic",
+          "[&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-600",
+          "[&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
         ),
         style: `min-height: ${minHeight}px;`,
       },
