@@ -444,11 +444,11 @@ class CapacityEngine:
         Calculate weekly demand for each role on a project.
 
         Average weekly demand:
-            Est.Hours × Role% × Role_Avg_Effort / Duration_weeks
+            Est.Hours × Role% / Duration_weeks
 
         Phase-aware weekly demand (for each SDLC phase):
-            Est.Hours × Role% × Role_Phase_Effort / Duration_weeks
-            (mathematically, phase weights cancel out — see spec derivation)
+            Est.Hours × Role% × Phase_Effort / (Duration_weeks × Phase_Weight)
+            i.e. the fraction of work in that phase spread over the phase's duration.
 
         CRITICAL: Demand is ZERO if Role% == 0 (the allocation gate).
         """
@@ -459,28 +459,33 @@ class CapacityEngine:
             return demands
 
         role_phase_efforts = self.assumptions.role_phase_efforts
-        role_avg_efforts = self.assumptions.role_avg_efforts
+        phase_weights = self.assumptions.sdlc_phase_weights
 
         for role_key, alloc_pct in project.role_allocations.items():
             # THE GATE: skip roles with zero allocation
             if alloc_pct <= 0:
                 continue
 
-            if role_key not in role_avg_efforts:
+            if role_key not in role_phase_efforts:
                 continue
 
             # Average weekly demand across all phases
-            avg_effort = role_avg_efforts[role_key]
-            avg_weekly = project.est_hours * alloc_pct * avg_effort / duration
+            # NO avg_effort multiplier — phase efforts describe distribution,
+            # not a reduction factor. They sum to 1.0 by design.
+            avg_weekly = project.est_hours * alloc_pct / duration
 
             # Phase-specific weekly demand
+            # phase_effort = fraction of role's total hours in this phase
+            # phase_weight = fraction of project duration in this phase
+            # weekly = total_role_hrs × phase_effort / (duration × phase_weight)
             phase_weekly = {}
-            if role_key in role_phase_efforts:
-                for phase in SDLC_PHASES:
-                    phase_effort = role_phase_efforts[role_key].get(phase, 0.0)
-                    phase_weekly[phase] = (
-                        project.est_hours * alloc_pct * phase_effort / duration
-                    )
+            for phase in SDLC_PHASES:
+                phase_effort = role_phase_efforts[role_key].get(phase, 0.0)
+                pw = phase_weights.get(phase, 0.0)
+                if pw > 0:
+                    phase_weekly[phase] = project.est_hours * alloc_pct * phase_effort / (duration * pw)
+                else:
+                    phase_weekly[phase] = 0.0
 
             demands.append(RoleDemand(
                 project_id=project.id,
