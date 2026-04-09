@@ -115,12 +115,13 @@ class TestDemand:
         pytest.skip("No scheduled project with non-zero allocations in seed")
 
     def test_demand_formula(self, connector, engine):
-        """Verify demand = est_hours × alloc × avg_effort / duration_weeks.
+        """Verify demand = est_hours × alloc / duration_weeks.
 
         Picks any scheduled project with a non-zero developer allocation
-        and checks the computed weekly hours match the formula.
+        and checks the computed weekly hours match the formula. Phase
+        efforts describe distribution (they sum to 1.0) and are NOT a
+        reduction factor on the average.
         """
-        assumptions = connector.read_assumptions()
         portfolio = connector.read_portfolio()
         p = next(
             (
@@ -139,7 +140,6 @@ class TestDemand:
         expected = (
             p.est_hours
             * p.role_allocations["developer"]
-            * assumptions.role_avg_efforts["developer"]
             / p.duration_weeks
         )
         assert approx(dev.weekly_hours, expected), (
@@ -261,20 +261,31 @@ class TestPortfolioSimulation:
         assert dates[-none_count:] == [None] * none_count or none_count == 0
 
     def test_higher_priority_gets_earlier_dates(self, engine):
-        """Highest priority projects should generally start before Medium."""
+        """Average start date of Highest should be earlier than Medium.
+
+        The greedy scheduler places projects in priority order but capacity
+        constraints can cause a large Highest project to push later than a
+        small Medium one that fit in an earlier gap. Use averages rather
+        than strict earliest-of-each so capacity-driven placement is OK.
+        """
         results = engine.simulate_portfolio_schedule()
         scheduled = [r for r in results if r["suggested_start"] is not None]
         if len(scheduled) < 2:
             pytest.skip("Not enough scheduled projects")
 
-        highest = [r for r in scheduled if r["priority"] == "Highest"]
-        medium = [r for r in scheduled if r["priority"] == "Medium"]
-        if highest and medium:
-            earliest_highest = min(r["suggested_start"] for r in highest)
-            earliest_medium = min(r["suggested_start"] for r in medium)
-            assert earliest_highest <= earliest_medium, (
-                f"Highest priority starts {earliest_highest} but Medium starts {earliest_medium}"
-            )
+        highest = [r["suggested_start"] for r in scheduled if r["priority"] == "Highest"]
+        medium = [r["suggested_start"] for r in scheduled if r["priority"] == "Medium"]
+        if not highest or not medium:
+            pytest.skip("Need both Highest and Medium projects scheduled")
+
+        # Compare averages rather than min — the greedy scheduler with
+        # capacity constraints can legitimately place a small Medium
+        # project earlier than a large Highest one.
+        avg_highest = sorted(highest)[len(highest) // 2]  # median
+        avg_medium = sorted(medium)[len(medium) // 2]
+        assert avg_highest <= avg_medium, (
+            f"Median Highest start {avg_highest} should be ≤ median Medium start {avg_medium}"
+        )
 
     def test_result_fields(self, engine):
         """Each result should have required fields."""

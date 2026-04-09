@@ -74,7 +74,7 @@ class TestMilestonesRouter:
 
 
 # ---------------------------------------------------------------------------
-# Tasks (read-only for now)
+# Tasks
 # ---------------------------------------------------------------------------
 
 class TestTasksRouter:
@@ -82,6 +82,90 @@ class TestTasksRouter:
         r = api_client.get(f"{T_API}/{project_id}")
         assert r.status_code == 200
         assert isinstance(r.json(), list)
+
+    def test_create_task(self, api_client, project_id):
+        r = api_client.post(
+            f"{T_API}/{project_id}",
+            json={
+                "title": "Design review",
+                "assignee": "Marcus Bell",
+                "priority": "High",
+                "status": "not_started",
+                "est_hours": 8,
+                "start_date": "2026-05-01",
+                "end_date": "2026-05-15",
+            },
+        )
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["title"] == "Design review"
+        assert body["assignee"] == "Marcus Bell"
+        assert body["priority"] == "High"
+        assert body["est_hours"] == 8.0
+
+        # It should now appear in the list
+        tasks = api_client.get(f"{T_API}/{project_id}").json()
+        assert any(t["title"] == "Design review" for t in tasks)
+
+    def test_create_task_under_milestone(self, api_client, project_id):
+        ms = api_client.post(
+            f"{M_API}/{project_id}", json={"title": "Discovery Phase"}
+        ).json()
+        r = api_client.post(
+            f"{T_API}/{project_id}",
+            json={"title": "Stakeholder interviews", "milestone_id": ms["id"]},
+        )
+        assert r.status_code == 201
+        assert r.json()["milestone_id"] == ms["id"]
+
+    def test_update_task(self, api_client, project_id):
+        created = api_client.post(
+            f"{T_API}/{project_id}", json={"title": "Original"}
+        ).json()
+        r = api_client.patch(
+            f"{T_API}/id/{created['id']}",
+            json={
+                "project_id": project_id,
+                "title": "Renamed",
+                "status": "in_progress",
+                "progress_pct": 0.5,
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["title"] == "Renamed"
+        assert r.json()["status"] == "in_progress"
+
+    def test_complete_task(self, api_client, project_id):
+        created = api_client.post(
+            f"{T_API}/{project_id}", json={"title": "To complete"}
+        ).json()
+        r = api_client.post(f"{T_API}/id/{created['id']}/complete")
+        assert r.status_code == 204
+
+        tasks = api_client.get(f"{T_API}/{project_id}").json()
+        match = next(t for t in tasks if t["id"] == created["id"])
+        assert match["status"] == "complete"
+
+    def test_delete_task(self, api_client, project_id):
+        created = api_client.post(
+            f"{T_API}/{project_id}", json={"title": "To delete"}
+        ).json()
+        r = api_client.delete(f"{T_API}/id/{created['id']}")
+        assert r.status_code == 204
+
+        tasks = api_client.get(f"{T_API}/{project_id}").json()
+        assert not any(t["id"] == created["id"] for t in tasks)
+
+    def test_update_nonexistent_404(self, api_client, project_id):
+        r = api_client.patch(
+            f"{T_API}/id/99999",
+            json={"project_id": project_id, "title": "x"},
+        )
+        assert r.status_code == 404
+
+    def test_delete_nonexistent_404(self, api_client):
+        r = api_client.delete(f"{T_API}/id/99999")
+        assert r.status_code == 404
 
 
 # ---------------------------------------------------------------------------
