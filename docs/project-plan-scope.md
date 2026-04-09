@@ -125,7 +125,7 @@ Open any project on the live site after deploy and:
 
 ---
 
-## Iteration 3 — Rich-text notes + updated-by indicator (shipped, awaiting review)
+## Iteration 3 — Rich-text notes + updated-by indicator ✅ APPROVED (2026-04-09)
 
 Tester feedback pulled in:
 1. Description field needs WYSIWYG (bold, italic, bullets) — rename to "Notes" so it reads like running task updates
@@ -236,3 +236,5 @@ After each iteration ships:
 | 2026-04-09 | Iteration 2.1 | Brett reviewed: inline editing didn't work (dropdowns clipped by Card's overflow-hidden), auto-save-on-change philosophy wrong, assignee should be roster-sourced, rollup stats hidden when tasks lack hours/dates. FIX: reverted all inline editing back to modal-only, roster dropdown replaces free-text assignee, rollup strip always renders with empty-state placeholders, % complete falls back to count-based when hours=0, full row click opens modal. 273 tests still passing. |
 | 2026-04-09 | Iteration 2.1 | ✅ Brett approved on the live site. Rollup strip showing correctly, assignee dropdown working, modal editing working, row click opens modal. Ready to pick next items from deferred list. |
 | 2026-04-09 | Iteration 3 | Tester (Brett's colleague) feedback: task notes need rich text (bold, italic, bullets), task row should show when/who last updated. Shipped: SCHEMA_VERSION bumped 6→7, `description` column renamed to `notes`, new `updated_by` column, TipTap-based RichTextEditor component, EditTaskDialog uses it, PlanPanel shows "Updated by X · time ago" under each task title. 276 backend tests passing. |
+| 2026-04-09 | Iteration 3.1 | Bullets, numbered lists, and H2 weren't rendering — toolbar was toggling the HTML correctly but Tailwind's CSS reset stripped the markers/sizes (prose class requires @tailwindcss/typography which isn't installed). Fixed with explicit Tailwind arbitrary child selectors on the editor content — no new deps. |
+| 2026-04-09 | Iteration 3 | ✅ Brett approved on the live site. Rich text editor working end-to-end, updated-by indicator showing on task rows. |
