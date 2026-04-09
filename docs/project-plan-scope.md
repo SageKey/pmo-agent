@@ -66,7 +66,7 @@ All items in Iteration 1 are ✅ Approved.
 
 ---
 
-## Iteration 2 — Phase rollups + roster-sourced assignee (shipped)
+## Iteration 2 — Phase rollups + roster-sourced assignee ✅ APPROVED (2026-04-09)
 
 Originally scoped to include inline editing + phase rollups. Inline editing
 was reverted after Brett's feedback: the dropdowns weren't opening (CSS
@@ -176,3 +176,4 @@ After each iteration ships:
 | 2026-04-09 | Iteration 1 | ✅ Brett approved Iteration 1 on the live site. Ready for Iteration 2 scope selection from the deferred list. |
 | 2026-04-09 | Iteration 2 | Brett picked inline editing + phase rollups. Shipped: 4 inline editor primitives (InlineText/Select/Date/Number), all task columns editable in place, rollup strip on every phase header with count/hours/%/dates + progress bar. 273 tests passing. Awaiting review. |
 | 2026-04-09 | Iteration 2.1 | Brett reviewed: inline editing didn't work (dropdowns clipped by Card's overflow-hidden), auto-save-on-change philosophy wrong, assignee should be roster-sourced, rollup stats hidden when tasks lack hours/dates. FIX: reverted all inline editing back to modal-only, roster dropdown replaces free-text assignee, rollup strip always renders with empty-state placeholders, % complete falls back to count-based when hours=0, full row click opens modal. 273 tests still passing. |
+| 2026-04-09 | Iteration 2.1 | ✅ Brett approved on the live site. Rollup strip showing correctly, assignee dropdown working, modal editing working, row click opens modal. Ready to pick next items from deferred list. |
