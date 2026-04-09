@@ -1213,12 +1213,13 @@ class CapacityEngine:
         """Simulate scheduling all plannable projects onto the capacity grid.
 
         Algorithm:
-        1. Seed demand grid with in-development projects
+        1. Seed demand grid from ALL active projects (matches heatmap baseline)
         2. Collect plannable projects (not started, needs spec, pct=0)
         3. Sort by priority (Highest first), then est_hours desc (big first)
-        4. Greedy placement: for each project, scan forward for earliest week
-           where all roles stay under max_util_pct
-        5. Stamp demand into grid so subsequent projects see updated load
+        4. For each plannable project, subtract its existing demand from the
+           grid (so we don't double-count), then scan forward for earliest
+           week where all roles stay under max_util_pct
+        5. Stamp the project's new demand into the grid at its suggested slot
         6. Return results with suggested dates, wait time, bottleneck info
 
         Args:
@@ -1247,8 +1248,11 @@ class CapacityEngine:
         # Filter exclusions
         plannable = [p for p in plannable if p.id not in exclude_ids]
 
-        # Seed demand grid from in-development projects
-        grid = self._build_demand_grid(in_dev, scan_start, horizon_weeks)
+        # Seed demand grid from ALL active projects so the baseline matches
+        # what the heatmap displays. Each plannable project's existing demand
+        # is subtracted before testing it, so we don't double-count.
+        all_active = in_dev + plannable
+        grid = self._build_demand_grid(all_active, scan_start, horizon_weeks)
 
         # Sort plannable: priority order, then largest first within tier
         priority_map = self.PRIORITY_ORDER
@@ -1264,6 +1268,13 @@ class CapacityEngine:
                            if v > 0 and k in role_phase_efforts}
             if not active_roles:
                 continue
+
+            # Subtract this project's existing demand from the grid so we
+            # don't double-count when re-planning it at a new slot.
+            old_demand = self._build_demand_grid([project], scan_start, horizon_weeks)
+            for wk, roles in old_demand.items():
+                for rk, hrs in roles.items():
+                    grid[wk][rk] = max(0.0, grid[wk].get(rk, 0.0) - hrs)
 
             # Get duration estimate
             duration_result = self.estimate_duration(
