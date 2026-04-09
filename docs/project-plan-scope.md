@@ -66,13 +66,64 @@ All items in Iteration 1 are ✅ Approved.
 
 ---
 
+## Iteration 2 — Inline editing + phase rollups (shipped)
+
+Two deferred items pulled in by Brett to transform the plan from "a grouped table" into "a Monday.com-style board."
+
+### Frontend — Inline editing
+
+| Item | Status | Notes |
+|---|---|---|
+| Title: click to edit inline (text input) | 🟢 | Blur or Enter saves, Escape cancels |
+| Assignee: click to edit inline (text input) | 🟢 | Empty string becomes null |
+| Status: click to open dropdown, select, save | 🟢 | Pill-style trigger, popover menu, click-outside to close |
+| Priority: same dropdown pattern | 🟢 | 4 options: Highest/High/Medium/Low |
+| Est hours: click to edit inline (number input) | 🟢 | Right-aligned, tabular-nums |
+| Start/end dates: click to open native date picker | 🟢 | Each editable independently |
+| Edit dialog retained for advanced fields (description, delete) | 🟢 | Pencil icon on hover opens full dialog |
+| `InlineText` / `InlineSelect` / `InlineDate` / `InlineNumber` primitives | 🟢 | Reusable in PlanPanel.tsx |
+
+### Frontend — Per-phase rollups
+
+| Item | Status | Notes |
+|---|---|---|
+| Task count pill | 🟢 | "N tasks" pill next to phase title |
+| Total estimated hours | 🟢 | Sum of `est_hours` for tasks in phase |
+| % complete (weighted by hours) | 🟢 | sum(complete hours) / sum(all hours) |
+| Earliest start → latest end date range | 🟢 | Min start / max end across phase tasks |
+| Mini progress bar next to % | 🟢 | Sky bar, turns emerald at 100% |
+| `computeRollup()` helper function | 🟢 | Pure function, memoized per phase |
+
+### Tests
+
+| Item | Status | Notes |
+|---|---|---|
+| Backend tests unchanged | 🧪 | 273 passing — no new backend work this iteration |
+| Inline editing verified via existing task PATCH endpoint tests | 🧪 | Each field change goes through PATCH /tasks/id/{id} |
+| Rollup calculations: visual verification only | ⏳ | Frontend still has 0 tests (existing gap) |
+
+### Awaiting Brett's approval
+
+Open any project on the live site after deploy and:
+- [ ] Phase headers show: count pill, hours, % complete bar, date range
+- [ ] Click a status pill → dropdown opens → select different → saves
+- [ ] Click priority pill → same pattern
+- [ ] Click task title → becomes input → Enter saves
+- [ ] Click assignee → becomes input → blur saves
+- [ ] Click a date → date picker opens → pick new date → saves
+- [ ] Click est hours → numeric input → Enter saves
+- [ ] Pencil icon on hover still opens full edit dialog
+- [ ] Escape cancels in-progress edit without saving
+
+---
+
 ## Explicitly out of scope for Iteration 1 (decide later)
 
 Each of these is a concrete future iteration. Brett decides if/when to implement.
 
 | Feature | Brett's decision | Notes |
 |---|---|---|
-| **Per-phase rollups** (task count, hours sum, % complete, date range) | ⏳ Undecided | Visual upgrade — matches Monday.com style |
+| **Per-phase rollups** (task count, hours sum, % complete, date range) | 🟡 Iteration 2 | Pulled in 2026-04-09 |
 | **Drag to reorder tasks within a phase** | ⏳ Undecided | Uses existing `sort_order` column |
 | **Drag to reorder phases** | ⏳ Undecided | Uses milestones `sort_order` |
 | **Move tasks between phases** | ⏳ Undecided | Changes `milestone_id` |
@@ -82,7 +133,7 @@ Each of these is a concrete future iteration. Brett decides if/when to implement
 | **Task dependencies UI** | ⏳ Undecided | `task_dependencies` table already exists |
 | **Subtasks / parent-child hierarchy** | ⏳ Undecided | `parent_task_id` column already exists |
 | **Keyboard shortcuts** (Enter to add, Cmd+D to duplicate, etc.) | ⏳ Undecided | Quality-of-life for power users |
-| **Inline editing** (vs. edit dialog) | ⏳ Undecided | Table cells become editable in place |
+| **Inline editing** (vs. edit dialog) | 🟡 Iteration 2 | Pulled in 2026-04-09 |
 | **Task comments** | ⏳ Undecided | Separate comment thread per task |
 | **Task attachments** | ⏳ Undecided | Requires file storage infrastructure |
 | **Task activity log** | ⏳ Undecided | Who changed what and when |
@@ -115,3 +166,4 @@ After each iteration ships:
 | 2026-04-09 | Iteration 1 | Initial scope document created. Started building MVP. |
 | 2026-04-09 | Iteration 1 | MVP shipped: task CRUD API, PlanPanel with phase grouping, EditTaskDialog, ProjectDetail integration. 273 tests passing. Awaiting Brett's approval. Also fixed 2 unrelated pre-existing test failures (demand formula + scheduler priority) that were drifting from the live engine. |
 | 2026-04-09 | Iteration 1 | ✅ Brett approved Iteration 1 on the live site. Ready for Iteration 2 scope selection from the deferred list. |
+| 2026-04-09 | Iteration 2 | Brett picked inline editing + phase rollups. Shipped: 4 inline editor primitives (InlineText/Select/Date/Number), all task columns editable in place, rollup strip on every phase header with count/hours/%/dates + progress bar. 273 tests passing. Awaiting review. |
