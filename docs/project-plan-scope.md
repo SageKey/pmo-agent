@@ -66,33 +66,41 @@ All items in Iteration 1 are ✅ Approved.
 
 ---
 
-## Iteration 2 — Inline editing + phase rollups (shipped)
+## Iteration 2 — Phase rollups + roster-sourced assignee (shipped)
 
-Two deferred items pulled in by Brett to transform the plan from "a grouped table" into "a Monday.com-style board."
+Originally scoped to include inline editing + phase rollups. Inline editing
+was reverted after Brett's feedback: the dropdowns weren't opening (CSS
+clipping bug), auto-save-on-change didn't match his preferred explicit-save
+model, and the modal already handles editing well. Rollups + assignee
+dropdown were kept and polished.
 
-### Frontend — Inline editing
+### Frontend — Inline editing (REVERTED)
 
 | Item | Status | Notes |
 |---|---|---|
-| Title: click to edit inline (text input) | 🟢 | Blur or Enter saves, Escape cancels |
-| Assignee: click to edit inline (text input) | 🟢 | Empty string becomes null |
-| Status: click to open dropdown, select, save | 🟢 | Pill-style trigger, popover menu, click-outside to close |
-| Priority: same dropdown pattern | 🟢 | 4 options: Highest/High/Medium/Low |
-| Est hours: click to edit inline (number input) | 🟢 | Right-aligned, tabular-nums |
-| Start/end dates: click to open native date picker | 🟢 | Each editable independently |
-| Edit dialog retained for advanced fields (description, delete) | 🟢 | Pencil icon on hover opens full dialog |
-| `InlineText` / `InlineSelect` / `InlineDate` / `InlineNumber` primitives | 🟢 | Reusable in PlanPanel.tsx |
+| All inline editing removed | ↩️ Reverted | Moved back to deferred list for future reconsideration with explicit-save model + portal-based dropdowns |
+| Task rows are click-anywhere-to-edit | 🟢 | Opens the modal (same as clicking the pencil previously) |
+| Complete button (circle icon) still works | 🟢 | `stopPropagation` so clicking the circle doesn't open the modal |
 
 ### Frontend — Per-phase rollups
 
 | Item | Status | Notes |
 |---|---|---|
 | Task count pill | 🟢 | "N tasks" pill next to phase title |
-| Total estimated hours | 🟢 | Sum of `est_hours` for tasks in phase |
-| % complete (weighted by hours) | 🟢 | sum(complete hours) / sum(all hours) |
-| Earliest start → latest end date range | 🟢 | Min start / max end across phase tasks |
+| Total estimated hours | 🟢 | Sum of `est_hours` — always shown ("— hrs" placeholder when empty) |
+| % complete (hybrid: weighted by hours when hours exist, else count-based) | 🟢 | Falls back to `completedCount / count` if no hours filled in |
+| Earliest start → latest end date range | 🟢 | Always shown ("— dates" placeholder when no tasks have dates) |
 | Mini progress bar next to % | 🟢 | Sky bar, turns emerald at 100% |
-| `computeRollup()` helper function | 🟢 | Pure function, memoized per phase |
+| `computeRollup()` pure helper + `PhaseRollupStrip` render component | 🟢 | Memoized per phase via useMemo |
+| Always-on rendering (no `hours > 0` conditionals) | 🟢 | Earlier bug: stats hidden when tasks lacked hours/dates |
+
+### Frontend — Roster-sourced assignee
+
+| Item | Status | Notes |
+|---|---|---|
+| Assignee dropdown in EditTaskDialog | 🟢 | Populated from `GET /roster/`, sorted alphabetically, shows name + role |
+| "unassigned" option | 🟢 | Empty-string value stored as `null` on save |
+| Free-text assignee removed | 🟢 | No more typo-driven data issues |
 
 ### Tests
 
@@ -133,7 +141,7 @@ Each of these is a concrete future iteration. Brett decides if/when to implement
 | **Task dependencies UI** | ⏳ Undecided | `task_dependencies` table already exists |
 | **Subtasks / parent-child hierarchy** | ⏳ Undecided | `parent_task_id` column already exists |
 | **Keyboard shortcuts** (Enter to add, Cmd+D to duplicate, etc.) | ⏳ Undecided | Quality-of-life for power users |
-| **Inline editing** (vs. edit dialog) | 🟡 Iteration 2 | Pulled in 2026-04-09 |
+| **Inline editing** (vs. edit dialog) | ↩️ Reverted from I2, deferred | Tried in Iteration 2 with auto-save model. Reverted due to (a) dropdown clipping bug from Card's `overflow-hidden`, (b) philosophy mismatch — Brett wants explicit-save. Revisit later with: portal-based dropdowns to escape clipping, per-row dirty state + save/cancel buttons, visual unsaved-change indicator. |
 | **Task comments** | ⏳ Undecided | Separate comment thread per task |
 | **Task attachments** | ⏳ Undecided | Requires file storage infrastructure |
 | **Task activity log** | ⏳ Undecided | Who changed what and when |
@@ -167,3 +175,4 @@ After each iteration ships:
 | 2026-04-09 | Iteration 1 | MVP shipped: task CRUD API, PlanPanel with phase grouping, EditTaskDialog, ProjectDetail integration. 273 tests passing. Awaiting Brett's approval. Also fixed 2 unrelated pre-existing test failures (demand formula + scheduler priority) that were drifting from the live engine. |
 | 2026-04-09 | Iteration 1 | ✅ Brett approved Iteration 1 on the live site. Ready for Iteration 2 scope selection from the deferred list. |
 | 2026-04-09 | Iteration 2 | Brett picked inline editing + phase rollups. Shipped: 4 inline editor primitives (InlineText/Select/Date/Number), all task columns editable in place, rollup strip on every phase header with count/hours/%/dates + progress bar. 273 tests passing. Awaiting review. |
+| 2026-04-09 | Iteration 2.1 | Brett reviewed: inline editing didn't work (dropdowns clipped by Card's overflow-hidden), auto-save-on-change philosophy wrong, assignee should be roster-sourced, rollup stats hidden when tasks lack hours/dates. FIX: reverted all inline editing back to modal-only, roster dropdown replaces free-text assignee, rollup strip always renders with empty-state placeholders, % complete falls back to count-based when hours=0, full row click opens modal. 273 tests still passing. |

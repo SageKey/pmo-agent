@@ -14,6 +14,7 @@ import {
   useDeleteTask,
   useUpdateTask,
 } from "@/hooks/useTasks";
+import { useRoster } from "@/hooks/useRoster";
 import type { Task } from "@/types/task";
 import type { Milestone } from "@/types/milestone";
 
@@ -91,6 +92,8 @@ export function EditTaskDialog({
   const updateMut = useUpdateTask(projectId);
   const deleteMut = useDeleteTask(projectId);
   const mutation = isEdit ? updateMut : createMut;
+  const rosterQuery = useRoster();
+  const roster = rosterQuery.data ?? [];
 
   useEffect(() => {
     if (open) {
@@ -184,11 +187,21 @@ export function EditTaskDialog({
               </select>
             </Field>
             <Field label="Assignee">
-              <Input
+              <select
                 value={form.assignee}
-                onChange={(v) => set("assignee", v)}
-                placeholder="Who owns it?"
-              />
+                onChange={(e) => set("assignee", e.target.value)}
+                className={selectCls}
+              >
+                <option value="">— unassigned —</option>
+                {roster
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((m) => (
+                    <option key={m.name} value={m.name}>
+                      {m.name} · {m.role}
+                    </option>
+                  ))}
+              </select>
             </Field>
           </div>
 
