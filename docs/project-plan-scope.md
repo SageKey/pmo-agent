@@ -12,7 +12,7 @@ A persistent record of what we've built, what's tested, what Brett has approved,
 
 ---
 
-## Iteration 1 — MVP (shipped)
+## Iteration 1 — MVP ✅ APPROVED (2026-04-09)
 
 The minimum to have a usable project plan on the Project Detail page.
 
@@ -52,16 +52,17 @@ The minimum to have a usable project plan on the Project Detail page.
 **273 backend tests passing** (8 new task tests + 265 existing).
 Frontend has zero tests — same as before, consistent with existing gap.
 
-### Awaiting Brett's approval
+### Brett approved (2026-04-09)
 
-Open `/portfolio/DEMO-001` (or any project) on the live site after deploy and:
-- [ ] Verify Plan section appears
-- [ ] Click "Add phase", name it, confirm it shows
-- [ ] Click "Add task" on that phase, fill in details, save
-- [ ] Click the circle icon next to a task to mark complete
-- [ ] Click a task title to edit it
-- [ ] Delete a task via the edit dialog
-- [ ] Collapse/expand a phase via the chevron
+All items in Iteration 1 are ✅ Approved.
+
+- [x] Plan section appears on project detail page
+- [x] Add phase works
+- [x] Add task works with phase pre-fill
+- [x] Click circle → mark complete
+- [x] Click title → edit dialog
+- [x] Delete via edit dialog
+- [x] Collapse/expand phases
 
 ---
 
@@ -113,3 +114,4 @@ After each iteration ships:
 |---|---|---|
 | 2026-04-09 | Iteration 1 | Initial scope document created. Started building MVP. |
 | 2026-04-09 | Iteration 1 | MVP shipped: task CRUD API, PlanPanel with phase grouping, EditTaskDialog, ProjectDetail integration. 273 tests passing. Awaiting Brett's approval. Also fixed 2 unrelated pre-existing test failures (demand formula + scheduler priority) that were drifting from the live engine. |
+| 2026-04-09 | Iteration 1 | ✅ Brett approved Iteration 1 on the live site. Ready for Iteration 2 scope selection from the deferred list. |
