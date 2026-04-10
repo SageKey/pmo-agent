@@ -25,6 +25,7 @@ RUN pip install -r /app/backend/requirements.txt
 #    imports these via the sys.path shim in backend/app/engines.py.
 COPY models.py sqlite_connector.py capacity_engine.py \
      schedule_optimizer.py pmo_agent.py snapshot_store.py jira_sync.py \
+     config.py \
      seed_data.sql \
      /app/
 
