@@ -37,7 +37,7 @@ RULES:
 • Cite specific numbers: "Developer at 106%" not "Developer is overloaded".
 
 DATA MODEL:
-• 8 roles: PM, DBA, BA (Business Analyst), Functional, Technical, Developer, Infrastructure, WMS
+• 8 roles: PM, DBA, BA (Business Analyst), Functional, Technical, Developer, Infrastructure, ERP
 • Supply = sum of each person's project_capacity_hrs (weekly hrs × project capacity %)
 • SDLC Phases: Discovery 10%, Planning 10%, Design 15%, Build 30%, Test 20%, Deploy 15%
 • Each role has different effort weights per phase (e.g., Developer: 0% Discovery → 50% Build → 25% Test)
@@ -460,7 +460,7 @@ class PMOTools:
 
         roles_data = {}
         for role in ["pm", "dba", "ba", "functional", "technical", "developer",
-                      "infrastructure", "wms"]:
+                      "infrastructure", "erp"]:
             if role not in utilization:
                 continue
             u = utilization[role]

@@ -5,6 +5,7 @@ import { RoleDemandCard } from "@/components/project/RoleDemandCard";
 import { AssignmentsPanel } from "@/components/project/AssignmentsPanel";
 import { MilestonesPanel } from "@/components/project/MilestonesPanel";
 import { CommentsPanel } from "@/components/project/CommentsPanel";
+import { PlanPanel } from "@/components/project/PlanPanel";
 import { useProject } from "@/hooks/usePortfolio";
 import { useProjectDemand } from "@/hooks/useProjectDemand";
 import { useMilestones } from "@/hooks/useMilestones";
@@ -49,6 +50,8 @@ export function ProjectDetail() {
       {assignments.data && (
         <AssignmentsPanel project={p} assignments={assignments.data} />
       )}
+
+      {projectId && <PlanPanel projectId={projectId} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {milestones.data && projectId && (

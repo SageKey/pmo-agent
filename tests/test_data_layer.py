@@ -33,7 +33,7 @@ class TestSeedDatabaseIfMissing:
         conn = sqlite3.connect(db_path)
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         conn.close()
-        assert count == 38
+        assert count == 41
 
     def test_seeds_when_db_exists_but_empty(self, tmp_path):
         """DB file exists with schema but no data → must re-seed.
@@ -58,7 +58,7 @@ class TestSeedDatabaseIfMissing:
         conn = sqlite3.connect(db_path)
         count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
         conn.close()
-        assert count == 38, f"Expected 38 projects after re-seed, got {count}"
+        assert count == 41, f"Expected 38 projects after re-seed, got {count}"
 
     def test_skips_seed_when_db_has_data(self, fresh_db):
         """DB already populated → must NOT re-seed (would be destructive)."""
@@ -101,7 +101,7 @@ class TestSafeLoad:
             data = data_layer.load_all_data(mtime)
             util = data_layer.load_utilization(mtime)
 
-        assert len(data["portfolio"]) == 38
+        assert len(data["portfolio"]) == 41
         assert len(data["roster"]) >= 23
         assert len(util) == 8  # 8 roles
         assert not data["portfolio_df"].empty

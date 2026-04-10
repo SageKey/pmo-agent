@@ -9,7 +9,7 @@ class TaskOut(BaseModel):
     milestone_id: Optional[int] = None
     parent_task_id: Optional[int] = None
     title: str
-    description: Optional[str] = None
+    notes: Optional[str] = None  # Rich HTML (renamed from description in v7)
     assignee: Optional[str] = None
     role_key: Optional[str] = None
     start_date: Optional[str] = None
@@ -23,3 +23,4 @@ class TaskOut(BaseModel):
     sort_order: Optional[int] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    updated_by: Optional[str] = None

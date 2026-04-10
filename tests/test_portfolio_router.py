@@ -327,6 +327,52 @@ class TestNormalizationRule7_LoweredPctDowngradesFromComplete:
 # Project demand + timeline endpoints (smoke level)
 # ---------------------------------------------------------------------------
 
+class TestPipelineAndInitiativeFields:
+    """Pipeline health status + initiative linkage."""
+
+    def test_pipeline_excluded_from_active_only(self, api_client):
+        api_client.post(
+            f"{API}/",
+            json={"id": "PIPE-1", "name": "Pipeline Test", "health": "📋 PIPELINE"},
+        )
+        active = api_client.get(f"{API}/", params={"active_only": True}).json()
+        assert "PIPE-1" not in {p["id"] for p in active}
+
+    def test_pipeline_included_in_full_list(self, api_client):
+        api_client.post(
+            f"{API}/",
+            json={"id": "PIPE-2", "name": "Pipeline Test 2", "health": "📋 PIPELINE"},
+        )
+        full = api_client.get(f"{API}/").json()
+        assert "PIPE-2" in {p["id"] for p in full}
+
+    def test_initiative_id_roundtrip(self, api_client):
+        # Create initiative first
+        api_client.post(
+            "/api/v1/initiatives/",
+            json={"id": "INIT-TEST", "name": "Test Init"},
+        )
+        r = api_client.post(
+            f"{API}/",
+            json={"id": "INIT-PROJ", "name": "Linked", "initiative_id": "INIT-TEST"},
+        )
+        assert r.status_code == 201
+        assert r.json()["initiative_id"] == "INIT-TEST"
+
+    def test_planned_it_start_roundtrip(self, api_client):
+        r = api_client.post(
+            f"{API}/",
+            json={
+                "id": "PIPE-3",
+                "name": "Future Project",
+                "health": "📋 PIPELINE",
+                "planned_it_start": "2026-Q3",
+            },
+        )
+        assert r.status_code == 201
+        assert r.json()["planned_it_start"] == "2026-Q3"
+
+
 class TestProjectDemand:
     def test_demand_shape(self, api_client):
         ids = [p["id"] for p in api_client.get(f"{API}/").json()]

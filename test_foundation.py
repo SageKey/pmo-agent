@@ -90,7 +90,7 @@ def main():
     check("3 PMs", role_counts["pm"] == 3, f"got {role_counts.get('pm', 0)}")
     check("1 DBA", role_counts["dba"] == 1, f"got {role_counts.get('dba', 0)}")
     check("3 Infrastructure", role_counts["infrastructure"] == 3, f"got {role_counts.get('infrastructure', 0)}")
-    check("1 WMS", role_counts["wms"] == 1, f"got {role_counts.get('wms', 0)}")
+    check("1 ERP", role_counts["erp"] == 1, f"got {role_counts.get('wms', 0)}")
 
     # Verify specific member
     jim = next(m for m in roster if m.name == "Jim Young")

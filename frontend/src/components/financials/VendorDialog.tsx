@@ -19,7 +19,7 @@ const ROLE_OPTIONS = [
   { key: "developer", label: "Developer" },
   { key: "infrastructure", label: "Infrastructure" },
   { key: "dba", label: "DBA" },
-  { key: "wms", label: "WMS" },
+  { key: "erp", label: "ERP" },
 ];
 
 interface Props {

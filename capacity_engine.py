@@ -444,11 +444,11 @@ class CapacityEngine:
         Calculate weekly demand for each role on a project.
 
         Average weekly demand:
-            Est.Hours × Role% × Role_Avg_Effort / Duration_weeks
+            Est.Hours × Role% / Duration_weeks
 
         Phase-aware weekly demand (for each SDLC phase):
-            Est.Hours × Role% × Role_Phase_Effort / Duration_weeks
-            (mathematically, phase weights cancel out — see spec derivation)
+            Est.Hours × Role% × Phase_Effort / (Duration_weeks × Phase_Weight)
+            i.e. the fraction of work in that phase spread over the phase's duration.
 
         CRITICAL: Demand is ZERO if Role% == 0 (the allocation gate).
         """
@@ -459,28 +459,33 @@ class CapacityEngine:
             return demands
 
         role_phase_efforts = self.assumptions.role_phase_efforts
-        role_avg_efforts = self.assumptions.role_avg_efforts
+        phase_weights = self.assumptions.sdlc_phase_weights
 
         for role_key, alloc_pct in project.role_allocations.items():
             # THE GATE: skip roles with zero allocation
             if alloc_pct <= 0:
                 continue
 
-            if role_key not in role_avg_efforts:
+            if role_key not in role_phase_efforts:
                 continue
 
             # Average weekly demand across all phases
-            avg_effort = role_avg_efforts[role_key]
-            avg_weekly = project.est_hours * alloc_pct * avg_effort / duration
+            # NO avg_effort multiplier — phase efforts describe distribution,
+            # not a reduction factor. They sum to 1.0 by design.
+            avg_weekly = project.est_hours * alloc_pct / duration
 
             # Phase-specific weekly demand
+            # phase_effort = fraction of role's total hours in this phase
+            # phase_weight = fraction of project duration in this phase
+            # weekly = total_role_hrs × phase_effort / (duration × phase_weight)
             phase_weekly = {}
-            if role_key in role_phase_efforts:
-                for phase in SDLC_PHASES:
-                    phase_effort = role_phase_efforts[role_key].get(phase, 0.0)
-                    phase_weekly[phase] = (
-                        project.est_hours * alloc_pct * phase_effort / duration
-                    )
+            for phase in SDLC_PHASES:
+                phase_effort = role_phase_efforts[role_key].get(phase, 0.0)
+                pw = phase_weights.get(phase, 0.0)
+                if pw > 0:
+                    phase_weekly[phase] = project.est_hours * alloc_pct * phase_effort / (duration * pw)
+                else:
+                    phase_weekly[phase] = 0.0
 
             demands.append(RoleDemand(
                 project_id=project.id,
@@ -1213,12 +1218,13 @@ class CapacityEngine:
         """Simulate scheduling all plannable projects onto the capacity grid.
 
         Algorithm:
-        1. Seed demand grid with in-development projects
+        1. Seed demand grid from ALL active projects (matches heatmap baseline)
         2. Collect plannable projects (not started, needs spec, pct=0)
         3. Sort by priority (Highest first), then est_hours desc (big first)
-        4. Greedy placement: for each project, scan forward for earliest week
-           where all roles stay under max_util_pct
-        5. Stamp demand into grid so subsequent projects see updated load
+        4. For each plannable project, subtract its existing demand from the
+           grid (so we don't double-count), then scan forward for earliest
+           week where all roles stay under max_util_pct
+        5. Stamp the project's new demand into the grid at its suggested slot
         6. Return results with suggested dates, wait time, bottleneck info
 
         Args:
@@ -1247,8 +1253,11 @@ class CapacityEngine:
         # Filter exclusions
         plannable = [p for p in plannable if p.id not in exclude_ids]
 
-        # Seed demand grid from in-development projects
-        grid = self._build_demand_grid(in_dev, scan_start, horizon_weeks)
+        # Seed demand grid from ALL active projects so the baseline matches
+        # what the heatmap displays. Each plannable project's existing demand
+        # is subtracted before testing it, so we don't double-count.
+        all_active = in_dev + plannable
+        grid = self._build_demand_grid(all_active, scan_start, horizon_weeks)
 
         # Sort plannable: priority order, then largest first within tier
         priority_map = self.PRIORITY_ORDER
@@ -1264,6 +1273,13 @@ class CapacityEngine:
                            if v > 0 and k in role_phase_efforts}
             if not active_roles:
                 continue
+
+            # Subtract this project's existing demand from the grid so we
+            # don't double-count when re-planning it at a new slot.
+            old_demand = self._build_demand_grid([project], scan_start, horizon_weeks)
+            for wk, roles in old_demand.items():
+                for rk, hrs in roles.items():
+                    grid[wk][rk] = max(0.0, grid[wk].get(rk, 0.0) - hrs)
 
             # Get duration estimate
             duration_result = self.estimate_duration(
@@ -1563,7 +1579,7 @@ class CapacityEngine:
         print("-" * 60)
 
         for role in ["pm", "dba", "ba", "functional", "technical", "developer",
-                      "infrastructure", "wms"]:
+                      "infrastructure", "erp"]:
             if role not in utilization:
                 continue
             u = utilization[role]
@@ -1577,7 +1593,7 @@ class CapacityEngine:
         print("=" * 72)
 
         for role in ["pm", "dba", "ba", "functional", "technical", "developer",
-                      "infrastructure", "wms"]:
+                      "infrastructure", "erp"]:
             if role not in utilization:
                 continue
             u = utilization[role]

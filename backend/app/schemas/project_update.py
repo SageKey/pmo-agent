@@ -37,3 +37,5 @@ class ProjectUpdate(BaseModel):
     # Values are fractions 0.0–1.0. Mapped to save_project's "alloc_{role}"
     # schema inside the router.
     role_allocations: Optional[Dict[str, float]] = None
+    initiative_id: Optional[str] = None
+    planned_it_start: Optional[str] = None

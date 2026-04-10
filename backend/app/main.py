@@ -27,6 +27,7 @@ from .routers import (
     capacity,
     comments,
     financials,
+    initiatives,
     jira,
     meta,
     milestones,
@@ -190,6 +191,14 @@ def _backfill_data_integrity() -> None:
         )
         stats["not_started_upgraded"] = cur.rowcount
 
+        # Rule 7: PIPELINE projects must have pct=0 and no start/end dates
+        cur = conn.execute(
+            """UPDATE projects SET pct_complete = 0, start_date = NULL, end_date = NULL
+               WHERE health LIKE '%PIPELINE%'
+                 AND (pct_complete > 0 OR start_date IS NOT NULL)"""
+        )
+        stats["pipeline_cleaned"] = cur.rowcount
+
         conn.commit()
         total = sum(stats.values())
         if total:
@@ -256,6 +265,7 @@ def create_app() -> FastAPI:
 
     # --- Routers ---
     app.include_router(meta.router, prefix=settings.api_prefix)
+    app.include_router(initiatives.router, prefix=settings.api_prefix)
     app.include_router(portfolio.router, prefix=settings.api_prefix)
     app.include_router(capacity.router, prefix=settings.api_prefix)
     app.include_router(milestones.router, prefix=settings.api_prefix)

@@ -31,11 +31,11 @@ ROLE_DISPLAY = {
     "developer": "Developer",
     "infrastructure": "Infrastructure",
     "dba": "DBA",
-    "wms": "WMS Consultant",
+    "erp": "ERP Consultant",
 }
 
 ROLE_ORDER = ["pm", "ba", "functional", "technical", "developer",
-              "infrastructure", "dba", "wms"]
+              "infrastructure", "dba", "erp"]
 
 PRIORITY_COLORS = {
     "Highest": RED,
@@ -1087,7 +1087,7 @@ def capacity_heatmap(heatmap_df: pd.DataFrame) -> alt.Chart:
                 axis=alt.Axis(labelFontSize=9, labelAngle=-45)),
         y=alt.Y("Role:N", title=None,
                 sort=["PM", "BA", "FUNCTIONAL", "TECHNICAL", "DEVELOPER",
-                      "INFRASTRUCTURE", "DBA", "WMS"],
+                      "INFRASTRUCTURE", "DBA", "ERP"],
                 axis=alt.Axis(labelFontSize=11)),
         color=alt.Color("Status:N",
                         scale=alt.Scale(
