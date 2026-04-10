@@ -27,3 +27,5 @@ class ProjectCreate(BaseModel):
     budget: float = 0.0
     notes: Optional[str] = None
     role_allocations: Optional[Dict[str, float]] = None
+    initiative_id: Optional[str] = None
+    planned_it_start: Optional[str] = None

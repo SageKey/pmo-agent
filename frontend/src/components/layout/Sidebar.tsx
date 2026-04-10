@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
+  Target,
   FolderKanban,
   Activity,
   Calendar,
@@ -16,6 +17,7 @@ import { cn } from "@/lib/cn";
 
 const NAV = [
   { to: "/executive", label: "Executive", icon: LayoutDashboard, publicSafe: true },
+  { to: "/initiatives", label: "Initiatives", icon: Target, publicSafe: true },
   { to: "/portfolio", label: "Portfolio", icon: FolderKanban, publicSafe: true },
   { to: "/capacity", label: "Capacity", icon: Activity, publicSafe: true },
   { to: "/timeline", label: "Timeline", icon: Calendar, publicSafe: true },

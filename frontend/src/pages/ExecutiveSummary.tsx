@@ -18,7 +18,7 @@ const ROLE_LABEL: Record<string, string> = {
   developer: "Developer",
   infrastructure: "Infrastructure",
   dba: "DBA",
-  wms: "WMS",
+  erp: "ERP",
 };
 
 const PRIORITY_ORDER: Record<string, number> = {
@@ -43,7 +43,7 @@ export function ExecutiveSummary() {
   // Weighted utilization across the whole team — total demand divided by
   // total supply. This is the metric that actually moves when someone is
   // excluded from capacity (supply drops, ratio rises). A simple average
-  // across the 8 roles gives WMS (14 hrs) the same weight as Developer
+  // across the 8 roles gives ERP (14 hrs) the same weight as Developer
   // (80 hrs), which masks real capacity shifts.
   const totalDemand = utilEntries.reduce((s, r) => s + r.demand_hrs_week, 0);
   const totalSupply = utilEntries.reduce((s, r) => s + r.supply_hrs_week, 0);

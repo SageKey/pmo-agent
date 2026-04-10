@@ -11,20 +11,36 @@ from typing import Optional
 
 from config import get_config
 from models import (
-    Project, TeamMember, RMAssumptions, ProjectAssignment,
+    Project, TeamMember, RMAssumptions, ProjectAssignment, Initiative,
     SDLC_PHASES, ROLE_KEYS, _to_date,
 )
 
 DEFAULT_DB = get_config().db_path
 
 # Schema version — bump when schema changes
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_info (
     key     TEXT PRIMARY KEY,
     value   TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS initiatives (
+    id              TEXT PRIMARY KEY,
+    name            TEXT NOT NULL,
+    description     TEXT,
+    sponsor         TEXT,
+    status          TEXT NOT NULL DEFAULT 'Active',
+    it_involvement  INTEGER NOT NULL DEFAULT 0,
+    priority        TEXT,
+    target_start    TEXT,
+    target_end      TEXT,
+    sort_order      INTEGER DEFAULT 0,
+    created_at      TEXT DEFAULT (datetime('now')),
+    updated_at      TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_init_status ON initiatives(status);
 
 CREATE TABLE IF NOT EXISTS projects (
     id              TEXT PRIMARY KEY,
@@ -51,6 +67,8 @@ CREATE TABLE IF NOT EXISTS projects (
     actual_cost     REAL DEFAULT 0.0,
     forecast_cost   REAL DEFAULT 0.0,
     sort_order      INTEGER,
+    initiative_id   TEXT REFERENCES initiatives(id),
+    planned_it_start TEXT,
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now'))
 );
@@ -251,7 +269,7 @@ CREATE TABLE IF NOT EXISTS project_tasks (
     milestone_id    INTEGER REFERENCES project_milestones(id) ON DELETE SET NULL,
     parent_task_id  INTEGER REFERENCES project_tasks(id) ON DELETE CASCADE,
     title           TEXT NOT NULL,
-    description     TEXT,
+    notes           TEXT,
     assignee        TEXT,
     role_key        TEXT,
     start_date      TEXT,
@@ -264,7 +282,8 @@ CREATE TABLE IF NOT EXISTS project_tasks (
     jira_key        TEXT,
     sort_order      INTEGER DEFAULT 0,
     created_at      TEXT DEFAULT (datetime('now')),
-    updated_at      TEXT DEFAULT (datetime('now'))
+    updated_at      TEXT DEFAULT (datetime('now')),
+    updated_by      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pt_project ON project_tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_pt_milestone ON project_tasks(milestone_id);
@@ -449,6 +468,29 @@ class SQLiteConnector:
             )
         except Exception:
             pass  # Column already exists
+        # Add initiative_id FK + planned_it_start to projects (v6 migration)
+        for col, col_type in [
+            ("initiative_id", "TEXT REFERENCES initiatives(id)"),
+            ("planned_it_start", "TEXT"),
+        ]:
+            try:
+                self._conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass
+        # Task rename description → notes + new updated_by column (v7 migration).
+        # Rename is idempotent: SELECT probe checks which column exists.
+        try:
+            cols = [r[1] for r in self._conn.execute("PRAGMA table_info(project_tasks)").fetchall()]
+            if "description" in cols and "notes" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE project_tasks RENAME COLUMN description TO notes"
+                )
+            if "updated_by" not in cols:
+                self._conn.execute(
+                    "ALTER TABLE project_tasks ADD COLUMN updated_by TEXT"
+                )
+        except Exception:
+            pass
         # Seed default app_settings rows (idempotent — INSERT OR IGNORE on key)
         self._seed_default_settings()
         self._conn.commit()
@@ -594,12 +636,100 @@ class SQLiteConnector:
         return datetime.fromtimestamp(Path(self.db_path).stat().st_mtime)
 
     # ------------------------------------------------------------------
+    # Initiatives
+    # ------------------------------------------------------------------
+    def get_initiatives(self, status: Optional[str] = None,
+                        it_only: Optional[bool] = None) -> list[dict]:
+        conn = self._open()
+        sql = "SELECT * FROM initiatives"
+        conditions, params = [], []
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if it_only is True:
+            conditions.append("it_involvement = 1")
+        elif it_only is False:
+            conditions.append("it_involvement = 0")
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY sort_order, name"
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+    def get_initiative(self, initiative_id: str) -> Optional[dict]:
+        conn = self._open()
+        row = conn.execute(
+            "SELECT * FROM initiatives WHERE id = ?", (initiative_id,)
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        # Attach linked projects (lightweight summary)
+        proj_rows = conn.execute(
+            """SELECT id, name, health, pct_complete, priority, planned_it_start
+               FROM projects WHERE initiative_id = ?
+               ORDER BY sort_order, name""",
+            (initiative_id,),
+        ).fetchall()
+        result["projects"] = [dict(r) for r in proj_rows]
+        result["project_count"] = len(result["projects"])
+        return result
+
+    def save_initiative(self, fields: dict, is_new: bool = False) -> Optional[str]:
+        conn = self._open()
+        iid = fields.get("id")
+        if is_new:
+            if not iid:
+                return "Initiative ID is required."
+            cols = [k for k in fields if k != "id"]
+            placeholders = ", ".join(["?"] * (len(cols) + 1))
+            col_names = "id, " + ", ".join(cols)
+            values = [iid] + [fields[c] for c in cols]
+            conn.execute(
+                f"INSERT INTO initiatives ({col_names}) VALUES ({placeholders})",
+                values,
+            )
+        else:
+            if not iid:
+                return "Initiative ID is required for update."
+            sets = []
+            values = []
+            for k, v in fields.items():
+                if k == "id":
+                    continue
+                sets.append(f"{k} = ?")
+                values.append(v)
+            if not sets:
+                return None
+            sets.append("updated_at = datetime('now')")
+            values.append(iid)
+            conn.execute(
+                f"UPDATE initiatives SET {', '.join(sets)} WHERE id = ?",
+                values,
+            )
+        conn.commit()
+        return None
+
+    def delete_initiative(self, initiative_id: str) -> Optional[str]:
+        conn = self._open()
+        # Unlink any projects pointing at this initiative (don't cascade-delete projects)
+        conn.execute(
+            "UPDATE projects SET initiative_id = NULL WHERE initiative_id = ?",
+            (initiative_id,),
+        )
+        conn.execute("DELETE FROM initiatives WHERE id = ?", (initiative_id,))
+        conn.commit()
+        return None
+
+    # ------------------------------------------------------------------
     # Project Portfolio
     # ------------------------------------------------------------------
     def read_portfolio(self) -> list[Project]:
         conn = self._open()
         rows = conn.execute(
-            "SELECT * FROM projects ORDER BY sort_order, priority, name"
+            """SELECT p.*, i.name AS initiative_name
+               FROM projects p
+               LEFT JOIN initiatives i ON p.initiative_id = i.id
+               ORDER BY p.sort_order, p.priority, p.name"""
         ).fetchall()
 
         projects = []
@@ -614,6 +744,20 @@ class SQLiteConnector:
             # Ensure all roles present
             for rk in ROLE_KEYS:
                 role_allocs.setdefault(rk, 0.0)
+
+            # Legacy-safe reads for new columns
+            try:
+                init_id = row["initiative_id"]
+            except (IndexError, KeyError):
+                init_id = None
+            try:
+                planned = row["planned_it_start"]
+            except (IndexError, KeyError):
+                planned = None
+            try:
+                init_name = row["initiative_name"]
+            except (IndexError, KeyError):
+                init_name = None
 
             projects.append(Project(
                 id=pid,
@@ -642,6 +786,9 @@ class SQLiteConnector:
                 role_allocations=role_allocs,
                 notes=row["notes"],
                 sort_order=row["sort_order"],
+                initiative_id=init_id,
+                initiative_name=init_name,
+                planned_it_start=planned,
             ))
 
         return projects
@@ -1682,23 +1829,32 @@ class SQLiteConnector:
                   est_hours: float = 0.0, status: str = "not_started",
                   progress_pct: float = 0.0, priority: str = "Medium",
                   jira_key: str = None, sort_order: int = 0,
-                  description: str = None, task_id: int = None,
-                  actor: str = "System") -> int:
-        """Create or update a task. Returns task ID."""
+                  notes: str = None, task_id: int = None,
+                  actor: str = "System",
+                  updated_by: str = None) -> int:
+        """Create or update a task. Returns task ID.
+
+        `notes` replaces the old `description` field (v7 rename — stored in
+        the `notes` column). `updated_by` is a display name string captured
+        on every write so the UI can show "updated by X".
+        """
         conn = self._open()
+        # Default updated_by to actor for backward compat — explicit value
+        # from the router takes precedence
+        who = updated_by or actor
         if task_id:
             conn.execute(
                 """UPDATE project_tasks SET
                    title=?, milestone_id=?, parent_task_id=?,
                    assignee=?, role_key=?, start_date=?, end_date=?,
                    est_hours=?, status=?, progress_pct=?, priority=?,
-                   jira_key=?, sort_order=?, description=?,
-                   updated_at=datetime('now')
+                   jira_key=?, sort_order=?, notes=?,
+                   updated_at=datetime('now'), updated_by=?
                    WHERE id=?""",
                 (title, milestone_id, parent_task_id,
                  assignee, role_key, start_date, end_date,
                  est_hours, status, progress_pct, priority,
-                 jira_key, sort_order, description, task_id),
+                 jira_key, sort_order, notes, who, task_id),
             )
             self._log_audit(project_id, "task_updated", actor, details=title)
             conn.commit()
@@ -1709,12 +1865,12 @@ class SQLiteConnector:
                    (project_id, title, milestone_id, parent_task_id,
                     assignee, role_key, start_date, end_date,
                     est_hours, status, progress_pct, priority,
-                    jira_key, sort_order, description)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    jira_key, sort_order, notes, updated_by)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (project_id, title, milestone_id, parent_task_id,
                  assignee, role_key, start_date, end_date,
                  est_hours, status, progress_pct, priority,
-                 jira_key, sort_order, description),
+                 jira_key, sort_order, notes, who),
             )
             tid = cur.lastrowid
             self._log_audit(project_id, "task_added", actor, details=title)

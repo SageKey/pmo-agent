@@ -57,7 +57,7 @@ export function GanttChart({
     const d = addMonths(rangeStart, i);
     months.push({
       date: d,
-      label: d.toLocaleDateString("en-US", { month: "short" }),
+      label: `${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`,
       isJan: d.getMonth() === 0,
     });
   }
@@ -95,9 +95,9 @@ export function GanttChart({
           </div>
           <div className="mt-0.5 text-xs text-slate-500">
             {scheduled.length} scheduled projects ·{" "}
-            {rangeStart.toLocaleDateString("en-US", { month: "short", year: "numeric" })}{" "}
+            {`${String(rangeStart.getMonth() + 1).padStart(2, "0")}-${rangeStart.getFullYear()}`}{" "}
             →{" "}
-            {rangeEnd.toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+            {`${String(rangeEnd.getMonth() + 1).padStart(2, "0")}-${rangeEnd.getFullYear()}`}
           </div>
         </div>
         <Legend />

@@ -18,7 +18,7 @@ const ROLE_LABEL: Record<string, string> = {
   developer: "Developer",
   infrastructure: "Infra",
   dba: "DBA",
-  wms: "WMS",
+  erp: "ERP",
 };
 
 export function HeatmapGrid({ data }: { data: HeatmapResponse }) {

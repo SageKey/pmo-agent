@@ -19,7 +19,7 @@ const ROLE_LABEL: Record<string, string> = {
   developer: "Developer",
   infrastructure: "Infrastructure",
   dba: "DBA",
-  wms: "WMS",
+  erp: "ERP",
 };
 
 const ROLE_ORDER = [
@@ -30,7 +30,7 @@ const ROLE_ORDER = [
   "developer",
   "infrastructure",
   "dba",
-  "wms",
+  "erp",
 ];
 
 export function TeamRoster() {

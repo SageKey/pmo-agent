@@ -67,7 +67,7 @@ ROLE_CONFIG = [
     ("technical",      "IT Tech Analyst/Developer","V",  25, "Technical"),
     ("developer",      "Developer",                "W",  26, "Developer"),
     ("infrastructure", "Infrastructure",           "X",  27, "Infrastructure"),
-    ("wms",            "WMS Consultant",            "AA", 28, "WMS Consultant"),
+    ("erp",            "ERP Consultant",            "AA", 28, "ERP Consultant"),
 ]
 
 PHASE_LABELS = {

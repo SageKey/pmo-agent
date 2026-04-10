@@ -24,7 +24,7 @@ const ROLE_OPTIONS: { key: string; label: string; role: string }[] = [
   { key: "developer", label: "Developer", role: "Developer" },
   { key: "infrastructure", label: "Infrastructure", role: "Infrastructure" },
   { key: "dba", label: "DBA", role: "DBA" },
-  { key: "wms", label: "WMS", role: "WMS Consultant" },
+  { key: "erp", label: "ERP", role: "ERP Consultant" },
 ];
 
 interface Props {

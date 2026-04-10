@@ -39,6 +39,9 @@ class ProjectOut(BaseModel):
     role_allocations: Dict[str, float] = {}
     notes: Optional[str] = None
     sort_order: Optional[int] = None
+    initiative_id: Optional[str] = None
+    initiative_name: Optional[str] = None
+    planned_it_start: Optional[str] = None
     is_active: bool = True
     duration_weeks: Optional[float] = None
 
@@ -71,6 +74,9 @@ class ProjectOut(BaseModel):
             role_allocations=p.role_allocations or {},
             notes=p.notes,
             sort_order=p.sort_order,
+            initiative_id=getattr(p, "initiative_id", None),
+            initiative_name=getattr(p, "initiative_name", None),
+            planned_it_start=getattr(p, "planned_it_start", None),
             is_active=p.is_active,
             duration_weeks=p.duration_weeks,
         )

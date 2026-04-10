@@ -15,7 +15,7 @@ class TestPortfolio:
 
     def test_total_projects(self, connector):
         portfolio = connector.read_portfolio()
-        assert len(portfolio) == 38
+        assert len(portfolio) == 41
 
     def test_active_excludes_postponed_and_complete(self, connector):
         active = connector.read_active_portfolio()
