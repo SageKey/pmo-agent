@@ -17,6 +17,7 @@ from typing import Optional
 
 from ortools.sat.python import cp_model
 
+from config import get_config
 from models import Project, SDLC_PHASES
 from sqlite_connector import SQLiteConnector
 from capacity_engine import CapacityEngine
@@ -29,8 +30,8 @@ MAX_SHIFT = {
     "Low": 16,
 }
 
-TARGET_UTILIZATION = 0.85  # 85%
-PLANNING_HORIZON_WEEKS = 26  # ~6 months
+TARGET_UTILIZATION = get_config().target_utilization
+PLANNING_HORIZON_WEEKS = get_config().planning_horizon_weeks
 
 
 @dataclass

@@ -6,10 +6,13 @@ Run with: streamlit run app.py
 import os
 import sys
 import time
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
+
+from config import get_config, set_config
 
 # Ensure imports work from the project directory
 sys.path.insert(0, str(Path(__file__).parent))
@@ -95,15 +98,7 @@ with st.sidebar:
         st.caption(f"Data as of: {ts}")
 
     # API key (for AI Assistant)
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    env_path = Path(__file__).parent / ".env"
-    if not api_key and env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("ANTHROPIC_API_KEY="):
-                api_key = line.split("=", 1)[1].strip().strip("'\"")
-                break
-
+    api_key = get_config().anthropic_api_key
     if not api_key:
         try:
             if hasattr(st, "secrets") and "ANTHROPIC_API_KEY" in st.secrets:
@@ -121,7 +116,7 @@ with st.sidebar:
         )
         if key_input:
             api_key = key_input
-            os.environ["ANTHROPIC_API_KEY"] = api_key
+            set_config(replace(get_config(), anthropic_api_key=api_key))
 
     st.session_state["api_key"] = api_key
 
@@ -148,20 +143,14 @@ with st.sidebar:
                   ))
 
     # Jira Sync — auto-sync every 15 min, manual button available
-    JIRA_SYNC_COOLDOWN = 15 * 60  # seconds
+    JIRA_SYNC_COOLDOWN = get_config().jira_sync_cooldown_seconds
 
-    jira_token = os.environ.get("JIRA_API_TOKEN", "")
+    jira_token = get_config().jira_api_token
     if not jira_token:
         try:
             jira_token = st.secrets.get("JIRA_API_TOKEN", "")
         except Exception:
             pass
-    if not jira_token and env_path.exists():
-        for line in env_path.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("JIRA_API_TOKEN="):
-                jira_token = line.split("=", 1)[1].strip().strip("'\"")
-                break
 
     def _run_jira_sync(token: str, force: bool = False):
         """Run Jira sync if token is set and cooldown has elapsed."""
@@ -212,7 +201,7 @@ with st.sidebar:
         )
         if jira_input:
             jira_token = jira_input
-            os.environ["JIRA_API_TOKEN"] = jira_token
+            set_config(replace(get_config(), jira_api_token=jira_token))
 
         if st.button("Sync Now", use_container_width=True,
                      disabled=not bool(jira_token),

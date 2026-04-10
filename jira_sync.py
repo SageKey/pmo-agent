@@ -21,22 +21,26 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from config import get_config
+
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration (resolved from centralized config)
 # ---------------------------------------------------------------------------
-JIRA_CLOUD_ID = "b79a437a-0282-4f3c-a737-558c675a8308"
-JIRA_SITE_URL = "https://etedevops.atlassian.net"
+_c = get_config()
+
+JIRA_CLOUD_ID = _c.jira_cloud_id
+JIRA_SITE_URL = _c.jira_site_url
 JIRA_BASE_URL = f"{JIRA_SITE_URL}/rest/api/3"
 
 # Custom field IDs discovered from Jira field metadata
-FIELD_PCT_COMPLETE = "customfield_11529"       # Select: 0% - 100%
-FIELD_PROJECT_HEALTH = "customfield_11496"     # Select: health statuses
-FIELD_BUSINESS_PORTFOLIO = "customfield_12123"  # Select: portfolio names
+FIELD_PCT_COMPLETE = _c.jira_field_pct_complete       # Select: 0% - 100%
+FIELD_PROJECT_HEALTH = _c.jira_field_health            # Select: health statuses
+FIELD_BUSINESS_PORTFOLIO = _c.jira_field_portfolio     # Select: portfolio names
 
 # Jira projects that contain PMO-tracked issues
-JIRA_PROJECTS = ["ETE", "DEV", "SSE"]
+JIRA_PROJECTS = _c.jira_projects
 
-DB_PATH = Path(__file__).parent / "pmo_data.db"
+DB_PATH = Path(_c.db_path)
 
 # ---------------------------------------------------------------------------
 # Jira Health → PMO Health mapping
@@ -428,16 +432,8 @@ def push_health_to_jira(
 if __name__ == "__main__":
     import sys
 
-    # Try to get API key from environment or .env
-    api_key = os.environ.get("JIRA_API_TOKEN", "")
-    if not api_key:
-        env_path = Path(__file__).parent / ".env"
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
-                line = line.strip()
-                if line.startswith("JIRA_API_TOKEN="):
-                    api_key = line.split("=", 1)[1].strip().strip("'\"")
-                    break
+    # Try to get API key from centralized config (env / .env)
+    api_key = get_config().jira_api_token
 
     if not api_key:
         print("Error: Set JIRA_API_TOKEN environment variable (email:api_token format)")
